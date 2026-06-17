@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-from skimage.measure import find_contours
+from skimage.measure import approximate_polygon, find_contours
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,6 +76,7 @@ def _contour_for_label(labels: np.ndarray, label: int) -> tuple[tuple[float, flo
         return ()
 
     contour = max(contours, key=len)
+    contour = approximate_polygon(contour, tolerance=1.0)
     points: list[tuple[float, float]] = []
     for row, col in contour:
         points.append((float(col), float(row)))
@@ -158,7 +159,7 @@ def selected_region_components(labels: np.ndarray, selected_ids: Iterable[int]) 
         stack = [seed]
         while stack:
             current = stack.pop()
-            for neighbor in adjacency[current]:
+            for neighbor in adjacency.get(current, set()):
                 if neighbor in remaining:
                     remaining.remove(neighbor)
                     component.add(neighbor)

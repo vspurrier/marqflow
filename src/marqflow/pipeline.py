@@ -8,7 +8,7 @@ import numpy as np
 from skimage.segmentation import slic
 
 from .config import SegmentationConfig
-from .image import downscale_image, load_rgb_image, save_rgb_image
+from .image import downscale_image, load_rgb_image, resize_to_max_edge, save_rgb_image
 from .regions import RegionMap, build_regions, labels_to_palette_image
 from .svg import region_map_to_svg
 
@@ -18,7 +18,8 @@ def prepare_image(input_path: str | Path, config: SegmentationConfig) -> np.ndar
 
     config.validate()
     image_rgb = load_rgb_image(input_path)
-    return downscale_image(image_rgb, config.downscale_factor)
+    image_rgb = downscale_image(image_rgb, config.downscale_factor)
+    return resize_to_max_edge(image_rgb, config.max_working_edge)
 
 
 def build_region_map(input_path: str | Path, config: SegmentationConfig) -> RegionMap:

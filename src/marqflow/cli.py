@@ -12,10 +12,11 @@ import typer
 import uvicorn
 
 from .config import SegmentationConfig, SuperpixelConfig
+from .gallery_web import create_app as create_gallery_app
 from .pipeline import build_region_map, build_superpixel_preview, write_pipeline_outputs
 from .project import MarqflowProject
 from .svg import region_map_to_svg
-from .web import create_app
+from .workspace import GridWorkspace
 
 app = typer.Typer(add_completion=False, help='Prepare and edit marquetry-friendly region maps.')
 
@@ -41,9 +42,9 @@ def prepare(
     input_path: Annotated[Path, typer.Argument(..., exists=True, readable=True)],
     output_dir: Annotated[Path, typer.Argument(...)],
     downscale_factor: int = typer.Option(
-        4, help='Integer resize factor applied before segmentation.'
+        1, help='Integer resize factor applied before segmentation.'
     ),
-    target_segments: int = typer.Option(20, help='Approximate number of coarse regions.'),
+    target_segments: int = typer.Option(96, help='Approximate number of coarse regions.'),
     compactness: float = typer.Option(20.0, help='Higher values prefer more even superpixels.'),
     sigma: float = typer.Option(1.0, help='Pre-smoothing before superpixel segmentation.'),
 ) -> None:
@@ -65,9 +66,9 @@ def init(
     input_path: Annotated[Path, typer.Argument(..., exists=True, readable=True)],
     project_dir: Annotated[Path, typer.Argument(...)],
     downscale_factor: int = typer.Option(
-        4, help='Integer resize factor applied before segmentation.'
+        1, help='Integer resize factor applied before segmentation.'
     ),
-    target_segments: int = typer.Option(20, help='Approximate number of coarse regions.'),
+    target_segments: int = typer.Option(96, help='Approximate number of coarse regions.'),
     compactness: float = typer.Option(20.0, help='Higher values prefer more even superpixels.'),
     sigma: float = typer.Option(1.0, help='Pre-smoothing before superpixel segmentation.'),
 ) -> None:
@@ -147,7 +148,7 @@ def regions(
 
 @app.command()
 def serve(
-    project_dir: Annotated[Path, typer.Argument(..., exists=True, readable=True)],
+    workspace_dir: Annotated[Path, typer.Argument(..., exists=True, readable=True)],
     host: str = typer.Option('127.0.0.1', help='Host to bind the browser server to.'),
     port: int = typer.Option(8000, help='Port to bind the browser server to.'),
     open_browser: bool = typer.Option(
@@ -156,9 +157,9 @@ def serve(
         help='Open the browser automatically.',
     ),
 ) -> None:
-    """Serve the interactive browser UI for a project."""
+    """Serve the browser UI for a grid-search workspace."""
 
-    app_obj = create_app(project_dir)
+    app_obj = create_gallery_app(workspace_dir)
     url = f'http://{host}:{port}'
 
     if open_browser:
@@ -175,8 +176,8 @@ def serve(
 @app.command()
 def summary(
     input_path: Annotated[Path, typer.Argument(..., exists=True, readable=True)],
-    downscale_factor: int = typer.Option(4),
-    target_segments: int = typer.Option(20),
+    downscale_factor: int = typer.Option(1),
+    target_segments: int = typer.Option(96),
     compactness: float = typer.Option(20.0),
     sigma: float = typer.Option(1.0),
 ) -> None:
@@ -191,3 +192,57 @@ def summary(
     typer.echo(f'regions: {len(region_map.regions)}')
     typer.echo(f'preview_shape: {preview.shape[1]}x{preview.shape[0]}')
     typer.echo(f'svg_paths: {svg.count("<path")}')
+
+
+@app.command('grid-init')
+def grid_init(
+    input_path: Annotated[Path, typer.Argument(..., exists=True, readable=True)],
+    workspace_dir: Annotated[Path, typer.Argument(...)],
+) -> None:
+    """Create a grid-search workspace with a preset gallery."""
+
+    workspace = GridWorkspace.create(input_path, workspace_dir)
+    typer.echo(f'workspace: {workspace.workspace_dir}')
+    typer.echo(f'source: {workspace.source_image_path}')
+    typer.echo(f'candidates: {len(workspace.candidates)}')
+    typer.echo(f'active: {workspace.active_candidate_id}')
+
+
+@app.command('grid-export')
+def grid_export(
+    workspace_dir: Annotated[Path, typer.Argument(..., exists=True, readable=True)],
+    output_dir: Annotated[Path, typer.Argument(...)],
+) -> None:
+    """Export a composite preview and SVG from the kept gallery selections."""
+
+    workspace = GridWorkspace.load(workspace_dir)
+    composite_png, composite_svg = workspace.export_composite(output_dir)
+    typer.echo(f'composite_png: {composite_png}')
+    typer.echo(f'composite_svg: {composite_svg}')
+
+
+@app.command('grid-serve')
+def grid_serve(
+    workspace_dir: Annotated[Path, typer.Argument(..., exists=True, readable=True)],
+    host: str = typer.Option('127.0.0.1', help='Host to bind the browser server to.'),
+    port: int = typer.Option(8000, help='Port to bind the browser server to.'),
+    open_browser: bool = typer.Option(
+        True,
+        '--open-browser/--no-open-browser',
+        help='Open the browser automatically.',
+    ),
+) -> None:
+    """Serve the browser UI for a grid-search workspace."""
+
+    app_obj = create_gallery_app(workspace_dir)
+    url = f'http://{host}:{port}'
+
+    if open_browser:
+
+        def _open() -> None:
+            time.sleep(0.5)
+            webbrowser.open(url)
+
+        threading.Thread(target=_open, daemon=True).start()
+
+    uvicorn.run(app_obj, host=host, port=port, log_level='info')

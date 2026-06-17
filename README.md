@@ -1,19 +1,19 @@
 # Marqflow
 
-Marqflow is an early-stage Python pipeline for turning a source image into a
-small, editable region graph for marquetry planning.
+Marqflow is a Python tool for planning marquetry from a raster image.
 
-The current pipeline does three things:
+The current workflow is gallery-first:
 
-1. Downscales the source image to a working resolution.
-2. Builds a superpixel region map with `scikit-image`.
-3. Exports a flat-color preview and an SVG containing the region contours.
+1. Load a source image into a workspace.
+2. Generate a grid of candidate region maps by varying segmentation parameters.
+3. Keep the candidates that look promising.
+4. Select regions from kept candidates and export a combined composite.
 
-This is the foundation for manual region refinement:
+The core pipeline still does the same underlying work:
 
-- split a selected region into smaller regions
-- merge a selected set of regions
-- preserve a stable graph of region adjacency for later editing
+- downscale the source image to a working resolution
+- build a superpixel region map with `scikit-image`
+- export a flat-color preview and an SVG of region contours
 
 ## Install
 
@@ -21,26 +21,48 @@ This is the foundation for manual region refinement:
 uv sync
 ```
 
-## Run
+## Gallery Workflow
 
-Prepare outputs for an image:
-
-```bash
-uv run marqflow prepare ~/code/bennett_16x.jpg ./out
-```
-
-Inspect the summary without writing files:
+Create a workspace from an image:
 
 ```bash
-uv run marqflow summary ~/code/bennett_16x.jpg
+uv run marqflow grid-init ~/code/bennett.jpg ./bennett-workspace
 ```
 
-## Output
+Launch the browser UI:
 
-The `prepare` command writes:
+```bash
+uv run marqflow grid-serve ./bennett-workspace
+```
 
-- `preview.png`
-- `regions.svg`
+Export the combined composite after selecting regions:
+
+```bash
+uv run marqflow grid-export ./bennett-workspace ./exported
+```
+
+The gallery UI is built around a search grid:
+
+- rows move toward more regions
+- columns move toward smoother, more regular regions
+- click a tile to open it in the viewer
+- keep the tiles you want to carry forward
+- box-select regions in one or more kept tiles
+- export a combined PNG and SVG at the end
+
+## Useful Utility Commands
+
+Preview a single segmentation without creating a workspace:
+
+```bash
+uv run marqflow prepare ~/code/bennett.jpg ./out
+```
+
+Print a quick summary for a source image:
+
+```bash
+uv run marqflow summary ~/code/bennett.jpg
+```
 
 ## Development
 
@@ -57,47 +79,4 @@ uv run ruff format .
 uv run ruff check .
 ```
 
-## Project Workflow
-
-Create an editable project:
-
-```bash
-uv run marqflow init ~/code/bennett_16x.jpg ./demo-project
-```
-
-List the current regions:
-
-```bash
-uv run marqflow regions ./demo-project
-```
-
-Refine selected regions:
-
-```bash
-uv run marqflow split ./demo-project 1 2 --segments 4
-```
-
-Merge selected regions:
-
-```bash
-uv run marqflow merge ./demo-project 3 4
-```
-
-Export the current SVG and preview:
-
-```bash
-uv run marqflow export ./demo-project ./exported
-```
-
-Launch the browser UI:
-
-```bash
-uv run marqflow serve ./demo-project
-```
-
-The browser view lets you:
-
-- click regions in the SVG preview to select them
-- split selected regions into local subregions
-- merge selected regions back into coarser pieces
-- export the current state to SVG and preview PNG
+Images are auto-oriented with EXIF metadata applied when loaded.

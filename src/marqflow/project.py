@@ -9,10 +9,10 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from skimage.segmentation import slic
+from skimage.segmentation import felzenszwalb, slic
 
 from .config import SegmentationConfig, SuperpixelConfig
-from .image import downscale_image, load_rgb_image, save_rgb_image
+from .image import downscale_image, load_rgb_image, resize_to_max_edge, save_rgb_image
 from .regions import (
     RegionMap,
     build_regions,
@@ -37,6 +37,7 @@ class EditRecord:
 def _config_to_dict(config: SegmentationConfig) -> dict[str, Any]:
     return {
         'downscale_factor': config.downscale_factor,
+        'max_working_edge': config.max_working_edge,
         'superpixels': asdict(config.superpixels),
     }
 
@@ -44,9 +45,10 @@ def _config_to_dict(config: SegmentationConfig) -> dict[str, Any]:
 def _config_from_dict(data: dict[str, Any]) -> SegmentationConfig:
     superpixels = data.get('superpixels', {})
     return SegmentationConfig(
-        downscale_factor=int(data.get('downscale_factor', 4)),
+        downscale_factor=int(data.get('downscale_factor', 1)),
+        max_working_edge=int(data.get('max_working_edge', 384)),
         superpixels=SuperpixelConfig(
-            target_segments=int(superpixels.get('target_segments', 20)),
+            target_segments=int(superpixels.get('target_segments', 32)),
             compactness=float(superpixels.get('compactness', 20.0)),
             sigma=float(superpixels.get('sigma', 1.0)),
         ),
@@ -70,6 +72,7 @@ class MarqflowProject:
     config: SegmentationConfig
     working_image: np.ndarray
     labels: np.ndarray
+    locked_region_ids: set[int] = field(default_factory=set)
     edits: list[EditRecord] = field(default_factory=list)
 
     @property
@@ -100,6 +103,7 @@ class MarqflowProject:
         config.validate()
 
         working_image = downscale_image(load_rgb_image(source_path), config.downscale_factor)
+        working_image = resize_to_max_edge(working_image, config.max_working_edge)
         labels = slic(
             working_image,
             n_segments=config.superpixels.target_segments,
@@ -135,6 +139,7 @@ class MarqflowProject:
             config=config,
             working_image=working_image,
             labels=labels,
+            locked_region_ids={int(value) for value in manifest.get('locked_region_ids', [])},
             edits=edits,
         )
 
@@ -152,6 +157,7 @@ class MarqflowProject:
                 'working_image': WORKING_IMAGE,
                 'labels': LABELS_PATH,
                 'config': _config_to_dict(self.config),
+                'locked_region_ids': sorted(self.locked_region_ids),
                 'edits': [asdict(edit) for edit in self.edits],
             },
         )
@@ -185,6 +191,8 @@ class MarqflowProject:
         changed = 0
 
         for region_id in selected_ids:
+            if region_id in self.locked_region_ids:
+                continue
             mask = self.labels == region_id
             if not np.any(mask):
                 continue
@@ -198,17 +206,32 @@ class MarqflowProject:
             if int(crop_mask.sum()) < 2:
                 continue
 
-            sublabels = slic(
+            masked_pixels = int(crop_mask.sum())
+            next_target = max(2, int(target_segments))
+            base_scale = max(40, masked_pixels // next_target)
+            scale = max(20, int(base_scale * (float(compactness) / 20.0)))
+            sublabels = felzenszwalb(
                 crop_image,
-                n_segments=max(2, int(target_segments)),
-                compactness=compactness,
+                scale=scale,
                 sigma=sigma,
-                start_label=1,
-                convert2lab=True,
-                mask=crop_mask,
+                min_size=max(2, masked_pixels // max(4, next_target * 2)),
             )
 
             unique = [int(value) for value in np.unique(sublabels[crop_mask]) if int(value) > 0]
+            if len(unique) <= 1:
+                sublabels = slic(
+                    crop_image,
+                    n_segments=max(2, int(target_segments)),
+                    compactness=float(compactness),
+                    sigma=sigma,
+                    start_label=1,
+                    convert2lab=True,
+                    mask=crop_mask,
+                )
+                unique = [
+                    int(value) for value in np.unique(sublabels[crop_mask]) if int(value) > 0
+                ]
+
             if len(unique) <= 1:
                 continue
 
@@ -240,7 +263,13 @@ class MarqflowProject:
     def merge_regions(self, region_ids: Iterable[int]) -> int:
         """Merge connected selected regions into coarser pieces."""
 
-        selected = sorted({int(region_id) for region_id in region_ids})
+        selected = sorted(
+            {
+                int(region_id)
+                for region_id in region_ids
+                if int(region_id) not in self.locked_region_ids
+            }
+        )
         if len(selected) < 2:
             return 0
 
@@ -260,3 +289,27 @@ class MarqflowProject:
             )
             self.save()
         return merged_groups
+
+    def lock_regions(self, region_ids: Iterable[int]) -> int:
+        """Protect selected regions from later split/merge edits."""
+
+        selected = {int(region_id) for region_id in region_ids}
+        before = len(self.locked_region_ids)
+        self.locked_region_ids.update(selected)
+        changed = len(self.locked_region_ids) - before
+        if changed:
+            self.edits.append(EditRecord(op='lock', data={'region_ids': sorted(selected)}))
+            self.save()
+        return changed
+
+    def unlock_regions(self, region_ids: Iterable[int]) -> int:
+        """Remove protection from selected regions."""
+
+        selected = {int(region_id) for region_id in region_ids}
+        before = len(self.locked_region_ids)
+        self.locked_region_ids.difference_update(selected)
+        changed = before - len(self.locked_region_ids)
+        if changed:
+            self.edits.append(EditRecord(op='unlock', data={'region_ids': sorted(selected)}))
+            self.save()
+        return changed
