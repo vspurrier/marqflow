@@ -1,9 +1,11 @@
 from pathlib import Path
 
 import numpy as np
+from PIL import Image
 
 from marqflow.config import SegmentationConfig
 from marqflow.pipeline import build_region_map, build_superpixel_preview
+from marqflow.project import MarqflowProject
 from marqflow.regions import build_region_neighbors
 from marqflow.svg import region_map_to_svg
 
@@ -27,8 +29,6 @@ def test_pipeline_builds_region_map_and_svg(tmp_path: Path) -> None:
     image[12:, 12:] = [255, 255, 0]
 
     input_path = tmp_path / 'synthetic.png'
-    from PIL import Image
-
     Image.fromarray(image, mode='RGB').save(input_path)
 
     config = SegmentationConfig(downscale_factor=1)
@@ -41,3 +41,46 @@ def test_pipeline_builds_region_map_and_svg(tmp_path: Path) -> None:
     assert len(region_map.regions) >= 4
     assert svg.startswith('<svg')
     assert svg.count('<path') >= 1
+
+
+def test_project_split_merge_round_trip(tmp_path: Path) -> None:
+    image = np.zeros((32, 32, 3), dtype=np.uint8)
+    image[:16, :16] = [255, 0, 0]
+    image[:16, 16:] = [0, 255, 0]
+    image[16:, :16] = [0, 0, 255]
+    image[16:, 16:] = [255, 255, 0]
+
+    input_path = tmp_path / 'synthetic.png'
+    Image.fromarray(image, mode='RGB').save(input_path)
+
+    project_dir = tmp_path / 'project'
+    project = MarqflowProject.create(
+        input_path,
+        project_dir,
+        SegmentationConfig(downscale_factor=1),
+    )
+    initial_count = len(project.region_map.regions)
+
+    first_region = project.region_map.regions[0].region_id
+    assert project.split_regions([first_region], target_segments=4) == 1
+
+    reloaded = MarqflowProject.load(project_dir)
+    split_count = len(reloaded.region_map.regions)
+    assert split_count > initial_count
+
+    pair = next(
+        (
+            (region.region_id, neighbor)
+            for region in reloaded.region_map.regions
+            for neighbor in region.neighbors
+        ),
+        None,
+    )
+    assert pair is not None
+    assert reloaded.merge_regions(pair) == 1
+
+    merged = MarqflowProject.load(project_dir)
+    assert len(merged.region_map.regions) <= split_count
+    assert (project_dir / 'project.json').exists()
+    assert (project_dir / 'working.png').exists()
+    assert (project_dir / 'labels.npy').exists()

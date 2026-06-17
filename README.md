@@ -56,3 +56,35 @@ Format and lint:
 uv run ruff format .
 uv run ruff check .
 ```
+
+## Project Workflow
+
+Create an editable project:
+
+```bash
+uv run marqflow init ~/code/bennett_16x.jpg ./demo-project
+```
+
+List the current regions:
+
+```bash
+uv run marqflow regions ./demo-project
+```
+
+Refine selected regions:
+
+```bash
+uv run marqflow split ./demo-project 1 2 --segments 4
+```
+
+Merge selected regions:
+
+```bash
+uv run marqflow merge ./demo-project 3 4
+```
+
+Export the current SVG and preview:
+
+```bash
+uv run marqflow export ./demo-project ./exported
+```

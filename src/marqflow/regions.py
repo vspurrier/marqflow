@@ -133,3 +133,36 @@ def labels_to_palette_image(image_rgb: np.ndarray, labels: np.ndarray) -> np.nda
 
 def iter_region_ids(regions: Iterable[Region]) -> list[int]:
     return [region.region_id for region in regions]
+
+
+def labels_to_region_lookup(labels: np.ndarray) -> dict[int, np.ndarray]:
+    """Build a boolean mask per label."""
+
+    lookup: dict[int, np.ndarray] = {}
+    for raw_label in np.unique(labels):
+        label = int(raw_label)
+        lookup[label] = labels == label
+    return lookup
+
+
+def selected_region_components(labels: np.ndarray, selected_ids: Iterable[int]) -> list[set[int]]:
+    """Split a selection into connected label components."""
+
+    adjacency = build_region_neighbors(labels)
+    remaining = set(int(region_id) for region_id in selected_ids)
+    components: list[set[int]] = []
+
+    while remaining:
+        seed = remaining.pop()
+        component = {seed}
+        stack = [seed]
+        while stack:
+            current = stack.pop()
+            for neighbor in adjacency[current]:
+                if neighbor in remaining:
+                    remaining.remove(neighbor)
+                    component.add(neighbor)
+                    stack.append(neighbor)
+        components.append(component)
+
+    return components
