@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+import threading
+import time
+import webbrowser
 from pathlib import Path
 from typing import Annotated
 
 import typer
+import uvicorn
 
 from .config import SegmentationConfig, SuperpixelConfig
 from .pipeline import build_region_map, build_superpixel_preview, write_pipeline_outputs
 from .project import MarqflowProject
 from .svg import region_map_to_svg
+from .web import create_app
 
 app = typer.Typer(add_completion=False, help='Prepare and edit marquetry-friendly region maps.')
 
@@ -138,6 +143,33 @@ def regions(
             f'{region.region_id:>4}  area={region.area:>6}  fill={region.fill}  '
             f'neighbors={neighbors}'
         )
+
+
+@app.command()
+def serve(
+    project_dir: Annotated[Path, typer.Argument(..., exists=True, readable=True)],
+    host: str = typer.Option('127.0.0.1', help='Host to bind the browser server to.'),
+    port: int = typer.Option(8000, help='Port to bind the browser server to.'),
+    open_browser: bool = typer.Option(
+        True,
+        '--open-browser/--no-open-browser',
+        help='Open the browser automatically.',
+    ),
+) -> None:
+    """Serve the interactive browser UI for a project."""
+
+    app_obj = create_app(project_dir)
+    url = f'http://{host}:{port}'
+
+    if open_browser:
+
+        def _open() -> None:
+            time.sleep(0.5)
+            webbrowser.open(url)
+
+        threading.Thread(target=_open, daemon=True).start()
+
+    uvicorn.run(app_obj, host=host, port=port, log_level='info')
 
 
 @app.command()

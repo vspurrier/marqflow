@@ -88,3 +88,16 @@ Export the current SVG and preview:
 ```bash
 uv run marqflow export ./demo-project ./exported
 ```
+
+Launch the browser UI:
+
+```bash
+uv run marqflow serve ./demo-project
+```
+
+The browser view lets you:
+
+- click regions in the SVG preview to select them
+- split selected regions into local subregions
+- merge selected regions back into coarser pieces
+- export the current state to SVG and preview PNG

@@ -24,8 +24,8 @@ class SegmentationConfig:
     def validate(self) -> None:
         if self.downscale_factor < 1:
             raise ValueError('downscale_factor must be >= 1')
-        if self.superpixels.target_segments < 2:
-            raise ValueError('target_segments must be >= 2')
+        if self.superpixels.target_segments < 1:
+            raise ValueError('target_segments must be >= 1')
         if self.superpixels.compactness <= 0:
             raise ValueError('compactness must be > 0')
         if self.superpixels.sigma < 0:
