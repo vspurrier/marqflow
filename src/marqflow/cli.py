@@ -159,18 +159,7 @@ def serve(
 ) -> None:
     """Serve the browser UI for a grid-search workspace."""
 
-    app_obj = create_gallery_app(workspace_dir)
-    url = f'http://{host}:{port}'
-
-    if open_browser:
-
-        def _open() -> None:
-            time.sleep(0.5)
-            webbrowser.open(url)
-
-        threading.Thread(target=_open, daemon=True).start()
-
-    uvicorn.run(app_obj, host=host, port=port, log_level='info')
+    _serve_workspace_ui(workspace_dir, host=host, port=port, open_browser=open_browser)
 
 
 @app.command()
@@ -233,6 +222,18 @@ def grid_serve(
     ),
 ) -> None:
     """Serve the browser UI for a grid-search workspace."""
+
+    _serve_workspace_ui(workspace_dir, host=host, port=port, open_browser=open_browser)
+
+
+def _serve_workspace_ui(
+    workspace_dir: Path,
+    *,
+    host: str,
+    port: int,
+    open_browser: bool,
+) -> None:
+    """Serve the browser UI for a workspace."""
 
     app_obj = create_gallery_app(workspace_dir)
     url = f'http://{host}:{port}'

@@ -7,7 +7,12 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True, slots=True)
 class SuperpixelConfig:
-    """Controls the coarse region base that the UI starts from."""
+    """Parameters for the initial superpixel segmentation.
+
+    `target_segments` is the rough number of regions to aim for.
+    `compactness` trades color similarity against spatial regularity.
+    `sigma` adds pre-smoothing before the segmentation step.
+    """
 
     target_segments: int = 32
     compactness: float = 20.0
@@ -16,7 +21,12 @@ class SuperpixelConfig:
 
 @dataclass(frozen=True, slots=True)
 class SegmentationConfig:
-    """Full pipeline configuration for preparing a marquetry working image."""
+    """Full pipeline configuration for preparing a marquetry working image.
+
+    The config keeps the two most important decisions together:
+    how aggressively to downscale the source image, and which superpixel
+    settings to use when building the region map.
+    """
 
     downscale_factor: int = 1
     max_working_edge: int = 384

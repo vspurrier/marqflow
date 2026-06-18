@@ -1,0 +1,109 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Marqflow Gallery</title>
+  <link rel="stylesheet" href="/static/gallery.css" />
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="topbar-row">
+        <div class="brand">
+          <h1 class="title">Marqflow Gallery</h1>
+          <p class="subtitle">
+            Canvas-first candidate browsing. Select a candidate at the top, keep promising ones,
+            and use the grid below to search more broadly.
+          </p>
+        </div>
+        <div class="status-row">
+          <div class="pill" id="workspace-pill">Loading workspace…</div>
+          <div class="pill" id="status-pill">Idle</div>
+        </div>
+      </div>
+      <div class="controls">
+        <select id="candidate-select" aria-label="Candidate selector"></select>
+        <button id="keep-btn" class="primary" type="button">Keep active</button>
+        <button id="refine-btn" class="primary" type="button">Refine active</button>
+        <button id="export-btn" type="button">Export composite</button>
+        <input id="export-dir" type="text" value="./exported" title="Export directory" />
+      </div>
+    </header>
+
+    <div class="tabs">
+      <button id="search-tab-btn" class="tab-btn active" type="button">Search</button>
+      <button id="compose-tab-btn" class="tab-btn" type="button">Compose</button>
+      <button id="merge-tab-btn" class="tab-btn" type="button">Merge</button>
+    </div>
+
+    <div class="progress-shell" aria-hidden="true">
+      <div id="progress-bar" class="progress-bar"></div>
+    </div>
+
+    <div id="search-panel" class="tab-panel active">
+      <div id="kept-strip" class="kept-strip" aria-label="Kept candidates"></div>
+      <section class="grid-panel">
+        <div class="section-title">
+          <span>Candidate Grid</span>
+          <span class="badge" id="candidate-count">0</span>
+        </div>
+        <div class="small" id="grid-help">
+          The grid is the search surface. Open candidates from here, keep the promising ones,
+          and use the top strip to revisit them quickly.
+        </div>
+        <div id="grid" class="candidate-grid" style="margin-top: 12px;"></div>
+      </section>
+    </div>
+
+    <div id="compose-panel" class="tab-panel">
+      <div class="compose-shell">
+        <aside class="compose-palette">
+          <div class="section-title" style="margin: 0;">
+            <span>Kept Palette</span>
+            <span class="badge" id="compose-kept-count">0</span>
+          </div>
+          <div class="small">
+            Click regions in the kept candidates to paint them into the working canvas on the right.
+            Paint all copies a candidate in one step.
+          </div>
+          <div id="compose-palette-list" class="compose-palette-list"></div>
+        </aside>
+        <section class="compose-workbench">
+          <div class="compose-canvas-wrap">
+            <div class="compose-stage" id="compose-stage">
+              <canvas id="compose-canvas"></canvas>
+            </div>
+          </div>
+          <div class="small" id="compose-summary">Paint regions from the left palette onto the composite.</div>
+        </section>
+      </div>
+    </div>
+
+    <div id="merge-panel" class="tab-panel">
+      <div class="merge-shell">
+        <div class="compose-workbench-bar">
+          <div class="small">
+            Review the merged preview before exporting the final pieces for packing.
+          </div>
+          <div class="compose-tools">
+            <label class="tool-field" title="Higher values merge more similar colors into the same final piece.">
+              <span>Merge threshold <span id="merge-threshold-value">24</span></span>
+              <input id="merge-threshold" type="range" min="0" max="80" step="1" value="24" />
+            </label>
+            <button id="export-final-btn" class="primary" type="button">Export final</button>
+          </div>
+        </div>
+        <div class="compose-canvas-wrap">
+          <div class="compose-stage" id="merge-stage">
+            <canvas id="merge-canvas"></canvas>
+          </div>
+        </div>
+        <div class="small" id="merge-summary">Merged preview will appear here.</div>
+      </div>
+    </div>
+  </div>
+  <script defer src="/static/gallery.js"></script>
+</body>
+</html>

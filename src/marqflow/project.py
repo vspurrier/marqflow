@@ -1,8 +1,15 @@
-"""Persistent marquetry project state."""
+"""Persistent marquetry project state.
+
+This module stores the editable, single-candidate side of the workflow:
+the working image, region labels, edit history, and persistence helpers
+for split/merge/lock operations.
+"""
 
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -60,7 +67,26 @@ def _json_load(path: Path) -> dict[str, Any]:
 
 
 def _json_dump(path: Path, payload: dict[str, Any]) -> None:
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding='utf-8')
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile('w', encoding='utf-8', delete=False, dir=path.parent) as tmp:
+        json.dump(payload, tmp, indent=2, sort_keys=True)
+        tmp.write('\n')
+        tmp_path = Path(tmp.name)
+    os.replace(tmp_path, path)
+
+
+def _serialise_path(base_dir: Path, path: Path) -> str:
+    try:
+        return str(path.relative_to(base_dir))
+    except ValueError:
+        return str(path)
+
+
+def _resolve_path(base_dir: Path, value: str | Path) -> Path:
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    return base_dir / path
 
 
 @dataclass(slots=True)
@@ -77,6 +103,8 @@ class MarqflowProject:
 
     @property
     def region_map(self) -> RegionMap:
+        """Build a fresh region map view from the current labels."""
+
         regions = build_regions(self.working_image, self.labels)
         return RegionMap(
             image_rgb=self.working_image,
@@ -87,6 +115,8 @@ class MarqflowProject:
 
     @property
     def preview(self) -> np.ndarray:
+        """Return the flat-color preview for the current labels."""
+
         return labels_to_palette_image(self.working_image, self.labels)
 
     @classmethod
@@ -130,12 +160,14 @@ class MarqflowProject:
         project_path = Path(project_dir)
         manifest = _json_load(project_path / PROJECT_MANIFEST)
         config = _config_from_dict(manifest['config'])
-        working_image = np.asarray(load_rgb_image(project_path / manifest['working_image']))
-        labels = np.load(project_path / manifest['labels'])
+        working_image = np.asarray(
+            load_rgb_image(_resolve_path(project_path, manifest['working_image']))
+        )
+        labels = np.load(_resolve_path(project_path, manifest['labels']))
         edits = [EditRecord(**record) for record in manifest.get('edits', [])]
         return cls(
             project_dir=project_path,
-            source_image_path=Path(manifest['source_image']),
+            source_image_path=_resolve_path(project_path, manifest['source_image']),
             config=config,
             working_image=working_image,
             labels=labels,
@@ -153,7 +185,7 @@ class MarqflowProject:
             self.project_dir / PROJECT_MANIFEST,
             {
                 'version': 1,
-                'source_image': str(self.source_image_path),
+                'source_image': _serialise_path(self.project_dir, self.source_image_path),
                 'working_image': WORKING_IMAGE,
                 'labels': LABELS_PATH,
                 'config': _config_to_dict(self.config),
@@ -180,7 +212,12 @@ class MarqflowProject:
         compactness: float | None = None,
         sigma: float | None = None,
     ) -> int:
-        """Refine selected regions by running local superpixel segmentation."""
+        """Refine selected regions by running local superpixel segmentation.
+
+        Each selected region is segmented inside its own bounding box. The
+        fallback from `felzenszwalb` to `slic` keeps the operation useful when
+        the local crop is small or low-contrast.
+        """
 
         compactness = (
             compactness if compactness is not None else self.config.superpixels.compactness
@@ -261,7 +298,11 @@ class MarqflowProject:
         return changed
 
     def merge_regions(self, region_ids: Iterable[int]) -> int:
-        """Merge connected selected regions into coarser pieces."""
+        """Merge connected selected regions into coarser pieces.
+
+        Only connected components are merged together so a selection spanning
+        multiple disconnected islands does not collapse into one label.
+        """
 
         selected = sorted(
             {
