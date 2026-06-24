@@ -550,7 +550,10 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
     def pack_final(request: ExportRequest) -> JSONResponse:
         with workspace_lock:
             workspace = _load_workspace(workspace_path)
-            payload = workspace.pack_by_veneer(request.output_dir)
+            try:
+                payload = workspace.pack_by_veneer(request.output_dir)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
             return JSONResponse({'output_dir': request.output_dir, 'packed_sheets': payload})
 
     return app

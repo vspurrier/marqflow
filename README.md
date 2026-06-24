@@ -99,6 +99,7 @@ Cleanup is a final review stage:
 - small/thin/geometry warnings are highlighted on the canvas and in the region list
 - use Merge selected and Split selected to adjust the final partition
 - use Merge suggestions to apply the current small/thin-piece cleanup suggestions in one pass
+- export and pack block invalid edited contours that are self-intersecting, zero-area, or out of bounds
 - the final `Pack final` action writes a veneer-aware packing plan next to the export directory
 
 ### Pack Tab

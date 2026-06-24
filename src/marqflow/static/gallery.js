@@ -943,7 +943,10 @@ async function renderCleanupTab(workspace) {
   const geometryWarningCount =
     (summary.complex_region_ids || []).length +
     (summary.hole_region_ids || []).length +
-    (summary.disconnected_region_ids || []).length;
+    (summary.disconnected_region_ids || []).length +
+    (summary.invalid_contour_ids || []).length +
+    (summary.out_of_bounds_region_ids || []).length +
+    (summary.zero_area_region_ids || []).length;
   const suggestionText =
     suggestionCount > 0 ? `Merge suggestions: ${suggestionCount}.` : 'No merge suggestions.';
   el.mergeSummary.textContent = [
@@ -1076,6 +1079,9 @@ function drawCleanupWarningOverlay(workspace) {
     ...(summary.complex_region_ids || []),
     ...(summary.hole_region_ids || []),
     ...(summary.disconnected_region_ids || []),
+    ...(summary.invalid_contour_ids || []),
+    ...(summary.out_of_bounds_region_ids || []),
+    ...(summary.zero_area_region_ids || []),
   ]);
   if (!smallIds.size && !thinIds.size && !geometryIds.size) {
     return;
@@ -1120,6 +1126,9 @@ async function renderFinalRegionList(workspace) {
   const complexIds = new Set(summary.complex_region_ids || []);
   const holeIds = new Set(summary.hole_region_ids || []);
   const disconnectedIds = new Set(summary.disconnected_region_ids || []);
+  const invalidContourIds = new Set(summary.invalid_contour_ids || []);
+  const outOfBoundsIds = new Set(summary.out_of_bounds_region_ids || []);
+  const zeroAreaIds = new Set(summary.zero_area_region_ids || []);
   const suggestions = new Map((summary.merge_suggestions || []).map((item) => [item.region_id, item]));
   el.finalRegionList.innerHTML = '';
   if (!regions.length) {
@@ -1140,7 +1149,10 @@ async function renderFinalRegionList(workspace) {
     if (
       complexIds.has(region.region_id) ||
       holeIds.has(region.region_id) ||
-      disconnectedIds.has(region.region_id)
+      disconnectedIds.has(region.region_id) ||
+      invalidContourIds.has(region.region_id) ||
+      outOfBoundsIds.has(region.region_id) ||
+      zeroAreaIds.has(region.region_id)
     ) {
       item.classList.add('geometry-warning');
     }
@@ -1150,6 +1162,9 @@ async function renderFinalRegionList(workspace) {
       complexIds.has(region.region_id) ? 'High point count' : '',
       holeIds.has(region.region_id) ? 'Holes' : '',
       disconnectedIds.has(region.region_id) ? 'Disconnected islands' : '',
+      invalidContourIds.has(region.region_id) ? 'Invalid contour' : '',
+      outOfBoundsIds.has(region.region_id) ? 'Out of bounds' : '',
+      zeroAreaIds.has(region.region_id) ? 'Zero area contour' : '',
     ].filter(Boolean);
     const veneerOptions = palette
       .map(

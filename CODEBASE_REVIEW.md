@@ -124,19 +124,21 @@ Done:
 - Pack output now uses per-veneer stock dimensions when sheet width/height are set on a veneer swatch.
 - Cleanup warnings now draw directly over the canvas for small, thin, and complex/problem regions.
 - Cleanup now includes a bulk Merge suggestions action that applies the current valid small/thin merge suggestions.
+- Export and pack now validate edited vector contours for invalid geometry, zero area, and out-of-bounds coordinates before writing fabrication files.
+- Final-design operations now append timestamped manual edit records for size, cleanup, subject, veneer inventory, veneer assignment, lock, point, smooth, merge, and split changes.
 
 Partial:
 
 - Frontend testing now includes static asset smoke coverage, API workflow coverage, and a headless browser workflow smoke test.
 - The UI is more cache-friendly, but candidate selection still rerenders more of the Hues/Cleanup view than it should.
-- The final plan is now a non-overlapping physical partition, but provenance is still coarse when cleanup edits are replayed after shape changes.
+- The final plan is now a non-overlapping physical partition with vector contour validation, but shared-boundary provenance is still coarse when cleanup edits are replayed after shape changes.
 - Manual merge and split exist. Point editing, smoothing, hover inspection, drag selection, and basic geometry diagnostics are implemented, but richer geometry repair and shared-boundary editing are still not implemented.
 
 Open:
 
 - Expand browser-level interaction tests beyond the current smoke path.
 - Add richer canvas-based cleanup interaction, especially brush selection and sliver overlays.
-- Add more nuanced sliver repair and shared-boundary cleanup.
+- Add more nuanced sliver repair, shared-boundary cleanup, and undo/revert for manual edits.
 - Remove or formalize old single-project commands and helpers.
 - Review and remove unused dependencies if they remain unreferenced after the current dependency pass.
 
@@ -184,7 +186,7 @@ Open:
 
    Status: Partial.
 
-   Current behavior: the workspace now stores physical width, height, units, and cleanup thresholds. Region summaries include physical area and perimeter estimates, and SVG export now scales into physical units. Packing produces veneer-grouped output, but it is still a bounding-box adapter rather than a shared-boundary nesting model.
+   Current behavior: the workspace now stores physical width, height, units, and cleanup thresholds. Region summaries include physical area and perimeter estimates, SVG export scales into physical units, and export/pack block invalid edited vector contours. Packing produces veneer-grouped output, but it is still a bounding-box adapter rather than a shared-boundary nesting model.
 
    Why this matters: marquetry decisions are physical. A region that looks acceptable at screen scale may be impossible to cut at 8x10 inches. Packing also requires real units and one closed piece per final region.
 

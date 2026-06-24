@@ -94,7 +94,11 @@ def test_browser_workflow_smoke(tmp_path: Path, browser_server: tuple[str, uvico
         assert first_swatch['sheet_height'] == 9
         assert first_swatch['grain_direction'] == 'vertical'
         assert first_swatch['notes'] == 'browser stock note'
-        page.locator('#compose-summary').wait_for()
+        page.click('#hues-tab-btn')
+        page.wait_for_selector('.compose-candidate', state='visible')
+        page.wait_for_function(
+            "() => document.querySelector('#compose-summary').textContent.length > 0"
+        )
         page.locator('.compose-candidate .paint-btn', has_text='Paint all').first.click()
         summary_wait = (
             "() => document.querySelector('#compose-summary')"

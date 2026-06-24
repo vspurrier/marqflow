@@ -516,6 +516,55 @@ def test_merge_cleanup_suggestions_reduces_piece_count(tmp_path: Path) -> None:
     assert len(after['merge_suggestions']) <= len(before['merge_suggestions'])
 
 
+def test_invalid_vector_contour_blocks_fabrication_exports(tmp_path: Path) -> None:
+    image = np.zeros((32, 32, 3), dtype=np.uint8)
+    image[:16, :] = [80, 80, 80]
+    image[16:, :] = [180, 180, 180]
+    input_path = tmp_path / 'source.png'
+    Image.fromarray(image, mode='RGB').save(input_path)
+
+    workspace_dir = tmp_path / 'workspace'
+    GridWorkspace.create(
+        input_path,
+        workspace_dir,
+        segment_levels=(2,),
+        smoothness_levels=(2.0,),
+        max_working_edge=32,
+    )
+    client = TestClient(create_app(workspace_dir))
+    first_region = client.get('/api/workspace').json()['final_regions'][0]
+
+    point_response = client.post(
+        '/api/workspace/final/point',
+        json={
+            'region_id': first_region['region_id'],
+            'point_index': 0,
+            'x': -50.0,
+            'y': -50.0,
+        },
+    )
+
+    assert point_response.status_code == 200
+    payload = point_response.json()
+    assert payload['vector_validation']['vector_valid'] is False
+    assert first_region['region_id'] in payload['vector_validation']['out_of_bounds_region_ids']
+    assert any(
+        edit['op'] == 'move_point'
+        for edit in payload['composite_design']['manual_edits']
+    )
+
+    export_response = client.post(
+        '/api/workspace/composite/export',
+        json={'output_dir': str(tmp_path / 'exported')},
+    )
+    assert export_response.status_code == 400
+    pack_response = client.post(
+        '/api/workspace/pack',
+        json={'output_dir': str(tmp_path / 'packed')},
+    )
+    assert pack_response.status_code == 400
+
+
 def test_browser_upload_caps_working_resolution(tmp_path: Path) -> None:
     image = np.zeros((900, 1200, 3), dtype=np.uint8)
     image[:, :600] = [90, 90, 90]

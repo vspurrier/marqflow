@@ -22,6 +22,7 @@ from typing import Any
 
 import numpy as np
 from PIL import Image
+from shapely.geometry import Polygon
 from skimage.measure import approximate_polygon, find_contours
 from skimage.measure import label as connected_components
 
@@ -509,6 +510,47 @@ class GridWorkspace:
             'region_count': len(region_ids),
         }
 
+    def _vector_validation(self) -> dict[str, Any]:
+        """Validate exported contour geometry for fabrication."""
+
+        base_project = self._base_project()
+        if base_project is None:
+            return {
+                'vector_valid': False,
+                'invalid_contour_ids': [],
+                'out_of_bounds_region_ids': [],
+                'zero_area_region_ids': [],
+            }
+        try:
+            records = self._final_region_records()
+        except ValueError:
+            records = []
+        width = float(base_project.working_image.shape[1])
+        height = float(base_project.working_image.shape[0])
+        invalid_contour_ids: list[int] = []
+        out_of_bounds_region_ids: list[int] = []
+        zero_area_region_ids: list[int] = []
+        for region in records:
+            if len(region.contour) < 4:
+                invalid_contour_ids.append(region.region_id)
+                continue
+            polygon = Polygon(region.contour)
+            if not polygon.is_valid:
+                invalid_contour_ids.append(region.region_id)
+            if polygon.area <= 1e-6:
+                zero_area_region_ids.append(region.region_id)
+            min_x, min_y, max_x, max_y = polygon.bounds
+            if min_x < -1.0 or min_y < -1.0 or max_x > width + 1.0 or max_y > height + 1.0:
+                out_of_bounds_region_ids.append(region.region_id)
+        return {
+            'vector_valid': not (
+                invalid_contour_ids or out_of_bounds_region_ids or zero_area_region_ids
+            ),
+            'invalid_contour_ids': invalid_contour_ids,
+            'out_of_bounds_region_ids': out_of_bounds_region_ids,
+            'zero_area_region_ids': zero_area_region_ids,
+        }
+
     def _refresh_composite_base_candidate(self) -> None:
         """Keep the persisted composite base aligned with the kept state."""
 
@@ -590,6 +632,15 @@ class GridWorkspace:
         design = self._ensure_composite_design()
         design.paint_events = list(self.paint_events)
         return event
+
+    def _record_manual_edit(self, edit: dict[str, Any]) -> dict[str, Any]:
+        """Append a non-paint final-design edit to the audit log."""
+
+        payload = {'edited_at_ns': time_ns(), **edit}
+        self.manual_edits.append(payload)
+        if self.composite_design is not None:
+            self.composite_design.manual_edits.append(dict(payload))
+        return payload
 
     def _apply_paint_events(self) -> None:
         """Rebuild candidate selections from the paint-event log."""
@@ -1107,6 +1158,9 @@ class GridWorkspace:
         self.physical_size = PhysicalSize(width=float(width), height=float(height), unit=unit)
         design = self._ensure_composite_design()
         design.physical_size = self.physical_size
+        self._record_manual_edit(
+            {'op': 'set_size', 'width': float(width), 'height': float(height), 'unit': unit}
+        )
         self.save()
 
     def set_cleanup_settings(self, settings: CleanupSettings) -> None:
@@ -1115,12 +1169,14 @@ class GridWorkspace:
         self.cleanup_settings = settings
         design = self._ensure_composite_design()
         design.cleanup = settings
+        self._record_manual_edit({'op': 'set_cleanup', **settings.to_dict()})
         self.save()
 
     def set_subject_settings(self, settings: SubjectSettings) -> None:
         """Persist subject-focus metadata."""
 
         self.subject_settings = settings
+        self._record_manual_edit({'op': 'set_subject', **settings.to_dict()})
         self.save()
 
     def set_veneer_palette(self, palette: list[VeneerSwatch]) -> None:
@@ -1163,6 +1219,9 @@ class GridWorkspace:
         design = self._ensure_composite_design()
         design.veneer_palette = list(normalized)
         design.final_region_veneer_overrides = dict(self.final_region_veneer_overrides)
+        self._record_manual_edit(
+            {'op': 'set_veneer_palette', 'veneer_ids': [swatch.veneer_id for swatch in normalized]}
+        )
         self.save()
 
     def set_final_region_veneer(self, region_id: int, veneer_id: str | None) -> bool:
@@ -1179,6 +1238,9 @@ class GridWorkspace:
             self.final_region_veneer_overrides[int(region_id)] = str(veneer_id)
             design.final_region_veneer_overrides[int(region_id)] = str(veneer_id)
         self.final_labels = labels
+        self._record_manual_edit(
+            {'op': 'set_veneer', 'region_id': int(region_id), 'veneer_id': veneer_id}
+        )
         self.save()
         return True
 
@@ -1197,6 +1259,7 @@ class GridWorkspace:
             self.final_region_locked_ids.discard(region_id)
             design.final_region_locked_ids.discard(region_id)
         self.final_labels = labels
+        self._record_manual_edit({'op': 'set_lock', 'region_id': region_id, 'locked': bool(locked)})
         self.save()
         return True
 
@@ -1222,6 +1285,15 @@ class GridWorkspace:
         self.final_region_contour_overrides[int(region_id)] = tuple(contour)
         design = self._ensure_composite_design()
         design.final_region_contour_overrides[int(region_id)] = tuple(contour)
+        self._record_manual_edit(
+            {
+                'op': 'move_point',
+                'region_id': int(region_id),
+                'point_index': int(point_index),
+                'x': float(x),
+                'y': float(y),
+            }
+        )
         self.save()
         return True
 
@@ -1241,6 +1313,9 @@ class GridWorkspace:
         self.final_region_contour_overrides[int(region_id)] = tuple(points)
         design = self._ensure_composite_design()
         design.final_region_contour_overrides[int(region_id)] = tuple(points)
+        self._record_manual_edit(
+            {'op': 'smooth', 'region_id': int(region_id), 'tolerance': float(tolerance)}
+        )
         self.save()
         return True
 
@@ -1272,11 +1347,11 @@ class GridWorkspace:
             for region_id in component:
                 if region_id != target:
                     self.final_region_sources.pop(region_id, None)
-        merge_edit = {'op': 'merge', 'region_ids': sorted({int(value) for value in region_ids})}
-        self.manual_edits.append(merge_edit)
+        self._record_manual_edit(
+            {'op': 'merge', 'region_ids': sorted({int(value) for value in region_ids})}
+        )
         design = self._ensure_composite_design()
         design.final_region_sources = dict(self.final_region_sources)
-        design.manual_edits.append(dict(merge_edit))
         self.save()
         return merged
 
@@ -1336,17 +1411,17 @@ class GridWorkspace:
         for new_label in range(next_label, next_label + changed):
             self.final_region_sources[new_label] = old_sources
         self.final_region_sources.pop(int(region_id), None)
-        split_edit = {
-            'op': 'split',
-            'region_id': int(region_id),
-            'target_segments': int(target_segments),
-            'compactness': float(compactness) if compactness is not None else None,
-            'sigma': float(sigma) if sigma is not None else None,
-        }
-        self.manual_edits.append(split_edit)
+        self._record_manual_edit(
+            {
+                'op': 'split',
+                'region_id': int(region_id),
+                'target_segments': int(target_segments),
+                'compactness': float(compactness) if compactness is not None else None,
+                'sigma': float(sigma) if sigma is not None else None,
+            }
+        )
         design = self._ensure_composite_design()
         design.final_region_sources = dict(self.final_region_sources)
-        design.manual_edits.append(dict(split_edit))
         self.save()
         return changed
 
@@ -1394,6 +1469,9 @@ class GridWorkspace:
             raise ValueError(
                 'final partition must have no gaps or disconnected regions before export'
             )
+        vector_validation = self._vector_validation()
+        if not vector_validation['vector_valid']:
+            raise ValueError('final vector contours must be valid and inside the design bounds')
 
     def _piece_manifest(self) -> list[dict[str, Any]]:
         """Return a traceable bill of pieces for the current final design."""
@@ -1501,6 +1579,7 @@ class GridWorkspace:
             'paint_event_count': len(self.paint_events),
             'final_region_count': len(final_regions),
             'partition_validation': self._partition_validation(self.final_labels),
+            'vector_validation': self._vector_validation() if final_regions else {},
             'composite_design': self.composite_design.to_dict()
             if self.composite_design is not None
             else self._build_composite_design().to_dict(),
@@ -1723,6 +1802,7 @@ class GridWorkspace:
                     )
 
         partition_validation = self._partition_validation()
+        vector_validation = self._vector_validation()
         return {
             'path_count': path_count,
             'region_count': len(records),
@@ -1730,11 +1810,16 @@ class GridWorkspace:
             'physical_size': self.physical_size.to_dict(),
             'partition_valid': partition_validation['partition_valid'],
             'partition_validation': partition_validation,
+            'vector_valid': vector_validation['vector_valid'],
+            'vector_validation': vector_validation,
             'small_region_ids': small_region_ids,
             'thin_region_ids': thin_region_ids,
             'complex_region_ids': complex_region_ids,
             'hole_region_ids': hole_region_ids,
             'disconnected_region_ids': disconnected_region_ids,
+            'invalid_contour_ids': vector_validation['invalid_contour_ids'],
+            'out_of_bounds_region_ids': vector_validation['out_of_bounds_region_ids'],
+            'zero_area_region_ids': vector_validation['zero_area_region_ids'],
             'merge_suggestions': merge_suggestions,
             'veneer_counts': {
                 veneer.veneer_id: sum(
