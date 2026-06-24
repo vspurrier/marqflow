@@ -1123,6 +1123,36 @@ class GridWorkspace:
         self.subject_settings = settings
         self.save()
 
+    def set_veneer_palette(self, palette: list[VeneerSwatch]) -> None:
+        """Replace the veneer inventory used for suggestions, overrides, and packing."""
+
+        if not palette:
+            raise ValueError('veneer palette must contain at least one swatch')
+        seen: set[str] = set()
+        normalized: list[VeneerSwatch] = []
+        for swatch in palette:
+            veneer_id = swatch.veneer_id.strip()
+            name = swatch.name.strip() or veneer_id
+            if not veneer_id:
+                raise ValueError('veneer IDs cannot be blank')
+            if veneer_id in seen:
+                raise ValueError(f'duplicate veneer ID: {veneer_id}')
+            seen.add(veneer_id)
+            color = tuple(max(0, min(255, int(value))) for value in swatch.color_rgb)
+            normalized.append(VeneerSwatch(veneer_id=veneer_id, name=name, color_rgb=color))
+
+        self.veneer_palette = normalized
+        valid_ids = {swatch.veneer_id for swatch in normalized}
+        self.final_region_veneer_overrides = {
+            region_id: veneer_id
+            for region_id, veneer_id in self.final_region_veneer_overrides.items()
+            if veneer_id in valid_ids
+        }
+        design = self._ensure_composite_design()
+        design.veneer_palette = list(normalized)
+        design.final_region_veneer_overrides = dict(self.final_region_veneer_overrides)
+        self.save()
+
     def set_final_region_veneer(self, region_id: int, veneer_id: str | None) -> bool:
         """Assign a veneer to a final region."""
 
@@ -1605,6 +1635,10 @@ class GridWorkspace:
         hole_region_ids: list[int] = []
         disconnected_region_ids: list[int] = []
         merge_suggestions: list[dict[str, Any]] = []
+        _, labels = self._ensure_final_partition()
+        px_per_unit_x, px_per_unit_y = self.physical_size.pixels_per_unit(
+            (labels.shape[1], labels.shape[0])
+        )
         region_by_id = {record.region_id: record for record in records}
         for record in records:
             if (
@@ -1614,7 +1648,10 @@ class GridWorkspace:
                 small_region_ids.append(record.region_id)
             if (
                 self.cleanup_settings.highlight_thin_width > 0
-                and min(record.bbox[2] - record.bbox[0], record.bbox[3] - record.bbox[1])
+                and min(
+                    (record.bbox[2] - record.bbox[0]) / max(1.0, px_per_unit_x),
+                    (record.bbox[3] - record.bbox[1]) / max(1.0, px_per_unit_y),
+                )
                 <= self.cleanup_settings.highlight_thin_width
             ):
                 thin_region_ids.append(record.region_id)

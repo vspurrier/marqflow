@@ -2,7 +2,7 @@
 
 Review date: 2026-06-18
 
-Last status update: 2026-06-23
+Last status update: 2026-06-24
 
 Scope: current `grid-gallery` branch. The first prototype remains recoverable from history and `main`; this branch is the gallery, compose, and merge redesign.
 The browser UI in this branch now presents the literal marquetry decision flow: `Image`, `Size`, `Subject`, `Shapes`, `Hues`, `Cleanup`, and `Pack`.
@@ -12,7 +12,7 @@ That is a UI shell, not yet a complete marquetry design model. Several tabs stil
 
 - Last verified commands before this audit:
   - `uv run ruff check src tests` passed.
-  - `uv run pytest -q` passed, with 9 tests.
+  - `uv run pytest -q` passed, with 10 tests.
   - `node --check src/marqflow/static/gallery.js` passed.
 - A live server check confirmed that `/`, `/static/gallery.css`, and `/static/gallery.js` are served from the FastAPI app.
 - The search page no longer renders the old large candidate preview canvas; it is now grid-first.
@@ -30,6 +30,8 @@ That is a UI shell, not yet a complete marquetry design model. Several tabs stil
 - Cleanup summary now reports high point count, hole, and disconnected-island warnings per final region.
 - Size input rejects non-positive physical dimensions, and pack/export validate basic partition invariants before writing files.
 - Pack and preview export now write `pieces.json` and `pieces.csv` bills of pieces with region IDs, veneer IDs, physical metrics, geometry warnings, and source references.
+- The Hues tab now includes an editable veneer inventory with persisted swatch IDs, names, and display colors.
+- Cleanup small/thin/geometry warnings are now visible as translucent overlays on the final canvas, not only in the region list.
 
 ## 2026-06-22 Implementation Audit
 
@@ -48,12 +50,12 @@ Implemented correctly:
 Important shortcomings:
 
 - `CompositeDesign` now exists and the main final-design mutation paths update it directly, but the workspace still mirrors final state across `GridWorkspace` fields such as selected candidate regions, `final_labels`, `final_region_sources`, `final_region_veneer_overrides`, `final_region_locked_ids`, and `manual_edits`.
-- Hues is still partly candidate-driven, but final regions now support explicit veneer overrides and lock controls in the Cleanup tab. The workflow still needs a true design model, not just a set of override maps.
+- Hues is still partly candidate-driven, but final regions now support explicit veneer overrides, region locks, and an editable veneer inventory. The workflow still needs a true material-planning model with stock/sheet constraints, not just swatches and override maps.
 - A persisted ordered paint-event log now exists, and a `CompositeDesign` aggregate is written to the manifest. Final-design operations now update the aggregate directly, but the workspace still mirrors those fields for compatibility.
 - Manual merge/split edits are stored against numeric region IDs. Those IDs can become stale if the base candidate or painted source layers change, because the code replays edits onto a rebuilt label raster.
 - Subject settings are metadata only. `detail_budget`, `protect_eyes`, and `protect_nose` do not influence candidate generation, local refinement, cleanup, or locking.
-- Cleanup now has a canvas hitmap for direct region selection, hover feedback, drag-select, and geometry warnings for high point counts, holes, and disconnected islands. It still lacks true sliver overlays and shared-boundary repair.
-- `highlight_small_area` and `highlight_thin_width` now surface as basic warnings in the Cleanup list, but the UI still does not highlight them directly on the canvas.
+- Cleanup now has a canvas hitmap for direct region selection, hover feedback, drag-select, and canvas overlays for small, thin, high-point-count, holed, and disconnected regions. It still lacks true sliver repair and shared-boundary repair.
+- `highlight_small_area` and `highlight_thin_width` now surface in the Cleanup list and on the canvas. Thin-width warnings now compare against physical units rather than raw pixel dimensions.
 - Unmerged SVG output now uses physical dimensions and scales final-region contours into those units. Merged-threshold preview SVG is still a visual preview path and should not be treated as fabrication export.
 - SVG paths are independent contours, not a shared-boundary planar graph. This is risky for marquetry because smoothing or simplification can create tiny visual gaps/overlaps between adjacent pieces.
 - Packing now uses a maintained rectangle packer and emits veneer-grouped SVG sheet files, but it is still bounding-box based rather than a true veneer nesting solver.
@@ -70,7 +72,7 @@ Current bugs or likely user-facing failures:
 - The Hues palette still injects candidate SVGs into the DOM for region clicks. Large candidates can remain slow even though previews use thumbnails/canvas elsewhere.
 - Cleanup selection happens through a text/list of final regions plus a canvas hitmap, hover inspection, and drag interactions, but it still lacks brush painting.
 - The merge threshold preview can imply fewer pieces, but the actual manual merge operation only merges selected connected final labels. This distinction is easy to misunderstand in the UI.
-- Automatic veneer choice still defaults to nearest palette color, but the UI now lets the user override a final region's veneer and lock regions. A richer material workflow is still missing.
+- Automatic veneer choice still defaults to nearest palette color, but the UI now lets the user edit the palette, override a final region's veneer, and lock regions. A richer material workflow with sheet inventory and grain direction is still missing.
 - `packFinal()` now sends only the output directory, which matches the current packing backend that exports veneer sheets from the final design.
 - `composite_summary()` now counts merged contours rather than raw records, but the merged preview/SVG can still differ from the summary when clusters produce multiple disconnected contours.
 
@@ -118,6 +120,8 @@ Done:
 - Cleanup summaries now include high-complexity, holed, and disconnected-region warning IDs.
 - Pack/export now block invalid physical sizes and invalid partitions instead of writing misleading fabrication files.
 - Pack/export now write traceable JSON and CSV piece manifests beside the SVG artifacts.
+- Veneer swatches can now be edited from the Hues tab and saved through `/api/workspace/veneer-palette`.
+- Cleanup warnings now draw directly over the canvas for small, thin, and complex/problem regions.
 
 Partial:
 
@@ -130,7 +134,7 @@ Open:
 
 - Expand browser-level interaction tests beyond the current smoke path.
 - Add richer canvas-based cleanup interaction, especially brush selection and sliver overlays.
-- Add more nuanced small-piece highlighting, canvas overlays, and merge suggestions.
+- Add more nuanced sliver repair, shared-boundary cleanup, and merge suggestions.
 - Remove or formalize old single-project commands and helpers.
 - Review and remove unused dependencies if they remain unreferenced after the current dependency pass.
 

@@ -67,11 +67,16 @@ const el = {
   simplifyToleranceValue: document.getElementById('simplify-tolerance-value'),
   smallArea: document.getElementById('small-area'),
   smallAreaValue: document.getElementById('small-area-value'),
+  thinWidth: document.getElementById('thin-width'),
+  thinWidthValue: document.getElementById('thin-width-value'),
   splitTarget: document.getElementById('split-target'),
   saveCleanupBtn: document.getElementById('save-cleanup-btn'),
   mergeSelectedBtn: document.getElementById('merge-selected-btn'),
   splitSelectedBtn: document.getElementById('split-selected-btn'),
   composeKeptCount: document.getElementById('compose-kept-count'),
+  veneerPaletteList: document.getElementById('veneer-palette-list'),
+  addVeneerBtn: document.getElementById('add-veneer-btn'),
+  saveVeneerPaletteBtn: document.getElementById('save-veneer-palette-btn'),
   composePaletteList: document.getElementById('compose-palette-list'),
   composeCanvas: document.getElementById('compose-canvas'),
   composeStage: document.getElementById('compose-stage'),
@@ -158,6 +163,8 @@ function setWorkspaceSummary(workspace) {
     el.simplifyToleranceValue.textContent = String(workspace.cleanup_settings.simplify_tolerance ?? 1.0);
     el.smallArea.value = String(workspace.cleanup_settings.highlight_small_area ?? 0.0);
     el.smallAreaValue.textContent = String(workspace.cleanup_settings.highlight_small_area ?? 0.0);
+    el.thinWidth.value = String(workspace.cleanup_settings.highlight_thin_width ?? 0.0);
+    el.thinWidthValue.textContent = String(workspace.cleanup_settings.highlight_thin_width ?? 0.0);
     state.cleanupThreshold = Number(workspace.cleanup_settings.merge_rgb_threshold ?? 24);
     el.mergeThreshold.value = String(state.cleanupThreshold);
     el.mergeThresholdValue.textContent = String(state.cleanupThreshold);
@@ -566,6 +573,7 @@ async function syncActiveCandidate(candidateId) {
 }
 
 async function renderHuesTab(workspace) {
+  renderVeneerInventory(workspace);
   const kept = workspace.candidates.filter((candidate) => candidate.kept);
   el.composeKeptCount.textContent = kept.length;
   el.composePaletteList.innerHTML = '';
@@ -584,6 +592,102 @@ async function renderHuesTab(workspace) {
   await Promise.all(
     kept.map((candidate) => renderHueCandidate(candidate).catch((error) => setStatus(String(error), true))),
   );
+}
+
+function rgbToHex(color) {
+  const values = Array.isArray(color) ? color : [0, 0, 0];
+  return `#${values
+    .slice(0, 3)
+    .map((value) => Math.max(0, Math.min(255, Number(value) || 0)).toString(16).padStart(2, '0'))
+    .join('')}`;
+}
+
+function hexToRgb(hex) {
+  const normalized = String(hex || '').replace('#', '').trim();
+  if (!/^[0-9a-fA-F]{6}$/.test(normalized)) {
+    return [0, 0, 0];
+  }
+  return [
+    parseInt(normalized.slice(0, 2), 16),
+    parseInt(normalized.slice(2, 4), 16),
+    parseInt(normalized.slice(4, 6), 16),
+  ];
+}
+
+function renderVeneerInventory(workspace) {
+  if (!el.veneerPaletteList) {
+    return;
+  }
+  el.veneerPaletteList.innerHTML = '';
+  (workspace.veneer_palette || []).forEach((swatch) => {
+    el.veneerPaletteList.appendChild(
+      buildVeneerRow(swatch.veneer_id, swatch.name, rgbToHex(swatch.color_rgb)),
+    );
+  });
+}
+
+function buildVeneerRow(veneerId, name, color) {
+  const row = document.createElement('div');
+  row.className = 'veneer-row';
+  const idInput = document.createElement('input');
+  idInput.className = 'veneer-id';
+  idInput.type = 'text';
+  idInput.value = veneerId;
+  idInput.title = 'Stable veneer ID used in exports.';
+  const nameInput = document.createElement('input');
+  nameInput.className = 'veneer-name';
+  nameInput.type = 'text';
+  nameInput.value = name;
+  nameInput.title = 'Human-readable veneer name.';
+  const colorInput = document.createElement('input');
+  colorInput.className = 'veneer-color';
+  colorInput.type = 'color';
+  colorInput.value = color;
+  colorInput.title = 'Approximate display color.';
+  const removeButton = document.createElement('button');
+  removeButton.className = 'remove-veneer-btn';
+  removeButton.type = 'button';
+  removeButton.title = 'Remove this veneer swatch.';
+  removeButton.textContent = 'Remove';
+  removeButton.addEventListener('click', () => row.remove());
+  row.append(idInput, nameInput, colorInput, removeButton);
+  return row;
+}
+
+function addVeneerRow() {
+  const nextIndex = (el.veneerPaletteList?.querySelectorAll('.veneer-row').length || 0) + 1;
+  el.veneerPaletteList.appendChild(
+    buildVeneerRow(`veneer-${nextIndex}`, `Veneer ${nextIndex}`, '#b08a5c'),
+  );
+}
+
+function collectVeneerPalette() {
+  return [...el.veneerPaletteList.querySelectorAll('.veneer-row')]
+    .map((row) => ({
+      veneer_id: row.querySelector('.veneer-id').value.trim(),
+      name: row.querySelector('.veneer-name').value.trim(),
+      color_rgb: hexToRgb(row.querySelector('.veneer-color').value),
+    }))
+    .filter((swatch) => swatch.veneer_id);
+}
+
+async function saveVeneerPalette() {
+  setBusy(true);
+  try {
+    const response = await fetch('/api/workspace/veneer-palette', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({swatches: collectVeneerPalette()}),
+    });
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+    const workspace = await response.json();
+    await refreshWorkspace(workspace);
+    setStatus('Saved veneer inventory.');
+  } finally {
+    setBusy(false);
+  }
 }
 
 async function renderHueCandidate(candidate) {
@@ -808,6 +912,7 @@ async function renderCleanupTab(workspace) {
   }
   await renderFinalHitmap();
   await renderFinalRegionList(workspace);
+  drawCleanupWarningOverlay(workspace);
 }
 
 async function renderFinalHitmap() {
@@ -910,6 +1015,53 @@ async function renderFinalHitmap() {
       el.cleanupHover.textContent = 'Hover a region to inspect it.';
     }
   };
+}
+
+function drawCleanupWarningOverlay(workspace) {
+  if (!state.finalHitmap || !state.finalHitmap.labels || !el.mergeCanvas.width || !el.mergeCanvas.height) {
+    return;
+  }
+  const summary = workspace.design_summary || {};
+  const smallIds = new Set(summary.small_region_ids || []);
+  const thinIds = new Set(summary.thin_region_ids || []);
+  const geometryIds = new Set([
+    ...(summary.complex_region_ids || []),
+    ...(summary.hole_region_ids || []),
+    ...(summary.disconnected_region_ids || []),
+  ]);
+  if (!smallIds.size && !thinIds.size && !geometryIds.size) {
+    return;
+  }
+  const ctx = el.mergeCanvas.getContext('2d');
+  const image = ctx.getImageData(0, 0, el.mergeCanvas.width, el.mergeCanvas.height);
+  const labels = state.finalHitmap.labels;
+  for (let y = 0; y < labels.length; y += 1) {
+    const row = labels[y];
+    for (let x = 0; x < row.length; x += 1) {
+      const regionId = row[x];
+      let color = null;
+      if (geometryIds.has(regionId)) {
+        color = [226, 109, 91, 0.42];
+      } else if (thinIds.has(regionId)) {
+        color = [255, 94, 70, 0.36];
+      } else if (smallIds.has(regionId)) {
+        color = [233, 177, 80, 0.34];
+      }
+      if (!color) {
+        continue;
+      }
+      const offset = (y * image.width + x) * 4;
+      const alpha = color[3];
+      image.data[offset] = Math.round(image.data[offset] * (1 - alpha) + color[0] * alpha);
+      image.data[offset + 1] = Math.round(
+        image.data[offset + 1] * (1 - alpha) + color[1] * alpha,
+      );
+      image.data[offset + 2] = Math.round(
+        image.data[offset + 2] * (1 - alpha) + color[2] * alpha,
+      );
+    }
+  }
+  ctx.putImageData(image, 0, 0);
 }
 
 async function renderFinalRegionList(workspace) {
@@ -1542,6 +1694,8 @@ async function updateCleanupThresholdFromWorkspace(workspace) {
   el.simplifyToleranceValue.textContent = String(cleanup.simplify_tolerance ?? 1.0);
   el.smallArea.value = String(cleanup.highlight_small_area ?? 0.0);
   el.smallAreaValue.textContent = String(cleanup.highlight_small_area ?? 0.0);
+  el.thinWidth.value = String(cleanup.highlight_thin_width ?? 0.0);
+  el.thinWidthValue.textContent = String(cleanup.highlight_thin_width ?? 0.0);
   state.cleanupThreshold = Number(cleanup.merge_rgb_threshold ?? 24);
   el.mergeThreshold.value = String(state.cleanupThreshold);
   el.mergeThresholdValue.textContent = String(state.cleanupThreshold);
@@ -1556,7 +1710,7 @@ async function saveCleanupSettings() {
       body: JSON.stringify({
         simplify_tolerance: Number(el.simplifyTolerance.value),
         highlight_small_area: Number(el.smallArea.value),
-        highlight_thin_width: 0.0,
+        highlight_thin_width: Number(el.thinWidth.value),
         merge_rgb_threshold: Number(el.mergeThreshold.value),
       }),
     });
@@ -1598,6 +1752,8 @@ el.saveSubjectBtn.addEventListener('click', saveSubject);
 el.rebuildGridBtn.addEventListener('click', rebuildGrid);
 el.resetWorkspaceBtn.addEventListener('click', resetWorkspace);
 el.saveCleanupBtn.addEventListener('click', saveCleanupSettings);
+el.addVeneerBtn.addEventListener('click', addVeneerRow);
+el.saveVeneerPaletteBtn.addEventListener('click', saveVeneerPalette);
 el.mergeSelectedBtn.addEventListener('click', mergeSelectedRegions);
 el.splitSelectedBtn.addEventListener('click', splitSelectedRegion);
 el.exportBtn.addEventListener('click', exportPreviewSvg);
@@ -1642,6 +1798,10 @@ el.simplifyTolerance.addEventListener('input', () => {
 });
 el.smallArea.addEventListener('input', () => {
   el.smallAreaValue.textContent = String(Number(el.smallArea.value).toFixed(1));
+  scheduleCleanupRender();
+});
+el.thinWidth.addEventListener('input', () => {
+  el.thinWidthValue.textContent = String(Number(el.thinWidth.value).toFixed(1));
   scheduleCleanupRender();
 });
 window.addEventListener('resize', () => {

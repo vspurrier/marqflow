@@ -84,6 +84,7 @@ The shapes grid is a parameter sweep over segmentation settings:
 
 Hues is a two-column workspace:
 
+- edit the veneer inventory before assigning materials
 - the left side is the kept-candidate palette
 - the right side is the composite canvas
 - click regions in the palette to paint them onto the canvas
@@ -95,6 +96,7 @@ Cleanup is a final review stage:
 
 - it previews the composite before final export
 - the threshold slider controls how aggressively similar colors are grouped
+- small/thin/geometry warnings are highlighted on the canvas and in the region list
 - use Merge selected and Split selected to adjust the final partition
 - the final `Pack final` action writes a veneer-aware packing plan next to the export directory
 

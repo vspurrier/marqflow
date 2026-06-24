@@ -20,7 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .jobs import JobManager
-from .marquetry import CleanupSettings, SubjectSettings
+from .marquetry import CleanupSettings, SubjectSettings, VeneerSwatch
 from .workspace import GridWorkspace
 
 
@@ -82,6 +82,16 @@ class SplitRequest(BaseModel):
 class VeneerRequest(BaseModel):
     region_id: int
     veneer_id: str | None = None
+
+
+class VeneerSwatchRequest(BaseModel):
+    veneer_id: str
+    name: str
+    color_rgb: tuple[int, int, int]
+
+
+class VeneerPaletteRequest(BaseModel):
+    swatches: list[VeneerSwatchRequest] = Field(default_factory=list)
 
 
 class LockRequest(BaseModel):
@@ -469,6 +479,25 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
             workspace = _load_workspace(workspace_path)
             if not workspace.set_final_region_veneer(request.region_id, request.veneer_id):
                 raise HTTPException(status_code=404, detail='region not found')
+            return JSONResponse(_workspace_summary(workspace))
+
+    @app.post('/api/workspace/veneer-palette')
+    def set_veneer_palette(request: VeneerPaletteRequest) -> JSONResponse:
+        with workspace_lock:
+            workspace = _load_workspace(workspace_path)
+            try:
+                workspace.set_veneer_palette(
+                    [
+                        VeneerSwatch(
+                            veneer_id=swatch.veneer_id,
+                            name=swatch.name,
+                            color_rgb=swatch.color_rgb,
+                        )
+                        for swatch in request.swatches
+                    ]
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
             return JSONResponse(_workspace_summary(workspace))
 
     @app.post('/api/workspace/final/lock')

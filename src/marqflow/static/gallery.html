@@ -178,6 +178,14 @@
           </div>
           <div class="compose-shell">
             <aside class="compose-palette">
+              <div class="veneer-inventory">
+                <div class="row">
+                  <strong>Veneer inventory</strong>
+                  <button id="add-veneer-btn" type="button">Add swatch</button>
+                </div>
+                <div id="veneer-palette-list" class="veneer-palette-list"></div>
+                <button id="save-veneer-palette-btn" class="primary" type="button">Save veneers</button>
+              </div>
               <div class="small">
                 Paint regions from the kept candidates into the working design. This is the veneer
                 assignment stage.
@@ -215,6 +223,10 @@
                 <label class="tool-field" title="Highlight regions below this physical area.">
                   <span>Small area <span id="small-area-value">0.0</span></span>
                   <input id="small-area" type="range" min="0" max="100" step="0.1" value="0" />
+                </label>
+                <label class="tool-field" title="Highlight regions narrower than this physical width.">
+                  <span>Thin width <span id="thin-width-value">0.0</span></span>
+                  <input id="thin-width" type="range" min="0" max="20" step="0.1" value="0" />
                 </label>
                 <label class="tool-field" title="Higher values merge more similar colors into the same final piece.">
                   <span>Merge threshold <span id="merge-threshold-value">24</span></span>

@@ -147,6 +147,49 @@ def test_grid_workspace_gallery_flow(tmp_path: Path) -> None:
     assert first_region['veneer_id'] == 'blue'
     assert first_region['veneer_override_id'] == 'blue'
 
+    duplicate_palette_response = client.post(
+        '/api/workspace/veneer-palette',
+        json={
+            'swatches': [
+                {'veneer_id': 'maple', 'name': 'Maple', 'color_rgb': [220, 205, 172]},
+                {'veneer_id': 'maple', 'name': 'Duplicate Maple', 'color_rgb': [200, 190, 160]},
+            ]
+        },
+    )
+    assert duplicate_palette_response.status_code == 400
+
+    palette_response = client.post(
+        '/api/workspace/veneer-palette',
+        json={
+            'swatches': [
+                {'veneer_id': 'maple', 'name': 'Maple', 'color_rgb': [220, 205, 172]},
+                {'veneer_id': 'walnut', 'name': 'Walnut', 'color_rgb': [80, 55, 38]},
+            ]
+        },
+    )
+    assert palette_response.status_code == 200
+    palette_payload = palette_response.json()
+    assert [swatch['veneer_id'] for swatch in palette_payload['veneer_palette']] == [
+        'maple',
+        'walnut',
+    ]
+    assert first_final_region_id not in {
+        int(region_id)
+        for region_id in palette_payload['composite_design']['final_region_veneer_overrides']
+    }
+
+    veneer_response = client.post(
+        '/api/workspace/final/veneer',
+        json={'region_id': first_final_region_id, 'veneer_id': 'walnut'},
+    )
+    assert veneer_response.status_code == 200
+    first_region = next(
+        region
+        for region in veneer_response.json()['final_regions']
+        if region['region_id'] == first_final_region_id
+    )
+    assert first_region['veneer_id'] == 'walnut'
+
     lock_response = client.post(
         '/api/workspace/final/lock',
         json={'region_id': first_final_region_id, 'locked': True},
@@ -222,6 +265,20 @@ def test_grid_workspace_gallery_flow(tmp_path: Path) -> None:
     )
     assert invalid_size_response.status_code == 422
 
+    cleanup_response = client.post(
+        '/api/workspace/cleanup',
+        json={
+            'simplify_tolerance': 1.0,
+            'highlight_small_area': 100.0,
+            'highlight_thin_width': 100.0,
+            'merge_rgb_threshold': 24.0,
+        },
+    )
+    assert cleanup_response.status_code == 200
+    cleanup_summary = cleanup_response.json()['design_summary']
+    assert cleanup_summary['small_region_ids']
+    assert cleanup_summary['thin_region_ids']
+
     composite_preview = client.get('/api/workspace/composite/preview?merge_threshold=0')
     assert composite_preview.status_code == 200
     assert composite_preview.headers['content-type'].startswith('image/png')
@@ -257,9 +314,9 @@ def test_grid_workspace_gallery_flow(tmp_path: Path) -> None:
 
     final_svg = client.get('/api/workspace/composite/svg')
     assert final_svg.status_code == 200
-    assert 'id="veneer-blue"' in final_svg.text
+    assert 'id="veneer-walnut"' in final_svg.text
     assert f'data-region-id="{first_final_region_id}"' in final_svg.text
-    assert 'data-veneer-id="blue"' in final_svg.text
+    assert 'data-veneer-id="walnut"' in final_svg.text
 
     pack_response = client.post(
         '/api/workspace/pack', json={'output_dir': str(tmp_path / 'packed')}

@@ -264,6 +264,49 @@
       display: grid;
       gap: 12px;
     }
+    .veneer-inventory {
+      display: grid;
+      gap: 10px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: rgba(255,255,255,0.025);
+    }
+    .veneer-inventory .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .veneer-inventory button {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--panel-2);
+      color: var(--text);
+      padding: 8px 10px;
+    }
+    .veneer-inventory button.primary {
+      background: linear-gradient(180deg, rgba(217,176,106,0.22), rgba(217,176,106,0.12));
+      border-color: rgba(217,176,106,0.56);
+    }
+    .veneer-palette-list {
+      display: grid;
+      gap: 8px;
+    }
+    .veneer-row {
+      display: grid;
+      grid-template-columns: minmax(80px, 0.8fr) minmax(120px, 1fr) 44px auto;
+      gap: 8px;
+      align-items: center;
+    }
+    .veneer-row input {
+      min-width: 0;
+    }
+    .veneer-row input[type="color"] {
+      width: 44px;
+      height: 36px;
+      padding: 2px;
+    }
     .compose-candidate {
       border: 1px solid var(--line);
       border-radius: 16px;
