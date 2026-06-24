@@ -50,7 +50,7 @@ Implemented in the current branch:
 - cleanup reports high point count, holed, and disconnected final regions
 - pack/export validates positive physical dimensions and basic partition invariants before writing files
 - pack/export writes `pieces.json` and `pieces.csv` bills of pieces with final region IDs and veneer assignments
-- editable veneer inventory with persisted swatch IDs, names, and display colors
+- editable veneer inventory with persisted swatch IDs, names, display colors, stock dimensions, grain direction, and notes
 - cleanup canvas overlays for small, thin, and complex/problem regions
 - bulk cleanup action for applying current small/thin merge suggestions
 
@@ -60,9 +60,9 @@ Implemented but not yet product-complete:
 - Size tab persists physical dimensions, and SVG export now scales into physical units, but the packing geometry is still bounding-box based.
 - Subject tab persists notes and protection flags, but those settings do not affect segmentation, local refinement, locking, or cleanup.
 - Shapes tab can generate and keep candidates, but generation is still synchronous and the parameter grid is still tied to the current SLIC/Felzenszwalb generator assumptions.
-- Hues tab still paints candidate source regions into the final preview, while final regions have veneer override and lock controls in Cleanup. It now has an editable veneer inventory, but it is still not a true material workflow with sheet stock, grain direction, or availability constraints.
+- Hues tab still paints candidate source regions into the final preview, while final regions have veneer override and lock controls in Cleanup. It now has an editable veneer inventory with stock dimensions and grain notes, but it is still not a true material workflow with availability quantities or grain-aware placement.
 - Cleanup tab exposes final region lists, merge/split actions, bulk merge suggestions, veneer overrides, lock controls, a basic canvas hitmap, direct point editing, contour smoothing, hover inspection, drag selection, small/thin/geometry warning overlays, and basic geometry warnings, but still lacks sliver repair and shared-boundary repair.
-- Pack tab now writes veneer-grouped SVG sheets, but the packing is still bounding-box based rather than a true nesting solver.
+- Pack tab now writes veneer-grouped SVG sheets and respects per-veneer stock dimensions, but the packing is still bounding-box based rather than a true nesting solver.
 
 Still open:
 
@@ -102,7 +102,7 @@ Implemented but not sufficient:
 
 Outstanding from the review:
 
-- Veneer/material palette semantics are partially implemented through editable swatches, but stock dimensions, grain direction, and availability are still open.
+- Veneer/material palette semantics are partially implemented through editable swatches with stock dimensions and grain notes, but availability quantities and grain-aware packing are still open.
 - Explicit persisted composite model.
 - Canvas plus hitmap interaction.
 - Background jobs and progress for generation/refinement.
@@ -391,7 +391,7 @@ These are ordered so each step gives the next one a stable foundation.
 
 - Phase 1 is partial. Browser workflows have bounded working images through the existing project creation path, default to a 768 px working edge, report original versus working dimensions, and start image-first. Crop and orientation controls are still missing.
 - Phase 2 is partial but not complete. A final label raster exists, ordered paint events are persisted, and a `CompositeDesign` aggregate plus canvas hitmap are now written and served. Final-region editing now updates that aggregate directly, but the workspace still mirrors the same state for compatibility. This remains the highest-priority model gap.
-- Phase 3 is partial. Editable veneer swatches, nearest-color suggestions, manual veneer override controls, veneer-grouped final SVG export, and veneer-grouped pack output exist, but they still need stock dimensions, grain direction, and availability constraints.
+- Phase 3 is partial. Editable veneer swatches, stock dimensions, grain notes, nearest-color suggestions, manual veneer override controls, veneer-grouped final SVG export, and veneer-grouped pack output exist, but they still need availability quantities and grain-aware packing constraints.
 - Phase 4 is partial. Manual merge/split endpoints exist, cleanup canvas selection exists, warning overlays exist, per-region and bulk merge suggestions exist, and automatic merge logic is still limited.
 - Phase 5 is mostly open. Subject settings exist, but detail locks and local segmentation are not connected to the pipeline.
 - Phase 6 is partial. Simplification tolerance affects contour extraction, point editing, smoothing, hover inspection, drag-selection controls, and canvas warning overlays exist, but there is no shared-boundary smoothing, sliver repair, or non-destructive cleanup preview.

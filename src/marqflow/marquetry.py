@@ -58,11 +58,15 @@ class PhysicalSize:
 
 @dataclass(frozen=True, slots=True)
 class VeneerSwatch:
-    """A named veneer color suggestion."""
+    """A named veneer material used for color suggestions and packing."""
 
     veneer_id: str
     name: str
     color_rgb: tuple[int, int, int]
+    sheet_width: float = 0.0
+    sheet_height: float = 0.0
+    grain_direction: str = ''
+    notes: str = ''
 
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
@@ -75,6 +79,10 @@ class VeneerSwatch:
             veneer_id=str(data['veneer_id']),
             name=str(data.get('name', data['veneer_id'])),
             color_rgb=tuple(int(value) for value in data.get('color_rgb', (0, 0, 0))),
+            sheet_width=float(data.get('sheet_width', 0.0) or 0.0),
+            sheet_height=float(data.get('sheet_height', 0.0) or 0.0),
+            grain_direction=str(data.get('grain_direction', '')),
+            notes=str(data.get('notes', '')),
         )
 
 
@@ -306,6 +314,23 @@ def veneer_by_id(veneer_id: str | None, palette: list[VeneerSwatch]) -> VeneerSw
         if swatch.veneer_id == veneer_id:
             return swatch
     return None
+
+
+def sheet_size_for_veneer(
+    veneer_id: str,
+    palette: list[VeneerSwatch],
+    physical_size: PhysicalSize,
+    fallback_size: tuple[float, float],
+) -> tuple[float, float]:
+    """Return available sheet dimensions for a veneer in physical units."""
+
+    swatch = veneer_by_id(veneer_id, palette)
+    fallback_width, fallback_height = fallback_size
+    if swatch is None:
+        return fallback_width, fallback_height
+    sheet_width = swatch.sheet_width if swatch.sheet_width > 0 else fallback_width
+    sheet_height = swatch.sheet_height if swatch.sheet_height > 0 else fallback_height
+    return sheet_width, sheet_height
 
 
 def _contour_length(points: tuple[tuple[float, float], ...]) -> float:
@@ -793,9 +818,15 @@ def pack_region_sheets(
     sheets: list[dict[str, Any]] = []
     for veneer_id, items in grouped.items():
         items = sorted(items, key=lambda region: region.area_px, reverse=True)
-        sheet_width = physical_size.width if physical_size.unit != 'px' else float(labels.shape[1])
-        sheet_height = (
-            physical_size.height if physical_size.unit != 'px' else float(labels.shape[0])
+        fallback_sheet = (
+            physical_size.width if physical_size.unit != 'px' else float(labels.shape[1]),
+            physical_size.height if physical_size.unit != 'px' else float(labels.shape[0]),
+        )
+        sheet_width, sheet_height = sheet_size_for_veneer(
+            veneer_id,
+            palette,
+            physical_size,
+            fallback_sheet,
         )
         packer = newPacker(rotation=False)
         contour_bounds: dict[int, tuple[float, float, float, float]] = {}

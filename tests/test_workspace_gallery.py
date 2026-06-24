@@ -162,8 +162,24 @@ def test_grid_workspace_gallery_flow(tmp_path: Path) -> None:
         '/api/workspace/veneer-palette',
         json={
             'swatches': [
-                {'veneer_id': 'maple', 'name': 'Maple', 'color_rgb': [220, 205, 172]},
-                {'veneer_id': 'walnut', 'name': 'Walnut', 'color_rgb': [80, 55, 38]},
+                {
+                    'veneer_id': 'maple',
+                    'name': 'Maple',
+                    'color_rgb': [220, 205, 172],
+                    'sheet_width': 0,
+                    'sheet_height': 0,
+                    'grain_direction': 'vertical',
+                    'notes': 'fallback stock size',
+                },
+                {
+                    'veneer_id': 'walnut',
+                    'name': 'Walnut',
+                    'color_rgb': [80, 55, 38],
+                    'sheet_width': 12.0,
+                    'sheet_height': 11.0,
+                    'grain_direction': 'horizontal',
+                    'notes': 'wide test sheet',
+                },
             ]
         },
     )
@@ -173,6 +189,15 @@ def test_grid_workspace_gallery_flow(tmp_path: Path) -> None:
         'maple',
         'walnut',
     ]
+    walnut = next(
+        swatch
+        for swatch in palette_payload['veneer_palette']
+        if swatch['veneer_id'] == 'walnut'
+    )
+    assert walnut['sheet_width'] == 12.0
+    assert walnut['sheet_height'] == 11.0
+    assert walnut['grain_direction'] == 'horizontal'
+    assert walnut['notes'] == 'wide test sheet'
     assert first_final_region_id not in {
         int(region_id)
         for region_id in palette_payload['composite_design']['final_region_veneer_overrides']
@@ -329,6 +354,10 @@ def test_grid_workspace_gallery_flow(tmp_path: Path) -> None:
         assert sheet['placement_valid'] is True
         assert sheet['utilization'] > 0
         assert Path(sheet['sheet_svg_path']).exists()
+    walnut_sheets = [sheet for sheet in packed if sheet['veneer_id'] == 'walnut']
+    assert walnut_sheets
+    assert all(sheet['sheet_width'] == 12.0 for sheet in walnut_sheets)
+    assert all(sheet['sheet_height'] == 11.0 for sheet in walnut_sheets)
     assert (tmp_path / 'packed' / 'pack.json').exists()
     packed_pieces = json.loads((tmp_path / 'packed' / 'pieces.json').read_text())
     assert packed_pieces

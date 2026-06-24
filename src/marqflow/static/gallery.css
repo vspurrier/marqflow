@@ -295,7 +295,7 @@
     }
     .veneer-row {
       display: grid;
-      grid-template-columns: minmax(80px, 0.8fr) minmax(120px, 1fr) 44px auto;
+      grid-template-columns: minmax(76px, 0.8fr) minmax(105px, 1fr) 44px 72px 72px minmax(70px, 0.7fr) minmax(90px, 1fr) auto;
       gap: 8px;
       align-items: center;
     }

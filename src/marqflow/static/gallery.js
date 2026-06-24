@@ -622,12 +622,20 @@ function renderVeneerInventory(workspace) {
   el.veneerPaletteList.innerHTML = '';
   (workspace.veneer_palette || []).forEach((swatch) => {
     el.veneerPaletteList.appendChild(
-      buildVeneerRow(swatch.veneer_id, swatch.name, rgbToHex(swatch.color_rgb)),
+      buildVeneerRow(
+        swatch.veneer_id,
+        swatch.name,
+        rgbToHex(swatch.color_rgb),
+        swatch.sheet_width || 0,
+        swatch.sheet_height || 0,
+        swatch.grain_direction || '',
+        swatch.notes || '',
+      ),
     );
   });
 }
 
-function buildVeneerRow(veneerId, name, color) {
+function buildVeneerRow(veneerId, name, color, sheetWidth = 0, sheetHeight = 0, grain = '', notes = '') {
   const row = document.createElement('div');
   row.className = 'veneer-row';
   const idInput = document.createElement('input');
@@ -645,13 +653,48 @@ function buildVeneerRow(veneerId, name, color) {
   colorInput.type = 'color';
   colorInput.value = color;
   colorInput.title = 'Approximate display color.';
+  const widthInput = document.createElement('input');
+  widthInput.className = 'veneer-sheet-width';
+  widthInput.type = 'number';
+  widthInput.min = '0';
+  widthInput.step = '0.1';
+  widthInput.value = String(sheetWidth || 0);
+  widthInput.title = 'Available veneer sheet width. Use 0 to fall back to final piece width.';
+  const heightInput = document.createElement('input');
+  heightInput.className = 'veneer-sheet-height';
+  heightInput.type = 'number';
+  heightInput.min = '0';
+  heightInput.step = '0.1';
+  heightInput.value = String(sheetHeight || 0);
+  heightInput.title = 'Available veneer sheet height. Use 0 to fall back to final piece height.';
+  const grainInput = document.createElement('input');
+  grainInput.className = 'veneer-grain';
+  grainInput.type = 'text';
+  grainInput.value = grain;
+  grainInput.placeholder = 'grain';
+  grainInput.title = 'Grain direction or orientation note.';
+  const notesInput = document.createElement('input');
+  notesInput.className = 'veneer-notes';
+  notesInput.type = 'text';
+  notesInput.value = notes;
+  notesInput.placeholder = 'notes';
+  notesInput.title = 'Optional stock notes.';
   const removeButton = document.createElement('button');
   removeButton.className = 'remove-veneer-btn';
   removeButton.type = 'button';
   removeButton.title = 'Remove this veneer swatch.';
   removeButton.textContent = 'Remove';
   removeButton.addEventListener('click', () => row.remove());
-  row.append(idInput, nameInput, colorInput, removeButton);
+  row.append(
+    idInput,
+    nameInput,
+    colorInput,
+    widthInput,
+    heightInput,
+    grainInput,
+    notesInput,
+    removeButton,
+  );
   return row;
 }
 
@@ -668,6 +711,10 @@ function collectVeneerPalette() {
       veneer_id: row.querySelector('.veneer-id').value.trim(),
       name: row.querySelector('.veneer-name').value.trim(),
       color_rgb: hexToRgb(row.querySelector('.veneer-color').value),
+      sheet_width: Number(row.querySelector('.veneer-sheet-width').value) || 0,
+      sheet_height: Number(row.querySelector('.veneer-sheet-height').value) || 0,
+      grain_direction: row.querySelector('.veneer-grain').value.trim(),
+      notes: row.querySelector('.veneer-notes').value.trim(),
     }))
     .filter((swatch) => swatch.veneer_id);
 }

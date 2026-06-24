@@ -1139,7 +1139,19 @@ class GridWorkspace:
                 raise ValueError(f'duplicate veneer ID: {veneer_id}')
             seen.add(veneer_id)
             color = tuple(max(0, min(255, int(value))) for value in swatch.color_rgb)
-            normalized.append(VeneerSwatch(veneer_id=veneer_id, name=name, color_rgb=color))
+            if swatch.sheet_width < 0 or swatch.sheet_height < 0:
+                raise ValueError('veneer sheet dimensions cannot be negative')
+            normalized.append(
+                VeneerSwatch(
+                    veneer_id=veneer_id,
+                    name=name,
+                    color_rgb=color,
+                    sheet_width=float(swatch.sheet_width),
+                    sheet_height=float(swatch.sheet_height),
+                    grain_direction=swatch.grain_direction.strip(),
+                    notes=swatch.notes.strip(),
+                )
+            )
 
         self.veneer_palette = normalized
         valid_ids = {swatch.veneer_id for swatch in normalized}

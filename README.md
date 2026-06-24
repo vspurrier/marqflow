@@ -84,7 +84,7 @@ The shapes grid is a parameter sweep over segmentation settings:
 
 Hues is a two-column workspace:
 
-- edit the veneer inventory before assigning materials
+- edit the veneer inventory before assigning materials, including approximate color, stock size, grain direction, and notes
 - the left side is the kept-candidate palette
 - the right side is the composite canvas
 - click regions in the palette to paint them onto the canvas
@@ -107,6 +107,7 @@ Pack is the final export stage:
 
 - it writes a veneer-aware packing plan
 - it uses the current physical size and final partition state
+- it uses per-veneer stock dimensions when those are set in the Hues inventory
 - the export directory is shown in the top-level controls
 
 By default, packing uses `rectpack` to place each final piece's bounding box

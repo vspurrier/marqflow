@@ -88,6 +88,10 @@ class VeneerSwatchRequest(BaseModel):
     veneer_id: str
     name: str
     color_rgb: tuple[int, int, int]
+    sheet_width: float = 0.0
+    sheet_height: float = 0.0
+    grain_direction: str = ''
+    notes: str = ''
 
 
 class VeneerPaletteRequest(BaseModel):
@@ -501,6 +505,10 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
                             veneer_id=swatch.veneer_id,
                             name=swatch.name,
                             color_rgb=swatch.color_rgb,
+                            sheet_width=swatch.sheet_width,
+                            sheet_height=swatch.sheet_height,
+                            grain_direction=swatch.grain_direction,
+                            notes=swatch.notes,
                         )
                         for swatch in request.swatches
                     ]

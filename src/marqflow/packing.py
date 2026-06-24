@@ -30,6 +30,7 @@ from .marquetry import (
     build_design_regions,
     default_veneer_palette,
     labels_to_svg_path,
+    sheet_size_for_veneer,
 )
 from .marquetry import pack_region_sheets as _pack_region_sheets
 
@@ -232,10 +233,18 @@ def _pack_with_external_nester(
             _piece_record(region, region.veneer_id, px_per_unit_x, px_per_unit_y)
         )
 
-    sheet_width = physical_size.width if physical_size.unit != 'px' else float(labels.shape[1])
-    sheet_height = physical_size.height if physical_size.unit != 'px' else float(labels.shape[0])
+    fallback_sheet = (
+        physical_size.width if physical_size.unit != 'px' else float(labels.shape[1]),
+        physical_size.height if physical_size.unit != 'px' else float(labels.shape[0]),
+    )
     sheets: list[dict[str, Any]] = []
     for veneer_id, pieces in sorted(grouped.items()):
+        sheet_width, sheet_height = sheet_size_for_veneer(
+            veneer_id,
+            palette,
+            physical_size,
+            fallback_sheet,
+        )
         nest_input_svg = _nest_input_svg(veneer_id, pieces, sheet_width, sheet_height)
         sheet_svg = _run_external_nester(command_template, nest_input_svg)
         sheets.append(

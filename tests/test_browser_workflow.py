@@ -76,6 +76,24 @@ def test_browser_workflow_smoke(tmp_path: Path, browser_server: tuple[str, uvico
 
         page.click('#hues-tab-btn')
         page.wait_for_selector('.compose-candidate')
+        page.wait_for_selector('.veneer-row')
+        first_veneer = page.locator('.veneer-row').first
+        first_veneer.locator('.veneer-sheet-width').fill('14')
+        first_veneer.locator('.veneer-sheet-height').fill('9')
+        first_veneer.locator('.veneer-grain').fill('vertical')
+        first_veneer.locator('.veneer-notes').fill('browser stock note')
+        page.click('#save-veneer-palette-btn')
+        page.wait_for_function(
+            "() => document.querySelector('#status-pill').textContent.includes('Saved veneer')"
+        )
+        material_workspace = page.evaluate(
+            "() => fetch('/api/workspace').then((response) => response.json())"
+        )
+        first_swatch = material_workspace['veneer_palette'][0]
+        assert first_swatch['sheet_width'] == 14
+        assert first_swatch['sheet_height'] == 9
+        assert first_swatch['grain_direction'] == 'vertical'
+        assert first_swatch['notes'] == 'browser stock note'
         page.locator('#compose-summary').wait_for()
         page.locator('.compose-candidate .paint-btn', has_text='Paint all').first.click()
         summary_wait = (
@@ -88,6 +106,12 @@ def test_browser_workflow_smoke(tmp_path: Path, browser_server: tuple[str, uvico
         page.click('#cleanup-tab-btn')
         page.wait_for_function(
             "() => document.querySelector('#merge-summary').textContent.includes('Partition')"
+        )
+        page.locator('#small-area').fill('100')
+        page.locator('#thin-width').fill('20')
+        page.click('#save-cleanup-btn')
+        page.wait_for_function(
+            "() => document.querySelector('#status-pill').textContent.includes('Saved cleanup')"
         )
         cleanup_text = page.locator('#merge-summary').text_content()
         assert 'Partition' in cleanup_text
