@@ -148,7 +148,7 @@ def regions(
 
 @app.command()
 def serve(
-    workspace_dir: Annotated[Path, typer.Argument(..., exists=True, readable=True)],
+    workspace_dir: Annotated[Path | None, typer.Argument()] = None,
     host: str = typer.Option('127.0.0.1', help='Host to bind the browser server to.'),
     port: int = typer.Option(8000, help='Port to bind the browser server to.'),
     open_browser: bool = typer.Option(
@@ -212,7 +212,7 @@ def grid_export(
 
 @app.command('grid-serve')
 def grid_serve(
-    workspace_dir: Annotated[Path, typer.Argument(..., exists=True, readable=True)],
+    workspace_dir: Annotated[Path | None, typer.Argument()] = None,
     host: str = typer.Option('127.0.0.1', help='Host to bind the browser server to.'),
     port: int = typer.Option(8000, help='Port to bind the browser server to.'),
     open_browser: bool = typer.Option(
@@ -227,7 +227,7 @@ def grid_serve(
 
 
 def _serve_workspace_ui(
-    workspace_dir: Path,
+    workspace_dir: Path | None,
     *,
     host: str,
     port: int,

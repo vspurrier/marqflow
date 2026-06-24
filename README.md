@@ -5,11 +5,12 @@ Marqflow is a Python tool for planning marquetry from raster images.
 The workflow is deliberately gallery-first:
 
 1. Start with a source image.
-2. Generate a grid of segmentation candidates.
-3. Keep the candidates that are worth carrying forward.
-4. Paint regions from the kept candidates into a composite.
-5. Merge visually similar regions into final wood-piece groups.
-6. Export PNG and SVG outputs for packing and stencil work.
+2. Set the final size and subject priorities.
+3. Generate a grid of segmentation candidates.
+4. Keep the candidates that are worth carrying forward.
+5. Assign hues and final regions from the kept candidates.
+6. Clean up the partition and review small-piece warnings.
+7. Pack the final pieces by veneer.
 
 The core pipeline still does the same underlying work:
 
@@ -25,19 +26,24 @@ uv sync
 
 ## Browser Workflow
 
-The browser UI has three top-level tabs:
+The browser UI is organized around marquetry decisions:
 
-- `Search`: browse the candidate grid, open candidates, and keep the ones worth using.
-- `Compose`: paint regions from kept candidates into a composite canvas.
-- `Merge`: preview how similar colors will be merged before the final export.
+- `Image`: choose or replace the source image.
+- `Size`: set the final physical dimensions.
+- `Subject`: mark the detail budget and priority areas.
+- `Shapes`: browse the candidate grid, open candidates, and keep the ones worth using.
+- `Hues`: paint regions from kept candidates into a working canvas.
+- `Cleanup`: preview the final partition, merge selected regions, and split selected regions.
+- `Pack`: export a veneer-aware packing plan.
 
 Typical flow:
 
 1. Create a workspace from an image.
-2. Use `Search` to find a good starting set of candidates.
-3. Use `Compose` to paint regions from kept candidates into the working canvas.
-4. Use `Merge` to preview the final shape grouping and merge threshold.
-5. Export the final composite once the piece breakdown looks right.
+2. Set the final physical size and subject priorities.
+3. Use `Shapes` to find a good starting set of candidates.
+4. Use `Hues` to paint regions from kept candidates into the working canvas.
+5. Use `Cleanup` to preview the final partition, merge selected regions, or split a region.
+6. Use `Pack` to write a veneer-aware packing plan once the piece breakdown looks right.
 
 Create a workspace from an image:
 
@@ -48,7 +54,7 @@ uv run marqflow grid-init ~/code/bennett.jpg ./bennett-workspace
 Launch the browser UI:
 
 ```bash
-uv run marqflow grid-serve ./bennett-workspace
+uv run marqflow grid-serve
 ```
 
 Export the combined composite after selecting regions:
@@ -57,31 +63,63 @@ Export the combined composite after selecting regions:
 uv run marqflow grid-export ./bennett-workspace ./exported
 ```
 
-### Search Tab
+Workspace lifecycle:
 
-The search grid is a parameter sweep over segmentation settings:
+- The browser opens to a blank landing screen until you choose an image.
+- Use `Open image` in the browser to create a workspace from the selected file.
+- The browser API reloads workspace state from disk on each request, so a page refresh is enough to pick up saved changes.
+- Use `Reset workspace` in the browser to delete generated candidates and selections, then rebuild a clean starting grid from the copied source image.
+- Use `grid-init` only when you want a brand new workspace directory from the command line.
+
+### Shapes Tab
+
+The shapes grid is a parameter sweep over segmentation settings:
 
 - rows move toward more regions
-- columns move toward smoother, more regular regions
+- columns move from coarser, smoother candidates on the left to more detailed ones on the right
 - click a tile to open it in the viewer
 - keep tiles you want to carry forward into compose
 
-### Compose Tab
+### Hues Tab
 
-Compose is a two-column workspace:
+Hues is a two-column workspace:
 
 - the left side is the kept-candidate palette
 - the right side is the composite canvas
 - click regions in the palette to paint them onto the canvas
 - use `Paint all` when a kept candidate should be copied wholesale
 
-### Merge Tab
+### Cleanup Tab
 
-Merge is a final review stage:
+Cleanup is a final review stage:
 
 - it previews the composite before final export
 - the threshold slider controls how aggressively similar colors are grouped
-- use it to reduce the number of wood pieces before packing
+- use Merge selected and Split selected to adjust the final partition
+- the final `Pack final` action writes a veneer-aware packing plan next to the export directory
+
+### Pack Tab
+
+Pack is the final export stage:
+
+- it writes a veneer-aware packing plan
+- it uses the current physical size and final partition state
+- the export directory is shown in the top-level controls
+
+By default, packing uses `rectpack` to place each final piece's bounding box
+while preserving the actual contour path in the output SVG. This is reliable
+and traceable, but it is not true irregular nesting.
+
+For SVGnest/Deepnest-style irregular nesting, configure an external runner:
+
+```bash
+export MARQFLOW_NESTER_CMD='/path/to/nester --input {input} --output {output}'
+uv run marqflow grid-serve
+```
+
+Marqflow writes one SVGnest-compatible input SVG per veneer, calls the command,
+and stores both the nested sheet SVG and the input SVG in the pack output. The
+runner must write the nested SVG to `{output}`.
 
 ## Useful Utility Commands
 

@@ -17,8 +17,9 @@ def test_gallery_static_assets_are_served(tmp_path: Path) -> None:
 
     css = client.get('/static/gallery.css')
     assert css.status_code == 200
-    assert 'compose-shell' in css.text
+    assert 'workspace-body' in css.text
 
     js = client.get('/static/gallery.js')
     assert js.status_code == 200
-    assert 'renderComposeWorkspace' in js.text
+    assert 'renderHuesTab' in js.text
+    assert 'renderCleanupTab' in js.text

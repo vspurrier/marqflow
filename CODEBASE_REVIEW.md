@@ -2,24 +2,86 @@
 
 Review date: 2026-06-18
 
-Last status update: 2026-06-18
+Last status update: 2026-06-23
 
 Scope: current `grid-gallery` branch. The first prototype remains recoverable from history and `main`; this branch is the gallery, compose, and merge redesign.
+The browser UI in this branch now presents the literal marquetry decision flow: `Image`, `Size`, `Subject`, `Shapes`, `Hues`, `Cleanup`, and `Pack`.
+That is a UI shell, not yet a complete marquetry design model. Several tabs still save metadata or operate on raster labels rather than editing a robust physical partition.
 
 ## Current Verification
 
-- `uv run ruff check .` passes.
-- `uv run pytest -q` passes, with 6 tests.
-- `node --check src/marqflow/static/gallery.js` passes.
+- Last verified commands before this audit:
+  - `uv run ruff check src tests` passed.
+  - `uv run pytest -q` passed, with 9 tests.
+  - `node --check src/marqflow/static/gallery.js` passed.
 - A live server check confirmed that `/`, `/static/gallery.css`, and `/static/gallery.js` are served from the FastAPI app.
 - The search page no longer renders the old large candidate preview canvas; it is now grid-first.
+- The workspace now persists a final partition raster, physical size, veneer palette, and cleanup metadata.
+- The browser exposes size controls and a veneer-aware pack action.
+- The browser exposes a separate subject tab and cleanup controls for merge/split workflows.
+- One headless browser smoke test now covers upload, keep, paint, cleanup, and pack at a high level.
+- A follow-up product plan was added at `MARQUETRY_PRODUCT_PLAN.md`.
+- Background grid/refine jobs now report visible progress to the browser.
+- Cleanup now includes direct point editing and contour smoothing controls.
+- Pack/export now writes veneer-grouped SVG sheet files to disk.
+- Packing now goes through a dedicated adapter module so the backend can be swapped later.
+- Browser upload now caps working images at a 768 px longest edge by default.
+- Unmerged composite SVG export now uses final design region records, including veneer overrides and edited contours.
+- Cleanup summary now reports high point count, hole, and disconnected-island warnings per final region.
+- Size input rejects non-positive physical dimensions, and pack/export validate basic partition invariants before writing files.
+- Pack and preview export now write `pieces.json` and `pieces.csv` bills of pieces with region IDs, veneer IDs, physical metrics, geometry warnings, and source references.
+
+## 2026-06-22 Implementation Audit
+
+The project has moved closer to the intended product shape, but the current code still falls short of a fabrication-ready marquetry planner.
+
+Implemented correctly:
+
+- The app can start without a workspace and requires image selection before showing the main workflow.
+- The browser now has top-level decision tabs: Image, Size, Subject, Shapes, Hues, Cleanup, and Pack.
+- `GridWorkspace` persists physical dimensions, cleanup settings, subject settings, a default veneer palette, final labels, source provenance, and manual merge/split edits.
+- The final preview, summary, SVG export, and packing route all use the final label raster rather than independent frontend-only state.
+- The final label raster is a complete pixel partition when generated from a base candidate, so the raster preview itself has no pixel gaps or overlaps.
+- Manual merge and split endpoints exist and are wired to the Cleanup tab.
+- Candidate grid dimensions are user-configurable and the top-left-to-bottom-right axis is intended to move from coarse to detailed.
+
+Important shortcomings:
+
+- `CompositeDesign` now exists and the main final-design mutation paths update it directly, but the workspace still mirrors final state across `GridWorkspace` fields such as selected candidate regions, `final_labels`, `final_region_sources`, `final_region_veneer_overrides`, `final_region_locked_ids`, and `manual_edits`.
+- Hues is still partly candidate-driven, but final regions now support explicit veneer overrides and lock controls in the Cleanup tab. The workflow still needs a true design model, not just a set of override maps.
+- A persisted ordered paint-event log now exists, and a `CompositeDesign` aggregate is written to the manifest. Final-design operations now update the aggregate directly, but the workspace still mirrors those fields for compatibility.
+- Manual merge/split edits are stored against numeric region IDs. Those IDs can become stale if the base candidate or painted source layers change, because the code replays edits onto a rebuilt label raster.
+- Subject settings are metadata only. `detail_budget`, `protect_eyes`, and `protect_nose` do not influence candidate generation, local refinement, cleanup, or locking.
+- Cleanup now has a canvas hitmap for direct region selection, hover feedback, drag-select, and geometry warnings for high point counts, holes, and disconnected islands. It still lacks true sliver overlays and shared-boundary repair.
+- `highlight_small_area` and `highlight_thin_width` now surface as basic warnings in the Cleanup list, but the UI still does not highlight them directly on the canvas.
+- Unmerged SVG output now uses physical dimensions and scales final-region contours into those units. Merged-threshold preview SVG is still a visual preview path and should not be treated as fabrication export.
+- SVG paths are independent contours, not a shared-boundary planar graph. This is risky for marquetry because smoothing or simplification can create tiny visual gaps/overlaps between adjacent pieces.
+- Packing now uses a maintained rectangle packer and emits veneer-grouped SVG sheet files, but it is still bounding-box based rather than a true veneer nesting solver.
+- `gallery_web.py` now has an accurate module docstring describing the tabbed marquetry browser UI.
+- `gallery.js` still has some UI responsibilities split between state refresh helpers and tab renderers, but the old dead helpers have been removed.
+- `python-multipart` is required by FastAPI uploads, and there is no stray `httpx2` dependency entry in `pyproject.toml`.
+- Browser-level workflow coverage is now broader. Static asset tests, API tests, and one headless browser smoke test cover upload, keep, paint-all, cleanup hover, drag-select, point edit, smooth, and pack.
+- API coverage now includes high-resolution browser upload downscaling and final SVG veneer override export.
+- API coverage now checks geometry warning summary keys.
+
+Current bugs or likely user-facing failures:
+
+- Candidate paint order is now persisted, and cleanup now exposes direct final-region point edits, but the UI still does not expose a real paint-event history or full brush editing. The current workflow remains candidate-driven rather than design-driven.
+- The Hues palette still injects candidate SVGs into the DOM for region clicks. Large candidates can remain slow even though previews use thumbnails/canvas elsewhere.
+- Cleanup selection happens through a text/list of final regions plus a canvas hitmap, hover inspection, and drag interactions, but it still lacks brush painting.
+- The merge threshold preview can imply fewer pieces, but the actual manual merge operation only merges selected connected final labels. This distinction is easy to misunderstand in the UI.
+- Automatic veneer choice still defaults to nearest palette color, but the UI now lets the user override a final region's veneer and lock regions. A richer material workflow is still missing.
+- `packFinal()` now sends only the output directory, which matches the current packing backend that exports veneer sheets from the final design.
+- `composite_summary()` now counts merged contours rather than raw records, but the merged preview/SVG can still differ from the summary when clusters produce multiple disconnected contours.
 
 ## Progress Summary
 
 Done:
 
-- Composite PNG preview, SVG export, and summary now derive from the same composite record model.
-- The first kept candidate is treated as the base layer for compose/export.
+- Composite PNG preview, SVG export, and summary now derive from the same final partition model.
+- The final partition is persisted as a raster plus provenance metadata, with last-painted candidate layers applied in order.
+- Physical size, cleanup thresholds, veneer palette, and veneer-aware pack output are now persisted on the workspace.
+- The first kept candidate is treated as the base layer for the final partition.
 - Merge preview now respects `merge_threshold` for PNG preview, SVG export, and path summary.
 - Expected composite export validation errors now return 400 responses.
 - Candidate open/sync now updates the server-side active candidate.
@@ -36,24 +98,40 @@ Done:
 - Candidate thumbnails are generated at workspace build time and Search/kept tiles use them.
 - Workspace and project manifests now store paths relative to their owning directory and resolve them on load.
 - Workspace writes use atomic file replacement, and mutations are guarded by a workspace lock in the web app.
+- The browser now has a reset workspace action that clears generated candidates and rebuilds from the copied source image.
 - `Paint all` is backed by a dedicated API route and the backend helper is now used.
+- The browser now exposes physical size controls and a packing action.
 - `iter_region_ids()` and `labels_to_region_lookup()` were removed.
 - `paint_all_candidate()` is now wired through the backend route instead of being dead helper code.
+- `CompositeDesign` is now persisted in the manifest alongside paint events, veneer overrides, locks, and validation data.
 - Merge threshold changes are debounced in the browser.
 - The composite base candidate is stored explicitly in the workspace manifest.
+- Composite render paths reuse cached candidate project loads.
+- Search grid rows and columns are now user-configurable from the UI and persisted in the workspace manifest.
+- The search grid now reads coarse-to-detailed from top-left to bottom-right.
+- The browser can start without a workspace and create one after image upload.
+- Background jobs now provide visible progress for grid and refine operations.
+- Cleanup now exposes direct point edit and smooth controls, plus canvas hover and drag selection.
+- Packing now writes SVG sheet files per veneer group.
+- Unmerged final SVG export now writes groups by veneer and preserves user veneer overrides.
+- Browser upload now enforces the 768 px working-edge default and reports original versus working dimensions.
+- Cleanup summaries now include high-complexity, holed, and disconnected-region warning IDs.
+- Pack/export now block invalid physical sizes and invalid partitions instead of writing misleading fabrication files.
+- Pack/export now write traceable JSON and CSV piece manifests beside the SVG artifacts.
 
 Partial:
 
-- Frontend testing now includes static asset smoke coverage, but not full browser interaction coverage.
-- The UI is more cache-friendly, but selection still rerenders more of the Compose view than it should.
-- Composite state is more explicit now, but region-to-source assignments are still modeled through kept candidates plus selected source regions rather than a dedicated composite assignment table.
+- Frontend testing now includes static asset smoke coverage, API workflow coverage, and a headless browser workflow smoke test.
+- The UI is more cache-friendly, but candidate selection still rerenders more of the Hues/Cleanup view than it should.
+- The final plan is now a non-overlapping physical partition, but provenance is still coarse when cleanup edits are replayed after shape changes.
+- Manual merge and split exist. Point editing, smoothing, hover inspection, drag selection, and basic geometry diagnostics are implemented, but richer geometry repair and shared-boundary editing are still not implemented.
 
 Open:
 
-- Add veneer/material palette semantics.
+- Expand browser-level interaction tests beyond the current smoke path.
+- Add richer canvas-based cleanup interaction, especially brush selection and sliver overlays.
+- Add more nuanced small-piece highlighting, canvas overlays, and merge suggestions.
 - Remove or formalize old single-project commands and helpers.
-- Move heavy generation/refinement work to background jobs with progress.
-- Replace interactive SVG editing with Canvas plus hitmap if region counts keep stressing the browser.
 - Review and remove unused dependencies if they remain unreferenced after the current dependency pass.
 
 ## High-Impact Issues
@@ -62,9 +140,9 @@ Open:
 
    Status: Done.
 
-   What changed: `GridWorkspace` now builds composite records through `_composite_region_records()`. The first kept candidate contributes all of its regions as the base, and additional kept candidates contribute selected regions. `composite_preview()`, `composite_svg()`, and `composite_summary()` all use this model.
+   What changed: `GridWorkspace` now rebuilds and persists a final partition raster. `composite_preview()`, `composite_svg()`, `composite_summary()`, and export all read from that partition and its provenance metadata instead of from layered source masks.
 
-   Remaining concern: this is still an implicit composite. A real marquetry workflow should persist an explicit composite object with base candidate, assignments, material groups, and merge metadata.
+   Remaining concern: richer canvas interactions are still missing, so the current cleanup workflow is region-based rather than vertex-based.
 
 2. The merge preview did not actually preview merged geometry.
 
@@ -88,13 +166,23 @@ Open:
 
 5. Composite merging is color-order dependent and not veneer-aware.
 
-   Status: Open.
+   Status: Partial.
 
-   Current behavior: `_cluster_records()` greedily assigns regions to the first RGB cluster within threshold and updates the cluster average as it goes.
+   Current behavior: the final partition gets suggested veneers from a default palette, the UI can pack by veneer, and merge previews still support a color threshold for quick grouping.
 
    Why this matters: veneer grouping should map to a material palette, not just RGB proximity. Two visually similar regions should only merge if they are intended to be the same veneer and the resulting piece is physically reasonable.
 
-   Suggested fix: introduce explicit veneer/material groups. Use Lab color distance or user-defined swatches for suggestions, then let the user override region-to-veneer assignments. Merge by material group and connectedness.
+   Suggested fix: expose per-region veneer overrides and make final export group strictly by veneer assignments.
+
+6. The final design lacks physical fabrication semantics.
+
+   Status: Partial.
+
+   Current behavior: the workspace now stores physical width, height, units, and cleanup thresholds. Region summaries include physical area and perimeter estimates, and SVG export now scales into physical units. Packing produces veneer-grouped output, but it is still a bounding-box adapter rather than a shared-boundary nesting model.
+
+   Why this matters: marquetry decisions are physical. A region that looks acceptable at screen scale may be impossible to cut at 8x10 inches. Packing also requires real units and one closed piece per final region.
+
+   Suggested fix: add more geometry validation for slivers, holes, shared boundaries, and minimum cut width.
 
 ## Medium-Impact Issues
 
@@ -116,15 +204,15 @@ Open:
 
    Status: Partial.
 
-  What changed: `tests/test_gallery_assets.py` verifies that the static browser assets are served. `tests/test_workspace_gallery.py` covers active candidate, selection, clear selection, merge preview, composite summary, SVG, and export API behavior.
+  What changed: `tests/test_gallery_assets.py` verifies that the static browser assets are served. `tests/test_workspace_gallery.py` covers active candidate, selection, clear selection, merge preview, composite summary, SVG, export API behavior, large-upload downscaling, and final SVG veneer override export. `tests/test_browser_workflow.py` covers a real browser upload/keep/paint/cleanup/pack smoke path.
 
-   Remaining work: add Playwright coverage for the actual user workflow: keep candidates, switch tabs, paint regions, Paint all, Clear, change merge threshold, and export.
+   Remaining work: broaden Playwright coverage for repaint ordering, veneer assignment, small-piece highlighting, export, and pack output inspection.
 
 4. The gallery grid was visually forced into square thumbnails.
 
    Status: Done.
 
-   What changed: candidate grid images now use `object-fit: contain`, the large search preview was removed, the grid is pinned to 3 desktop columns, 2 tablet columns, and 1 mobile column, and workspace candidate thumbnails are generated at build time.
+   What changed: candidate grid images now use `object-fit: contain`, the large search preview was removed, the grid is pinned to fixed desktop/tablet/mobile column counts, and workspace candidate thumbnails are generated at build time.
 
 5. README port mismatch.
 
@@ -143,6 +231,12 @@ Open:
    Status: Done.
 
    What changed: workspace mutations are now protected by a process-local lock in the FastAPI app, and manifests are written atomically.
+
+8. Workspace deletion/restart was implicit.
+
+   Status: Done.
+
+   What changed: the browser now exposes a reset action that clears generated candidates and selections, then rebuilds the gallery from the copied source image. Reloading is still just a normal browser refresh because the app re-reads workspace state from disk on each API request.
 
 ## Dead Code and Cleanup Candidates
 
@@ -188,11 +282,11 @@ Open:
 
    What changed: both helpers were removed from `regions.py`.
 
-8. `python-multipart` and `httpx2` dependencies should be reviewed.
+8. `python-multipart` dependency review.
 
-   Status: Open.
+   Status: Done.
 
-   Current note: no direct imports were found. `httpx2` is especially surprising. Remove both if they are not required by indirect FastAPI/test behavior.
+   Current note: `python-multipart` is required for FastAPI uploads, and there is no stray `httpx2` dependency entry in `pyproject.toml`.
 
 ## Maintainability Issues
 
@@ -233,33 +327,27 @@ Open:
 
 4. The grid search has no metadata model beyond labels.
 
-  Status: Open.
+  Status: Partial.
 
-   Current behavior: row/column/parameter information is encoded mostly in labels, and refined candidates are appended to the same flat list.
+   Current behavior: row, column, generation, and parent candidate information are now explicit, but search-space bounds are still only implicit in the UI labels and preset values.
 
-   Suggested fix: store `row`, `col`, `generation`, `parent_candidate_id`, and search-space bounds explicitly. Then the UI can render refined searches as separate grids.
+   Suggested fix: store search-space bounds explicitly and render refined searches as separate grids.
 
-5. Long-running work is synchronous.
+5. Long-running work now runs in background jobs.
 
-   Status: Open.
+   Status: Done.
 
-   Current behavior: grid init and refine block while candidates are generated.
-
-   Suggested fix: add jobs:
-
-   - `POST /api/workspace/refine` returns a job ID.
-   - `GET /api/jobs/{id}` returns progress.
-   - UI shows determinate progress when possible.
+   What changed: grid rebuild and refine operations now return job IDs and the browser polls `/api/jobs/{id}` for progress.
 
 ## Performance Issues and Recommendations
 
 1. Avoid hydrating every candidate SVG as live DOM.
 
-  Status: Open.
+  Status: Partial.
 
-   Current state: Compose still injects SVG for kept candidates so regions can be clicked. This is workable for modest region counts but will degrade with many regions.
+   Current state: Compose still injects SVG for kept candidates so regions can be clicked, but the cleanup view now uses a canvas hitmap for region selection. The palette still degrades with many regions.
 
-   Suggested fix: render previews with Canvas and use a hitmap for selection. Serve labels as a compressed PNG or binary array where each pixel maps to a region ID.
+   Suggested fix: render kept-candidate previews with Canvas too, then use a hitmap or binary region map for selection.
 
 2. Use one delegated event listener instead of one listener per path.
 
@@ -285,11 +373,9 @@ Open:
 
 5. Debounce and cancel merge preview renders.
 
-   Status: Partial.
+   Status: Done.
 
-   What changed: cancellation/request versioning is implemented.
-
-   Remaining work: debounce slider input.
+   What changed: cancellation/request versioning is implemented, and merge slider input is debounced.
 
 6. Avoid computing PNG and SVG for every preview update.
 
@@ -299,11 +385,11 @@ Open:
 
 7. Cache loaded projects during a request or app session.
 
-   Status: Open.
+   Status: Done.
 
-   Current behavior: composite rendering still loads candidate projects from disk repeatedly.
+   What changed: workspace composite code now uses `_load_project_cached()` with an LRU cache.
 
-   Suggested fix: load each candidate project once per composite render and pass that cache through preview, summary, and SVG generation. Consider an app-session LRU cache keyed by candidate ID and project mtime.
+   Remaining concern: cache invalidation is path-based and should eventually consider project mtime or candidate generation.
 
 8. Generate thumbnails for gallery browsing.
 
@@ -313,13 +399,13 @@ Open:
 
 9. Move heavy candidate generation and refinement to jobs.
 
-   Status: Open.
+   Status: Done.
 
-   Current behavior: refine is a blocking POST that generates nine candidates before returning.
+   Current state: grid and refine operations are background jobs with visible progress.
 
 10. Consider Canvas for interactive editing and SVG only for final export.
 
-   Status: Open.
+   Status: Partial.
 
    Best direction: use Canvas or WebGL for viewing, hit-testing, hover, and painting. Keep SVG as the export format and possibly as a static preview overlay.
 
@@ -328,8 +414,7 @@ Open:
 1. Stop rebuilding the whole Compose palette after every selection.
 2. Cache candidate project loads on the backend.
 3. Move interactive selection to Canvas plus hitmap.
-4. Move candidate generation/refinement into background jobs.
-5. Add explicit cache invalidation keyed by candidate generation.
+4. Add explicit cache invalidation keyed by candidate generation.
 
 Completed from the original performance list:
 
@@ -344,6 +429,10 @@ Completed from the original performance list:
 ## Suggested Product Direction
 
 For a first useful digital pass from image to marquetry design, build around these stages:
+
+0. Reframe the UI around marquetry decisions.
+
+   The top-level tabs should not be implementation stages like Search/Compose/Merge. They should match the way a user thinks through a marquetry plan: Image, Size, Subject, Shapes, Hues, Cleanup, and Pack. The implementation can still use candidate generation and composite models internally, but the user-facing structure should follow physical decisions.
 
 1. Normalize the source image.
 
@@ -405,9 +494,13 @@ For a first useful digital pass from image to marquetry design, build around the
 
    Add minimum area filtering, contour simplification settings, hole handling, and per-region complexity metrics.
 
-7. Add packing integration only after final-region semantics are stable.
+7. Add final partition validation.
 
-   Nesting should operate on final SVG groups by veneer, not on transient candidate regions.
+   Validate that the final design covers the source area exactly once, with no gaps, no overlaps, and no unassigned regions. This should be a blocking export check.
+
+8. Add packing integration only after final-region semantics are stable.
+
+   Nesting should operate on final SVG groups by veneer, not on transient candidate regions. The current code now does this through `packing.py`: the default backend uses deterministic bounding-box placement, and `MARQFLOW_NESTER_CMD` can hand per-veneer SVGnest-compatible input SVGs to an external SVG nester.
 
 ## Prioritized Fix List
 
@@ -424,10 +517,40 @@ Done:
 
 Next:
 
-1. Stop full Compose rerenders after each region click.
-2. Add Playwright coverage for Compose and Merge.
-3. Review dependencies and remove `httpx2`/`python-multipart` if not intentional.
-4. Cache loaded candidate projects during composite rendering.
-5. Add explicit persisted composite assignment state.
-6. Add veneer palette groups and final fabrication exports.
-7. Move candidate generation/refinement into background jobs with progress.
+1. Replace candidate selected-region state with an explicit `CompositeDesign`.
+
+   Required outcome: the workspace persists ordered paint events, final labels, final region records, veneer assignments, locks, cleanup operations, physical scale, and validation state in one aggregate.
+
+2. Make paint ordering deterministic and user-visible.
+
+   Required outcome: painting candidate A, then candidate B over the same area, always shows B after preview, export, and browser reload.
+
+3. Move Hues from "paint candidate regions" to "assign veneers."
+
+   Required outcome: the user can select final regions and assign a named veneer swatch. Automatic Lab matching remains only a suggestion.
+
+4. Replace SVG DOM region interaction with canvas plus hitmap.
+
+   Required outcome: candidate and final-region clicks use a region-ID hitmap instead of injecting hundreds or thousands of SVG paths into the page.
+
+5. Add direct final-canvas cleanup tools.
+
+   Required outcome: users can select visual regions on the final canvas, merge adjacent regions, highlight small/thin pieces, and preview smoothing/simplification before applying it.
+
+6. Add partition validation and physical-unit export.
+
+   Required outcome: export blocks on unassigned pixels, overlap defects, holes/slivers beyond thresholds, or invalid physical dimensions. SVG paths use real units or a documented physical scale.
+
+7. Replace placeholder packing with a packing adapter.
+
+   Status: partially done. Packing receives validated final regions grouped by user-assigned veneer, writes traceable SVG sheets, records backend metadata, saves per-veneer nester input SVGs when an external runner is configured, and writes JSON/CSV piece manifests. The built-in fallback is still bounding-box placement; a bundled true irregular nesting engine remains open.
+
+   Required remaining outcome: choose whether to vendor SVGnest/Deepnest automation or require an installed external command, then add an integration test against that concrete backend.
+
+8. Add browser workflow tests.
+
+   Required outcome: Playwright or equivalent covers image upload, candidate generation, keep candidate, paint/repaint, veneer override, merge, small-piece highlighting, export, and pack. A headless smoke test now covers the basic upload/keep/paint/cleanup/pack path.
+
+9. Clean up implementation debt.
+
+   Required outcome: remove unused JS helpers, fix the stale `gallery_web.py` docstring, and decide whether old `MarqflowProject` CLI commands are public or legacy/internal.
