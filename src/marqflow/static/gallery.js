@@ -72,6 +72,7 @@ const el = {
   splitTarget: document.getElementById('split-target'),
   saveCleanupBtn: document.getElementById('save-cleanup-btn'),
   mergeSelectedBtn: document.getElementById('merge-selected-btn'),
+  mergeSuggestionsBtn: document.getElementById('merge-suggestions-btn'),
   splitSelectedBtn: document.getElementById('split-selected-btn'),
   composeKeptCount: document.getElementById('compose-kept-count'),
   veneerPaletteList: document.getElementById('veneer-palette-list'),
@@ -1538,6 +1539,27 @@ async function mergeSelectedRegions() {
   }
 }
 
+async function mergeAllSuggestions() {
+  setBusy(true);
+  try {
+    const response = await fetch('/api/workspace/final/merge-suggestions', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({}),
+    });
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+    const workspace = await response.json();
+    await refreshWorkspace(workspace);
+    state.selectedFinalRegionIds.clear();
+    await renderCleanupTab(workspace);
+    setStatus('Merged cleanup suggestions.');
+  } finally {
+    setBusy(false);
+  }
+}
+
 async function saveFinalRegionVeneer(regionId, veneerId) {
   setBusy(true);
   try {
@@ -1755,6 +1777,7 @@ el.saveCleanupBtn.addEventListener('click', saveCleanupSettings);
 el.addVeneerBtn.addEventListener('click', addVeneerRow);
 el.saveVeneerPaletteBtn.addEventListener('click', saveVeneerPalette);
 el.mergeSelectedBtn.addEventListener('click', mergeSelectedRegions);
+el.mergeSuggestionsBtn.addEventListener('click', mergeAllSuggestions);
 el.splitSelectedBtn.addEventListener('click', splitSelectedRegion);
 el.exportBtn.addEventListener('click', exportPreviewSvg);
 el.exportFinalBtn.addEventListener('click', packFinal);

@@ -122,6 +122,7 @@ Done:
 - Pack/export now write traceable JSON and CSV piece manifests beside the SVG artifacts.
 - Veneer swatches can now be edited from the Hues tab and saved through `/api/workspace/veneer-palette`.
 - Cleanup warnings now draw directly over the canvas for small, thin, and complex/problem regions.
+- Cleanup now includes a bulk Merge suggestions action that applies the current valid small/thin merge suggestions.
 
 Partial:
 
@@ -134,7 +135,7 @@ Open:
 
 - Expand browser-level interaction tests beyond the current smoke path.
 - Add richer canvas-based cleanup interaction, especially brush selection and sliver overlays.
-- Add more nuanced sliver repair, shared-boundary cleanup, and merge suggestions.
+- Add more nuanced sliver repair and shared-boundary cleanup.
 - Remove or formalize old single-project commands and helpers.
 - Review and remove unused dependencies if they remain unreferenced after the current dependency pass.
 

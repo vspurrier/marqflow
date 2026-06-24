@@ -98,6 +98,7 @@ Cleanup is a final review stage:
 - the threshold slider controls how aggressively similar colors are grouped
 - small/thin/geometry warnings are highlighted on the canvas and in the region list
 - use Merge selected and Split selected to adjust the final partition
+- use Merge suggestions to apply the current small/thin-piece cleanup suggestions in one pass
 - the final `Pack final` action writes a veneer-aware packing plan next to the export directory
 
 ### Pack Tab

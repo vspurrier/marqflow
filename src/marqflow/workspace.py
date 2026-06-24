@@ -1268,6 +1268,30 @@ class GridWorkspace:
         self.save()
         return merged
 
+    def merge_cleanup_suggestions(self) -> int:
+        """Apply all currently valid small/thin merge suggestions."""
+
+        merged_total = 0
+        seen_pairs: set[tuple[int, int]] = set()
+        while True:
+            suggestions = self.composite_summary().get('merge_suggestions', [])
+            merged_this_pass = 0
+            for suggestion in suggestions:
+                region_id = int(suggestion['region_id'])
+                target_id = int(suggestion['target_region_id'])
+                pair = tuple(sorted((region_id, target_id)))
+                if pair in seen_pairs:
+                    continue
+                seen_pairs.add(pair)
+                merged = self.merge_final_regions(pair)
+                if merged > 0:
+                    merged_total += merged
+                    merged_this_pass += merged
+                    break
+            if merged_this_pass == 0:
+                break
+        return merged_total
+
     def split_final_region(
         self,
         region_id: int,

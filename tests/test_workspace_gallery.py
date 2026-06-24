@@ -449,6 +449,44 @@ target.write_text(source.read_text(encoding='utf-8') + '<!-- external-nested -->
         assert 'nest_input_svg' not in sheet
 
 
+def test_merge_cleanup_suggestions_reduces_piece_count(tmp_path: Path) -> None:
+    image = np.zeros((48, 48, 3), dtype=np.uint8)
+    image[:24, :24] = [88, 88, 88]
+    image[:24, 24:] = [104, 104, 104]
+    image[24:, :24] = [120, 120, 120]
+    image[24:, 24:] = [136, 136, 136]
+    input_path = tmp_path / 'source.png'
+    Image.fromarray(image, mode='RGB').save(input_path)
+
+    workspace_dir = tmp_path / 'workspace'
+    GridWorkspace.create(
+        input_path,
+        workspace_dir,
+        segment_levels=(4,),
+        smoothness_levels=(1.0,),
+        max_working_edge=48,
+    )
+    client = TestClient(create_app(workspace_dir))
+    workspace = client.post(
+        '/api/workspace/cleanup',
+        json={
+            'simplify_tolerance': 1.0,
+            'highlight_small_area': 100.0,
+            'highlight_thin_width': 100.0,
+            'merge_rgb_threshold': 24.0,
+        },
+    ).json()
+    before = workspace['design_summary']
+    assert before['merge_suggestions']
+
+    response = client.post('/api/workspace/final/merge-suggestions')
+
+    assert response.status_code == 200
+    after = response.json()['design_summary']
+    assert after['region_count'] < before['region_count']
+    assert len(after['merge_suggestions']) <= len(before['merge_suggestions'])
+
+
 def test_browser_upload_caps_working_resolution(tmp_path: Path) -> None:
     image = np.zeros((900, 1200, 3), dtype=np.uint8)
     image[:, :600] = [90, 90, 90]

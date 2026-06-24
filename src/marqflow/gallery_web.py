@@ -459,6 +459,15 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
                 raise HTTPException(status_code=404, detail='no regions merged')
             return JSONResponse(_workspace_summary(workspace))
 
+    @app.post('/api/workspace/final/merge-suggestions')
+    def merge_suggestions() -> JSONResponse:
+        with workspace_lock:
+            workspace = _load_workspace(workspace_path)
+            merged = workspace.merge_cleanup_suggestions()
+            if merged <= 0:
+                raise HTTPException(status_code=404, detail='no suggested regions merged')
+            return JSONResponse(_workspace_summary(workspace))
+
     @app.post('/api/workspace/final/split')
     def split_final(request: SplitRequest) -> JSONResponse:
         with workspace_lock:
