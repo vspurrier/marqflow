@@ -37,6 +37,7 @@ interface Candidate {
 }
 
 interface WorkspaceSummary {
+  workspace_dir: string;
   source: {
     original_width: number;
     original_height: number;

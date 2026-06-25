@@ -34,6 +34,7 @@ uv run pytest -q
 ## Implemented
 
 - Image normalization with EXIF orientation and bounded working size.
+- Workspace naming, listing, opening, and deletion through the browser API.
 - One SLIC-based candidate generator.
 - Candidate-grid generation that stays separate from final design state.
 - Durable design seeded from a candidate label partition.
@@ -111,12 +112,6 @@ uv run pytest -q
 
    Current tests are API/core level. Add browser tests after the new UI
    stabilizes.
-
-9. File/workspace lifecycle.
-
-   Uploaded images create temporary workspaces when no directory is provided.
-   The rewrite still needs explicit workspace naming, reload/delete behavior,
-   and a clear default storage location for real projects.
 
 ## Engineering Direction
 

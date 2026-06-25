@@ -74,6 +74,7 @@ uv run marqflow serve ./workspace
 
 The browser UI is deliberately minimal in this rewrite:
 
+- name, list, open, and delete workspaces
 - choose an image
 - generate and choose candidate partitions
 - inspect the generated design invariant and physical dimensions
@@ -90,6 +91,10 @@ The browser UI is deliberately minimal in this rewrite:
 - write the bounding-box pack manifest
 
 The UI should stay thin until the core design model is strong.
+
+When `marqflow serve` is launched without a workspace argument, browser-created
+workspaces are stored under `~/.marqflow`. When launched with a workspace path,
+new browser workspaces are created alongside that path.
 
 ## Verification
 

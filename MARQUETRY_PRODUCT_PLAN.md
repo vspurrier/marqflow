@@ -51,6 +51,7 @@ The final design must stay a complete, non-overlapping puzzle.
 Implemented now:
 
 - image upload/load
+- explicit workspace naming, listing, opening, and deletion
 - one-off candidate generation
 - candidate grid generation as a source-stage search tool
 - durable design partition

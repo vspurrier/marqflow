@@ -13,6 +13,11 @@ let dragStart = null;
 let dragCurrent = null;
 
 const el = /** @type {Record<string, any>} */ ({
+  workspaceName: document.getElementById('workspace-name'),
+  refreshWorkspaces: document.getElementById('refresh-workspaces'),
+  workspaceList: document.getElementById('workspace-list'),
+  openWorkspace: document.getElementById('open-workspace'),
+  deleteWorkspace: document.getElementById('delete-workspace'),
   imageInput: document.getElementById('image-input'),
   targetRegions: document.getElementById('target-regions'),
   compactness: document.getElementById('compactness'),
@@ -69,6 +74,7 @@ function rgb(color) {
 }
 
 async function refresh() {
+  await loadWorkspaces();
   const response = await fetch('/api/workspace');
   if (!response.ok) {
     workspace = null;
@@ -78,6 +84,20 @@ async function refresh() {
   workspace = await response.json();
   await loadHitmap();
   render();
+}
+
+async function loadWorkspaces() {
+  const response = await fetch('/api/workspaces');
+  if (!response.ok) return;
+  const payload = await response.json();
+  el.workspaceList.innerHTML = '';
+  for (const item of payload.workspaces || []) {
+    const option = document.createElement('option');
+    option.value = item.name;
+    option.textContent = `${item.active ? '* ' : ''}${item.name}`;
+    option.selected = Boolean(item.active);
+    el.workspaceList.appendChild(option);
+  }
 }
 
 async function loadHitmap() {
@@ -329,6 +349,7 @@ async function openImage() {
   form.append('image', el.imageInput.files[0]);
   form.append('target_regions', el.targetRegions.value || '80');
   form.append('compactness', el.compactness.value || '18');
+  if (el.workspaceName.value) form.append('workspace_name', el.workspaceName.value);
   setStatus('Building first partition...');
   const response = await fetch('/api/workspace/open-image', {method: 'POST', body: form});
   if (!response.ok) {
@@ -338,7 +359,53 @@ async function openImage() {
   workspace = await response.json();
   selectedRegionIds.clear();
   await loadHitmap();
+  await loadWorkspaces();
   setStatus('Workspace ready.');
+  render();
+}
+
+async function openSelectedWorkspace() {
+  if (!el.workspaceList.value) {
+    setStatus('Choose a workspace to open.', true);
+    return;
+  }
+  const response = await fetch('/api/workspace/open', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({name: el.workspaceList.value}),
+  });
+  if (!response.ok) {
+    setStatus(await response.text(), true);
+    return;
+  }
+  workspace = await response.json();
+  selectedRegionIds.clear();
+  await loadHitmap();
+  await loadWorkspaces();
+  setStatus(`Opened workspace ${el.workspaceList.value}.`);
+  render();
+}
+
+async function deleteSelectedWorkspace() {
+  if (!el.workspaceList.value) {
+    setStatus('Choose a workspace to delete.', true);
+    return;
+  }
+  const name = el.workspaceList.value;
+  const response = await fetch(`/api/workspace/${encodeURIComponent(name)}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    setStatus(await response.text(), true);
+    return;
+  }
+  if (workspace?.workspace_dir?.endsWith(`/${name}`)) {
+    workspace = null;
+    hitmap = null;
+    selectedRegionIds.clear();
+  }
+  await loadWorkspaces();
+  setStatus(`Deleted workspace ${name}.`);
   render();
 }
 
@@ -622,6 +689,9 @@ async function pack() {
 }
 
 el.openImage.addEventListener('click', openImage);
+el.refreshWorkspaces.addEventListener('click', loadWorkspaces);
+el.openWorkspace.addEventListener('click', openSelectedWorkspace);
+el.deleteWorkspace.addEventListener('click', deleteSelectedWorkspace);
 el.candidateGrid.addEventListener('click', generateCandidateGrid);
 el.updateSize.addEventListener('click', updateSize);
 el.assignSelected.addEventListener('click', assignSelected);

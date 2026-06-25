@@ -372,6 +372,34 @@ def test_api_vertical_slice(tmp_path: Path) -> None:
     assert preview_response.status_code == 200
 
 
+def test_api_workspace_lifecycle(tmp_path: Path) -> None:
+    image_path = tmp_path / 'source.png'
+    _fixture_image(image_path)
+    client = TestClient(create_app(tmp_path / 'active'))
+
+    created = client.post(
+        '/api/workspace/open-image',
+        files={'image': ('source.png', image_path.read_bytes(), 'image/png')},
+        data={'target_regions': '4', 'compactness': '8', 'workspace_name': 'Bennett Portrait'},
+    )
+    assert created.status_code == 200
+    assert Path(created.json()['workspace_dir']).name == 'Bennett-Portrait'
+
+    listed = client.get('/api/workspaces')
+    assert listed.status_code == 200
+    assert listed.json()['workspaces'][0]['name'] == 'Bennett-Portrait'
+    assert listed.json()['workspaces'][0]['active'] is True
+
+    opened = client.post('/api/workspace/open', json={'name': 'Bennett-Portrait'})
+    assert opened.status_code == 200
+    assert opened.json()['validation']['valid'] is True
+
+    deleted = client.delete('/api/workspace/Bennett-Portrait')
+    assert deleted.status_code == 200
+    assert client.get('/api/workspace').status_code == 404
+    assert client.get('/api/workspaces').json()['workspaces'] == []
+
+
 def test_api_merge_undo_and_hitmap(tmp_path: Path) -> None:
     image_path = tmp_path / 'source.png'
     _fixture_image(image_path)

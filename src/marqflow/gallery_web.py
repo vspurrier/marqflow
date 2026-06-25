@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+import shutil
 import tempfile
 from pathlib import Path
 from typing import Annotated
@@ -126,6 +128,15 @@ class PackRequest(BaseModel):
     output_dir: str = './exported'
 
 
+class WorkspaceOpenRequest(BaseModel):
+    name: str = Field(min_length=1)
+
+
+def _workspace_name(raw_name: str) -> str:
+    name = re.sub(r'[^a-zA-Z0-9_.-]+', '-', raw_name).strip('.-')
+    return name[:80] or 'workspace'
+
+
 def _html_page() -> str:
     return (STATIC_DIR / 'gallery.html').read_text(encoding='utf-8')
 
@@ -141,7 +152,7 @@ def _load_workspace(path: Path | None) -> MarquetryWorkspace:
 
 def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
     workspace_path = Path(workspace_dir) if workspace_dir is not None else None
-    workspace_root = workspace_path.parent if workspace_path else None
+    workspace_root = workspace_path.parent if workspace_path else Path.home() / '.marqflow'
     app = FastAPI(title='Marqflow')
     app.mount('/static', StaticFiles(directory=STATIC_DIR), name='static')
 
@@ -152,6 +163,49 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
     @app.get('/api/workspace')
     def workspace() -> JSONResponse:
         return JSONResponse(_load_workspace(workspace_path).summary())
+
+    @app.get('/api/workspaces')
+    def workspaces() -> JSONResponse:
+        nonlocal workspace_root
+        workspace_root.mkdir(parents=True, exist_ok=True)
+        items = []
+        for path in sorted(workspace_root.iterdir()):
+            if not path.is_dir() or not (path / 'workspace.json').exists():
+                continue
+            items.append(
+                {
+                    'name': path.name,
+                    'path': str(path),
+                    'active': (
+                        workspace_path is not None
+                        and path.resolve() == workspace_path.resolve()
+                    ),
+                }
+            )
+        return JSONResponse({'workspace_root': str(workspace_root), 'workspaces': items})
+
+    @app.post('/api/workspace/open')
+    def open_workspace(request: WorkspaceOpenRequest) -> JSONResponse:
+        nonlocal workspace_path
+        target = workspace_root / _workspace_name(request.name)
+        if not (target / 'workspace.json').exists():
+            raise HTTPException(status_code=404, detail='workspace not found')
+        workspace_path = target
+        return JSONResponse(MarquetryWorkspace.load(workspace_path).summary())
+
+    @app.delete('/api/workspace/{name}')
+    def delete_workspace(name: str) -> JSONResponse:
+        nonlocal workspace_path
+        target = (workspace_root / _workspace_name(name)).resolve()
+        root = workspace_root.resolve()
+        if root not in target.parents:
+            raise HTTPException(status_code=400, detail='path escapes workspace root')
+        if not (target / 'workspace.json').exists():
+            raise HTTPException(status_code=404, detail='workspace not found')
+        shutil.rmtree(target)
+        if workspace_path is not None and target == workspace_path.resolve():
+            workspace_path = None
+        return JSONResponse({'deleted': name})
 
     @app.get('/api/workspace-file/{relative_path:path}')
     def workspace_file(relative_path: str) -> FileResponse:
@@ -169,18 +223,20 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
         image: Annotated[UploadFile, File()],
         target_regions: Annotated[int, Form()] = 80,
         compactness: Annotated[float, Form()] = 18.0,
+        workspace_name: Annotated[str | None, Form()] = None,
     ) -> JSONResponse:
         nonlocal workspace_path
         nonlocal workspace_root
-        if workspace_root is None:
-            workspace_root = Path(tempfile.mkdtemp(prefix='marqflow-'))
         workspace_root.mkdir(parents=True, exist_ok=True)
         suffix = Path(image.filename or 'source.png').suffix or '.png'
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=workspace_root) as tmp:
             tmp.write(await image.read())
             upload_path = Path(tmp.name)
         try:
-            workspace_path = workspace_root / f'workspace-{upload_path.stem}'
+            name = _workspace_name(
+                workspace_name or Path(image.filename or upload_path.stem).stem
+            )
+            workspace_path = workspace_root / name
             ws = MarquetryWorkspace.create(upload_path, workspace_path)
             candidate = ws.generate_candidate(
                 target_regions=target_regions,

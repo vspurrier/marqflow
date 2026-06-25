@@ -17,7 +17,14 @@
     </header>
 
     <section class="card">
-      <h2>1. Image and first partition</h2>
+      <h2>1. Workspace and image</h2>
+      <div class="controls">
+        <label>Workspace <input id="workspace-name" type="text" placeholder="bennett-portrait" /></label>
+        <button id="refresh-workspaces" type="button">Refresh workspaces</button>
+        <label>Open <select id="workspace-list"></select></label>
+        <button id="open-workspace" type="button">Open workspace</button>
+        <button id="delete-workspace" type="button">Delete workspace</button>
+      </div>
       <div class="controls">
         <input id="image-input" type="file" accept="image/*" />
         <label>Regions <input id="target-regions" type="number" value="80" min="2" /></label>
