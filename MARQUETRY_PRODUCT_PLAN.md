@@ -58,55 +58,56 @@ Implemented now:
 - veneer assignments
 - editable veneer inventory with stock fields
 - manual connected-region merge
-- undo for veneer assignment and region merge edits
+- bulk veneer assignment
+- undo for veneer assignment, bulk veneer assignment, detail zones, size changes,
+  veneer inventory changes, and region merge edits
 - same-veneer-preferred merge suggestions for small/thin regions
-- final label hitmap API for browser selection tooling
+- bounded auto-merge cleanup for suggested small/thin regions
+- final label hitmap API and browser click/drag selection tooling
+- persisted rectangular detail zones
+- raster shared-boundary metrics
 - partition validation
 - physical-unit SVG export
-- simple pack manifest
+- `rectpack` bounding-box pack manifest by veneer
 - minimal browser UI
 
 ## Next Milestones
 
-1. Add browser hitmap interaction.
+1. Use subject/detail zones during candidate generation.
 
-   The API exposes the final label map. The UI still needs click/drag region
-   selection on the final design instead of list-only controls.
+   Rectangular focus zones are persisted, but the SLIC generator is still
+   global. Marquetry portraits need local detail budgets so eyes, nose, mouth,
+   and other focal areas preserve more structure than background or clothing.
 
-2. Add subject/detail masks for eyes/nose or user-selected focus zones.
+2. Replace raster boundary metrics with shared-boundary vector geometry.
 
-   The candidate generator is still global. Marquetry portraits need local
-   detail budgets so eyes, nose, mouth, and other focal areas can preserve more
-   structure than background or clothing.
+   Raster boundary metrics now exist. Independently extracted vector contours
+   are still not a robust planar graph. Advanced smoothing, point editing, and
+   no-gap/no-overlap SVG cleanup should be built on shared vector edges.
 
-3. Add shared-boundary geometry before advanced smoothing.
+3. Add cleanup operations on top of shared boundaries.
 
-   The raster partition is valid, but independently extracted vector contours
-   are not yet a robust planar graph. Advanced smoothing, point editing, and
-   no-gap/no-overlap SVG cleanup should be built on shared edges.
-
-4. Add cleanup operations on top of shared boundaries.
-
+   Current cleanup supports connected merge and bounded auto-merge suggestions.
    Needed operations: simplify shared edges, smooth selected boundaries, repair
    slivers, lock regions, split selected regions, and edit vertices.
 
-5. Deepen veneer inventory logic.
+4. Deepen veneer inventory logic.
 
    Veneer replacement and stock fields now exist. The workflow still needs a
    polished swatch editor, grain direction review, texture/photo swatches, and
    clearer purchasing/overage warnings.
 
-6. Add a packing adapter for an actual irregular nesting backend.
+5. Replace bounding-box packing with irregular nesting.
 
-   Current packing writes a grouped manifest plus SVG. The adapter should take
-   validated physical paths by veneer and return sheet placements.
+   Current packing uses `rectpack` against physical bounding boxes. The next
+   adapter should pack actual validated physical paths by veneer.
 
-7. Convert browser JS to TypeScript modules once the API stabilizes.
+6. Convert browser JS to TypeScript modules once the API stabilizes.
 
    The current browser code uses `checkJs` and declarations. A module split
    becomes worthwhile after the core workflow stops shifting.
 
-8. Add browser-level regression tests.
+7. Add browser-level regression tests.
 
    API/core tests cover the model. Browser tests should cover image open,
    candidate-grid selection, veneer assignment, merge, undo, SVG preview, and

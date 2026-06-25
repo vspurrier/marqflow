@@ -19,13 +19,17 @@ The final design is a puzzle:
 The rewrite currently supports:
 
 1. Load and normalize a source image.
-2. Generate one SLIC candidate partition.
+2. Generate one SLIC candidate partition or a candidate search grid.
 3. Seed a durable `MarquetryDesign` from that candidate.
-4. Auto-assign veneers from a default palette.
-5. Manually override a region veneer.
-6. Validate the partition invariant.
-7. Export a veneer-grouped SVG in physical units.
-8. Write a simple veneer-grouped packing manifest.
+4. Set final physical dimensions.
+5. Auto-assign veneers from a default palette.
+6. Manually override veneers for one or many selected regions.
+7. Click or drag-select final regions from a canvas hitmap.
+8. Merge connected selected regions.
+9. Persist rectangular detail zones for subject areas.
+10. Validate the partition invariant.
+11. Export a veneer-grouped SVG in physical units.
+12. Write a `rectpack` bounding-box packing manifest.
 
 This is intentionally smaller than the prototype. The goal is a clean core
 that can grow without repeating the previous tech debt.
@@ -68,10 +72,14 @@ uv run marqflow serve ./workspace
 The browser UI is deliberately minimal in this rewrite:
 
 - choose an image
-- inspect the generated design invariant
-- assign veneers to final regions
+- generate and choose candidate partitions
+- inspect the generated design invariant and physical dimensions
+- click or drag-select final regions
+- assign veneers to selected final regions
+- merge selected connected regions
+- auto-merge small/thin suggested regions
 - export SVG
-- write the pack manifest
+- write the bounding-box pack manifest
 
 The UI should stay thin until the core design model is strong.
 

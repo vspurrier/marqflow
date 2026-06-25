@@ -12,6 +12,7 @@ from typing import Any
 
 import numpy as np
 from PIL import Image, ImageOps
+from rectpack import newPacker
 from skimage.segmentation import slic
 
 from .geometry import (
@@ -22,9 +23,11 @@ from .geometry import (
     partition_validation,
     preview_image,
     region_neighbors,
+    shared_boundaries,
 )
 from .models import (
     Candidate,
+    DetailZone,
     EditOperation,
     MarquetryDesign,
     PhysicalSize,
@@ -320,6 +323,79 @@ class MarquetryWorkspace:
         )
         self.save()
 
+    def assign_veneer_many(self, region_ids: list[int] | set[int], veneer_id: str) -> None:
+        """Assign one veneer to multiple current regions as one undoable edit."""
+
+        if self.design is None:
+            raise ValueError('create a design first')
+        selected_region_ids = {int(region_id) for region_id in region_ids}
+        if not selected_region_ids:
+            raise ValueError('choose at least one region')
+        if veneer_id not in {veneer.veneer_id for veneer in self.design.veneers}:
+            raise ValueError(f'unknown veneer: {veneer_id}')
+        existing = {int(value) for value in np.unique(self.design_labels()) if int(value) > 0}
+        missing = sorted(selected_region_ids - existing)
+        if missing:
+            raise ValueError(f'unknown region ids: {missing}')
+
+        previous = {
+            region_id: self.design.veneer_assignments.get(region_id)
+            for region_id in selected_region_ids
+        }
+        for region_id in selected_region_ids:
+            self.design.veneer_assignments[region_id] = veneer_id
+        self.design.edit_history.append(
+            EditOperation(
+                op_id=self._next_op_id(),
+                kind='assign_veneer_many',
+                payload={
+                    'region_ids': sorted(selected_region_ids),
+                    'veneer_id': veneer_id,
+                    'previous_veneer_ids': {
+                        str(region_id): previous_veneer
+                        for region_id, previous_veneer in sorted(previous.items())
+                    },
+                },
+            )
+        )
+        self.save()
+
+    def add_detail_zone(
+        self,
+        name: str,
+        bbox: tuple[int, int, int, int],
+        detail_multiplier: float = 2.0,
+    ) -> DetailZone:
+        """Persist a rectangular focus zone in source-image pixel coordinates."""
+
+        if self.design is None:
+            raise ValueError('create a design first')
+        x0, y0, x1, y1 = bbox
+        clipped = (
+            max(0, min(int(x0), self.source.working_width - 1)),
+            max(0, min(int(y0), self.source.working_height - 1)),
+            max(1, min(int(x1), self.source.working_width)),
+            max(1, min(int(y1), self.source.working_height)),
+        )
+        if clipped[0] >= clipped[2] or clipped[1] >= clipped[3]:
+            raise ValueError('detail zone must have positive area')
+        zone = DetailZone(
+            zone_id=len(self.design.detail_zones) + 1,
+            name=name or f'Zone {len(self.design.detail_zones) + 1}',
+            bbox=clipped,
+            detail_multiplier=max(1.0, float(detail_multiplier)),
+        )
+        self.design.detail_zones.append(zone)
+        self.design.edit_history.append(
+            EditOperation(
+                op_id=self._next_op_id(),
+                kind='add_detail_zone',
+                payload={'zone': zone.to_dict()},
+            )
+        )
+        self.save()
+        return zone
+
     def _selected_regions_are_connected(
         self,
         selected_region_ids: set[int],
@@ -438,6 +514,12 @@ class MarquetryWorkspace:
                 self.design.veneer_assignments.pop(region_id, None)
             else:
                 self.design.veneer_assignments[region_id] = str(previous_veneer)
+        elif edit.kind == 'assign_veneer_many':
+            for region_id, previous_veneer in edit.payload['previous_veneer_ids'].items():
+                if previous_veneer is None:
+                    self.design.veneer_assignments.pop(int(region_id), None)
+                else:
+                    self.design.veneer_assignments[int(region_id)] = str(previous_veneer)
         elif edit.kind == 'merge_regions':
             labels_path = self.workspace_dir / str(edit.payload['previous_labels_path'])
             self._write_design_labels(np.load(labels_path))
@@ -461,6 +543,11 @@ class MarquetryWorkspace:
                     'previous_veneer_assignments'
                 ].items()
             }
+        elif edit.kind == 'add_detail_zone':
+            zone_id = int(edit.payload['zone']['zone_id'])
+            self.design.detail_zones = [
+                zone for zone in self.design.detail_zones if zone.zone_id != zone_id
+            ]
         else:
             raise ValueError(f'cannot undo edit kind: {edit.kind}')
         self.save()
@@ -498,6 +585,22 @@ class MarquetryWorkspace:
             )
         return suggestions
 
+    def apply_merge_suggestions(self, max_merges: int = 10) -> int:
+        """Apply connected small/thin merge suggestions until no safe suggestions remain."""
+
+        applied = 0
+        for _ in range(max(0, int(max_merges))):
+            suggestions = self.merge_suggestions()
+            if not suggestions:
+                break
+            suggestion = suggestions[0]
+            try:
+                self.merge_regions([suggestion['region_id'], suggestion['target_region_id']])
+            except ValueError:
+                break
+            applied += 1
+        return applied
+
     def regions(self) -> list[dict[str, Any]]:
         if self.design is None:
             return []
@@ -510,6 +613,21 @@ class MarquetryWorkspace:
         if self.design is None:
             return {'valid': False, 'reason': 'missing design'}
         return partition_validation(self.design_labels())
+
+    def boundary_summary(self) -> dict[str, Any]:
+        """Return shared-boundary metrics used by cleanup and merge prioritization."""
+
+        if self.design is None:
+            return {'boundary_count': 0, 'boundaries': []}
+        labels = self.design_labels()
+        boundaries = shared_boundaries(labels)
+        px_per_unit_x, px_per_unit_y = self.design.physical_size.pixels_per_unit(
+            (labels.shape[1], labels.shape[0])
+        )
+        avg_px_per_unit = (px_per_unit_x + px_per_unit_y) / 2
+        for boundary in boundaries:
+            boundary['edge_length_physical'] = boundary['edge_px'] / max(avg_px_per_unit, 1e-9)
+        return {'boundary_count': len(boundaries), 'boundaries': boundaries}
 
     def export_svg(self, output_path: str | Path) -> Path:
         if self.design is None:
@@ -528,7 +646,7 @@ class MarquetryWorkspace:
         return path
 
     def pack(self, output_dir: str | Path) -> dict[str, Any]:
-        """Write a traceable, simple packing manifest grouped by veneer."""
+        """Write a traceable physical packing manifest grouped by veneer."""
 
         if self.design is None:
             raise ValueError('create a design first')
@@ -543,22 +661,70 @@ class MarquetryWorkspace:
             pieces = by_veneer.get(veneer.veneer_id, [])
             if not pieces:
                 continue
-            sheet_count_used = 1
+            sheet_width = veneer.sheet_width or self.design.physical_size.width
+            sheet_height = veneer.sheet_height or self.design.physical_size.height
+            available_count = veneer.sheet_count or max(1, len(pieces))
+            packer = newPacker(rotation=True)
+            scale = 1000
+            for piece in pieces:
+                x0, y0, x1, y1 = piece['bbox']
+                width_px = max(1, x1 - x0)
+                height_px = max(1, y1 - y0)
+                px_per_unit_x, px_per_unit_y = self.design.physical_size.pixels_per_unit(
+                    (self.source.working_width, self.source.working_height)
+                )
+                width_units = width_px / max(px_per_unit_x, 1e-9)
+                height_units = height_px / max(px_per_unit_y, 1e-9)
+                packer.add_rect(
+                    max(1, int(round(width_units * scale))),
+                    max(1, int(round(height_units * scale))),
+                    piece['region_id'],
+                )
+            packer.add_bin(
+                max(1, int(round(sheet_width * scale))),
+                max(1, int(round(sheet_height * scale))),
+                count=available_count,
+            )
+            packer.pack()
+            placements_by_region = {}
+            for bin_index, x, y, width, height, region_id in packer.rect_list():
+                placements_by_region[int(region_id)] = {
+                    'sheet_index': int(bin_index),
+                    'x': x / scale,
+                    'y': y / scale,
+                    'width': width / scale,
+                    'height': height / scale,
+                }
+            placed_count = len(placements_by_region)
+            sheet_count_used = (
+                max(
+                    (placement['sheet_index'] for placement in placements_by_region.values()),
+                    default=-1,
+                )
+                + 1
+            )
+            packed_pieces = [
+                {
+                    **piece,
+                    'placement': placements_by_region.get(piece['region_id']),
+                    'packed': piece['region_id'] in placements_by_region,
+                }
+                for piece in pieces
+            ]
             sheets.append(
                 {
                     'veneer_id': veneer.veneer_id,
                     'piece_count': len(pieces),
-                    'sheet_width': veneer.sheet_width or self.design.physical_size.width,
-                    'sheet_height': veneer.sheet_height or self.design.physical_size.height,
+                    'placed_piece_count': placed_count,
+                    'sheet_width': sheet_width,
+                    'sheet_height': sheet_height,
                     'available_sheet_count': veneer.sheet_count,
                     'sheet_count_used': sheet_count_used,
-                    'over_stock_capacity': bool(
-                        veneer.sheet_count and sheet_count_used > veneer.sheet_count
-                    ),
-                    'pieces': pieces,
+                    'over_stock_capacity': placed_count < len(pieces),
+                    'pieces': packed_pieces,
                 }
             )
-        manifest = {'packing_backend': 'simple-grouped-manifest', 'sheets': sheets}
+        manifest = {'packing_backend': 'rectpack-bounding-box', 'sheets': sheets}
         (output_path / 'pack.json').write_text(
             json.dumps(manifest, indent=2, sort_keys=True) + '\n',
             encoding='utf-8',
@@ -575,6 +741,7 @@ class MarquetryWorkspace:
             'regions': self.regions(),
             'merge_suggestions': self.merge_suggestions(),
             'validation': self.validation(),
+            'boundaries': self.boundary_summary(),
         }
 
     def copy_to(self, output_dir: str | Path) -> None:

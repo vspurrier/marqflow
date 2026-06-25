@@ -54,8 +54,9 @@ def test_workspace_creates_valid_design_and_exports(tmp_path: Path) -> None:
     assert 'width="8in"' in svg
 
     manifest = workspace.pack(tmp_path / 'packed')
-    assert manifest['packing_backend'] == 'simple-grouped-manifest'
+    assert manifest['packing_backend'] == 'rectpack-bounding-box'
     assert manifest['sheets']
+    assert 'placement' in manifest['sheets'][0]['pieces'][0]
     assert (tmp_path / 'packed' / 'pack.json').exists()
     assert (tmp_path / 'packed' / 'design.svg').exists()
 
@@ -139,6 +140,40 @@ def test_merge_regions_preserves_partition_and_undo_restores_it(tmp_path: Path) 
         '3': 'walnut',
         '4': 'black-dyed',
     }
+
+
+def test_bulk_assignment_detail_zones_and_boundaries(tmp_path: Path) -> None:
+    image_path = tmp_path / 'source.png'
+    _fixture_image(image_path)
+    workspace = MarquetryWorkspace.create(image_path, tmp_path / 'workspace', max_edge=64)
+    candidate = workspace.generate_candidate(target_regions=4, compactness=8.0)
+    workspace.create_design(candidate.candidate_id, PhysicalSize(width=8, height=8, unit='in'))
+    workspace._write_design_labels(_four_region_labels())
+    workspace.save()
+
+    workspace.assign_veneer_many([1, 2], 'walnut')
+    summary = workspace.summary()
+    assert summary['design']['veneer_assignments']['1'] == 'walnut'
+    assert summary['design']['veneer_assignments']['2'] == 'walnut'
+    workspace.undo()
+    assert workspace.summary()['design']['veneer_assignments']['1'] != 'walnut'
+
+    zone = workspace.add_detail_zone('eyes', (2, 3, 20, 18), detail_multiplier=3)
+    assert zone.to_dict() == {
+        'zone_id': 1,
+        'name': 'eyes',
+        'bbox': [2, 3, 20, 18],
+        'detail_multiplier': 3.0,
+    }
+    reloaded = MarquetryWorkspace.load(tmp_path / 'workspace')
+    assert reloaded.summary()['design']['detail_zones'][0]['name'] == 'eyes'
+    assert reloaded.boundary_summary()['boundary_count'] == 4
+    assert all(
+        boundary['edge_length_physical'] > 0
+        for boundary in reloaded.boundary_summary()['boundaries']
+    )
+    reloaded.undo()
+    assert reloaded.summary()['design']['detail_zones'] == []
 
 
 def test_merge_requires_connected_regions(tmp_path: Path) -> None:
@@ -254,6 +289,31 @@ def test_api_merge_undo_and_hitmap(tmp_path: Path) -> None:
     undo_response = client.post('/api/design/undo')
     assert undo_response.status_code == 200
     assert undo_response.json()['validation']['region_count'] == 4
+
+    bulk_response = client.post(
+        '/api/design/veneer-bulk',
+        json={'region_ids': [1, 2], 'veneer_id': 'walnut'},
+    )
+    assert bulk_response.status_code == 200
+    assert bulk_response.json()['design']['veneer_assignments']['1'] == 'walnut'
+
+    zone_response = client.post(
+        '/api/design/detail-zone',
+        json={'name': 'eyes', 'bbox': [0, 0, 12, 12], 'detail_multiplier': 2.5},
+    )
+    assert zone_response.status_code == 200
+    assert zone_response.json()['design']['detail_zones'][0]['name'] == 'eyes'
+
+    boundaries_response = client.get('/api/design/boundaries')
+    assert boundaries_response.status_code == 200
+    assert boundaries_response.json()['boundary_count'] == 4
+
+    cleanup_response = client.post(
+        '/api/design/apply-merge-suggestions',
+        json={'max_merges': 2},
+    )
+    assert cleanup_response.status_code == 200
+    assert 'applied_merge_count' in cleanup_response.json()
 
 
 def test_api_size_and_veneer_inventory(tmp_path: Path) -> None:

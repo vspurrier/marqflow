@@ -49,6 +49,11 @@ class VeneerRequest(BaseModel):
     veneer_id: str
 
 
+class BulkVeneerRequest(BaseModel):
+    region_ids: list[int] = Field(min_length=1)
+    veneer_id: str
+
+
 class VeneerModel(BaseModel):
     veneer_id: str = Field(min_length=1)
     name: str = Field(min_length=1)
@@ -74,6 +79,16 @@ class VeneerModel(BaseModel):
 
 class MergeRequest(BaseModel):
     region_ids: list[int] = Field(min_length=2)
+
+
+class ApplyMergeSuggestionsRequest(BaseModel):
+    max_merges: int = Field(default=10, ge=1, le=200)
+
+
+class DetailZoneRequest(BaseModel):
+    name: str = 'Focus zone'
+    bbox: tuple[int, int, int, int]
+    detail_multiplier: float = Field(default=2.0, ge=1.0)
 
 
 class PackRequest(BaseModel):
@@ -203,6 +218,15 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return JSONResponse(ws.summary())
 
+    @app.post('/api/design/veneer-bulk')
+    def assign_veneer_many(request: BulkVeneerRequest) -> JSONResponse:
+        ws = _load_workspace(workspace_path)
+        try:
+            ws.assign_veneer_many(request.region_ids, request.veneer_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return JSONResponse(ws.summary())
+
     @app.post('/api/design/merge')
     def merge_regions(request: MergeRequest) -> JSONResponse:
         ws = _load_workspace(workspace_path)
@@ -211,6 +235,14 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return JSONResponse(ws.summary())
+
+    @app.post('/api/design/apply-merge-suggestions')
+    def apply_merge_suggestions(request: ApplyMergeSuggestionsRequest) -> JSONResponse:
+        ws = _load_workspace(workspace_path)
+        applied = ws.apply_merge_suggestions(max_merges=request.max_merges)
+        payload = ws.summary()
+        payload['applied_merge_count'] = applied
+        return JSONResponse(payload)
 
     @app.post('/api/design/undo')
     def undo() -> JSONResponse:
@@ -232,6 +264,24 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
                 'labels': labels.astype(int).tolist(),
             }
         )
+
+    @app.post('/api/design/detail-zone')
+    def add_detail_zone(request: DetailZoneRequest) -> JSONResponse:
+        ws = _load_workspace(workspace_path)
+        try:
+            ws.add_detail_zone(
+                name=request.name,
+                bbox=request.bbox,
+                detail_multiplier=request.detail_multiplier,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return JSONResponse(ws.summary())
+
+    @app.get('/api/design/boundaries')
+    def design_boundaries() -> JSONResponse:
+        ws = _load_workspace(workspace_path)
+        return JSONResponse(ws.boundary_summary())
 
     @app.post('/api/design/veneers')
     def replace_veneers(veneers: list[VeneerModel]) -> JSONResponse:

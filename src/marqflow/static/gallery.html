@@ -48,10 +48,19 @@
         <pre id="summary">No workspace.</pre>
       </article>
       <article class="card">
-        <h2>3. Veneer assignment</h2>
+        <h2>3. Final design selection</h2>
         <div class="controls">
+          <label>Selected veneer <select id="selected-veneer"></select></label>
+          <button id="assign-selected" type="button">Assign selected</button>
+          <button id="merge-selected" type="button">Merge selected</button>
+          <button id="apply-suggestions" type="button">Auto-merge small pieces</button>
+          <button id="clear-selection" type="button">Clear selection</button>
           <button id="undo" type="button">Undo last edit</button>
         </div>
+        <div class="viewer">
+          <canvas id="design-canvas" width="1" height="1"></canvas>
+        </div>
+        <p id="selection-status" class="selection-status">No selected regions.</p>
         <div id="merge-suggestions" class="suggestions"></div>
         <div id="regions" class="regions"></div>
       </article>

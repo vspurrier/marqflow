@@ -112,6 +112,30 @@ class Candidate:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class DetailZone:
+    """A user-selected area where generated candidates should preserve more detail."""
+
+    zone_id: int
+    name: str
+    bbox: tuple[int, int, int, int]
+    detail_multiplier: float = 2.0
+
+    def to_dict(self) -> dict[str, Any]:
+        payload = asdict(self)
+        payload['bbox'] = list(self.bbox)
+        return payload
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> DetailZone:
+        return cls(
+            zone_id=int(data['zone_id']),
+            name=str(data.get('name') or f'Zone {data["zone_id"]}'),
+            bbox=tuple(int(value) for value in data['bbox']),
+            detail_multiplier=max(1.0, float(data.get('detail_multiplier', 2.0))),
+        )
+
+
 @dataclass(slots=True)
 class Region:
     """A single physical cut piece in the current design partition."""
@@ -163,6 +187,7 @@ class MarquetryDesign:
     veneers: list[Veneer]
     veneer_assignments: dict[int, str] = field(default_factory=dict)
     locked_region_ids: set[int] = field(default_factory=set)
+    detail_zones: list[DetailZone] = field(default_factory=list)
     edit_history: list[EditOperation] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -176,6 +201,7 @@ class MarquetryDesign:
                 for region_id, veneer_id in sorted(self.veneer_assignments.items())
             },
             'locked_region_ids': sorted(self.locked_region_ids),
+            'detail_zones': [zone.to_dict() for zone in self.detail_zones],
             'edit_history': [edit.to_dict() for edit in self.edit_history],
         }
 
@@ -191,6 +217,9 @@ class MarquetryDesign:
                 for region_id, veneer_id in data.get('veneer_assignments', {}).items()
             },
             locked_region_ids={int(region_id) for region_id in data.get('locked_region_ids', [])},
+            detail_zones=[
+                DetailZone.from_dict(item) for item in data.get('detail_zones', [])
+            ],
             edit_history=[EditOperation.from_dict(item) for item in data.get('edit_history', [])],
         )
 

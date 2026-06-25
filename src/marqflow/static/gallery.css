@@ -77,6 +77,22 @@ pre {
   margin: 0;
   overflow: auto;
 }
+.viewer {
+  background: rgba(36, 24, 17, 0.08);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  overflow: hidden;
+}
+#design-canvas {
+  cursor: crosshair;
+  display: block;
+  height: auto;
+  width: 100%;
+}
+.selection-status {
+  color: var(--muted);
+  margin: 0;
+}
 .regions,
 .candidates {
   display: grid;

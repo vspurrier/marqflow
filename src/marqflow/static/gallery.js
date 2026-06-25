@@ -2,6 +2,15 @@
 
 /** @type {WorkspaceSummary | null} */
 let workspace = null;
+/** @type {DesignHitmap | null} */
+let hitmap = null;
+/** @type {Set<number>} */
+let selectedRegionIds = new Set();
+let sourceImage = new Image();
+/** @type {{x: number, y: number} | null} */
+let dragStart = null;
+/** @type {{x: number, y: number} | null} */
+let dragCurrent = null;
 
 const el = /** @type {Record<string, any>} */ ({
   imageInput: document.getElementById('image-input'),
@@ -24,6 +33,13 @@ const el = /** @type {Record<string, any>} */ ({
   updateSize: document.getElementById('update-size'),
   mergeSuggestions: document.getElementById('merge-suggestions'),
   regions: document.getElementById('regions'),
+  selectedVeneer: document.getElementById('selected-veneer'),
+  assignSelected: document.getElementById('assign-selected'),
+  mergeSelected: document.getElementById('merge-selected'),
+  applySuggestions: document.getElementById('apply-suggestions'),
+  clearSelection: document.getElementById('clear-selection'),
+  designCanvas: document.getElementById('design-canvas'),
+  selectionStatus: document.getElementById('selection-status'),
   undo: document.getElementById('undo'),
   viewSvg: document.getElementById('view-svg'),
   pack: document.getElementById('pack'),
@@ -47,7 +63,25 @@ async function refresh() {
     return;
   }
   workspace = await response.json();
+  await loadHitmap();
   render();
+}
+
+async function loadHitmap() {
+  if (!workspace?.design) {
+    hitmap = null;
+    selectedRegionIds.clear();
+    return;
+  }
+  const response = await fetch('/api/design/hitmap');
+  if (!response.ok) {
+    hitmap = null;
+    return;
+  }
+  hitmap = await response.json();
+  sourceImage = new Image();
+  sourceImage.onload = () => drawDesign();
+  sourceImage.src = '/api/workspace-file/source.png';
 }
 
 function render() {
@@ -56,6 +90,9 @@ function render() {
     el.candidates.textContent = '';
     el.regions.textContent = '';
     el.mergeSuggestions.textContent = '';
+    hitmap = null;
+    selectedRegionIds.clear();
+    drawDesign();
     return;
   }
   el.summary.textContent = JSON.stringify(
@@ -73,8 +110,11 @@ function render() {
     el.physicalHeight.value = workspace.design.physical_size.height;
     el.physicalUnit.value = workspace.design.physical_size.unit;
   }
+  renderSelectedVeneerOptions();
   renderCandidates();
   renderMergeSuggestions();
+  drawDesign();
+  updateSelectionStatus();
   el.regions.innerHTML = '';
   for (const region of workspace.regions) {
     const item = document.createElement('article');
@@ -100,6 +140,101 @@ function render() {
       await assignVeneer(Number(select.dataset.regionId), select.value);
     });
     el.regions.appendChild(item);
+  }
+}
+
+function renderSelectedVeneerOptions() {
+  const veneers = workspace?.design?.veneers || [];
+  el.selectedVeneer.innerHTML = veneers
+    .map((veneer) => `<option value="${veneer.veneer_id}">${veneer.name}</option>`)
+    .join('');
+}
+
+function updateSelectionStatus() {
+  const ids = [...selectedRegionIds].sort((a, b) => a - b);
+  el.selectionStatus.textContent = ids.length
+    ? `Selected ${ids.length} region(s): ${ids.join(', ')}`
+    : 'No selected regions.';
+}
+
+function regionColor(regionId) {
+  const region = workspace?.regions.find((item) => item.region_id === regionId);
+  return region?.color_rgb || [180, 180, 180];
+}
+
+function canvasPoint(event) {
+  const canvas = /** @type {HTMLCanvasElement} */ (el.designCanvas);
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: Math.floor(((event.clientX - rect.left) / rect.width) * canvas.width),
+    y: Math.floor(((event.clientY - rect.top) / rect.height) * canvas.height),
+  };
+}
+
+function labelAt(point) {
+  if (!hitmap) return 0;
+  const x = Math.max(0, Math.min(hitmap.width - 1, point.x));
+  const y = Math.max(0, Math.min(hitmap.height - 1, point.y));
+  return Number(hitmap.labels[y]?.[x] || 0);
+}
+
+function selectRect(start, end, additive) {
+  if (!hitmap) return;
+  const minX = Math.max(0, Math.min(start.x, end.x));
+  const maxX = Math.min(hitmap.width - 1, Math.max(start.x, end.x));
+  const minY = Math.max(0, Math.min(start.y, end.y));
+  const maxY = Math.min(hitmap.height - 1, Math.max(start.y, end.y));
+  if (!additive) selectedRegionIds.clear();
+  for (let y = minY; y <= maxY; y += 1) {
+    for (let x = minX; x <= maxX; x += 1) {
+      const regionId = Number(hitmap.labels[y]?.[x] || 0);
+      if (regionId > 0) selectedRegionIds.add(regionId);
+    }
+  }
+  updateSelectionStatus();
+  drawDesign();
+}
+
+function drawDesign() {
+  const canvas = /** @type {HTMLCanvasElement} */ (el.designCanvas);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const width = hitmap?.width || 1;
+  const height = hitmap?.height || 1;
+  canvas.width = width;
+  canvas.height = height;
+  ctx.clearRect(0, 0, width, height);
+  if (!workspace || !hitmap) return;
+  if (sourceImage.complete && sourceImage.naturalWidth) {
+    ctx.drawImage(sourceImage, 0, 0, width, height);
+  }
+
+  const imageData = ctx.getImageData(0, 0, width, height);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const regionId = Number(hitmap.labels[y]?.[x] || 0);
+      if (!selectedRegionIds.has(regionId)) continue;
+      const offset = (y * width + x) * 4;
+      const color = regionColor(regionId);
+      imageData.data[offset] = Math.round(imageData.data[offset] * 0.45 + color[0] * 0.55);
+      imageData.data[offset + 1] = Math.round(imageData.data[offset + 1] * 0.45 + color[1] * 0.55);
+      imageData.data[offset + 2] = Math.round(imageData.data[offset + 2] * 0.45 + color[2] * 0.55);
+      imageData.data[offset + 3] = 255;
+    }
+  }
+  ctx.putImageData(imageData, 0, 0);
+
+  if (dragStart && dragCurrent) {
+    ctx.strokeStyle = '#f4f0dc';
+    ctx.lineWidth = Math.max(1, width / 300);
+    ctx.setLineDash([6, 4]);
+    ctx.strokeRect(
+      dragStart.x,
+      dragStart.y,
+      dragCurrent.x - dragStart.x,
+      dragCurrent.y - dragStart.y,
+    );
+    ctx.setLineDash([]);
   }
 }
 
@@ -188,6 +323,8 @@ async function openImage() {
     return;
   }
   workspace = await response.json();
+  selectedRegionIds.clear();
+  await loadHitmap();
   setStatus('Workspace ready.');
   render();
 }
@@ -230,6 +367,8 @@ async function createDesign(candidateId) {
     return;
   }
   workspace = await response.json();
+  selectedRegionIds.clear();
+  await loadHitmap();
   setStatus(`Design seeded from ${candidateId}.`);
   render();
 }
@@ -245,7 +384,31 @@ async function assignVeneer(regionId, veneerId) {
     return;
   }
   workspace = await response.json();
+  await loadHitmap();
   setStatus(`Assigned region ${regionId}.`);
+  render();
+}
+
+async function assignSelected() {
+  if (!selectedRegionIds.size) {
+    setStatus('Select at least one region first.', true);
+    return;
+  }
+  const response = await fetch('/api/design/veneer-bulk', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      region_ids: [...selectedRegionIds],
+      veneer_id: el.selectedVeneer.value,
+    }),
+  });
+  if (!response.ok) {
+    setStatus(await response.text(), true);
+    return;
+  }
+  workspace = await response.json();
+  await loadHitmap();
+  setStatus(`Assigned ${selectedRegionIds.size} selected region(s).`);
   render();
 }
 
@@ -260,7 +423,34 @@ async function mergeRegions(regionIds) {
     return;
   }
   workspace = await response.json();
+  selectedRegionIds.clear();
+  await loadHitmap();
   setStatus(`Merged ${regionIds.join(', ')}.`);
+  render();
+}
+
+async function mergeSelected() {
+  if (selectedRegionIds.size < 2) {
+    setStatus('Select at least two connected regions to merge.', true);
+    return;
+  }
+  await mergeRegions([...selectedRegionIds]);
+}
+
+async function applySuggestions() {
+  const response = await fetch('/api/design/apply-merge-suggestions', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({max_merges: 10}),
+  });
+  if (!response.ok) {
+    setStatus(await response.text(), true);
+    return;
+  }
+  workspace = await response.json();
+  selectedRegionIds.clear();
+  await loadHitmap();
+  setStatus(`Applied ${workspace.applied_merge_count || 0} merge suggestion(s).`);
   render();
 }
 
@@ -271,6 +461,8 @@ async function undo() {
     return;
   }
   workspace = await response.json();
+  selectedRegionIds.clear();
+  await loadHitmap();
   setStatus('Undid last edit.');
   render();
 }
@@ -292,6 +484,48 @@ async function pack() {
 el.openImage.addEventListener('click', openImage);
 el.candidateGrid.addEventListener('click', generateCandidateGrid);
 el.updateSize.addEventListener('click', updateSize);
+el.assignSelected.addEventListener('click', assignSelected);
+el.mergeSelected.addEventListener('click', mergeSelected);
+el.applySuggestions.addEventListener('click', applySuggestions);
+el.clearSelection.addEventListener('click', () => {
+  selectedRegionIds.clear();
+  updateSelectionStatus();
+  drawDesign();
+});
+el.designCanvas.addEventListener('pointerdown', (event) => {
+  dragStart = canvasPoint(event);
+  dragCurrent = dragStart;
+  el.designCanvas.setPointerCapture(event.pointerId);
+});
+el.designCanvas.addEventListener('pointermove', (event) => {
+  if (!dragStart) return;
+  dragCurrent = canvasPoint(event);
+  drawDesign();
+});
+el.designCanvas.addEventListener('pointerup', (event) => {
+  if (!dragStart) return;
+  const end = canvasPoint(event);
+  const distance = Math.hypot(end.x - dragStart.x, end.y - dragStart.y);
+  if (distance < 4) {
+    const regionId = labelAt(end);
+    if (!event.shiftKey) selectedRegionIds.clear();
+    if (regionId > 0) {
+      if (selectedRegionIds.has(regionId) && event.shiftKey) {
+        selectedRegionIds.delete(regionId);
+      } else {
+        selectedRegionIds.add(regionId);
+      }
+    }
+    updateSelectionStatus();
+    dragStart = null;
+    dragCurrent = null;
+    drawDesign();
+    return;
+  }
+  selectRect(dragStart, end, event.shiftKey);
+  dragStart = null;
+  dragCurrent = null;
+});
 el.undo.addEventListener('click', undo);
 el.viewSvg.addEventListener('click', () => window.open('/api/design.svg', '_blank'));
 el.pack.addEventListener('click', pack);

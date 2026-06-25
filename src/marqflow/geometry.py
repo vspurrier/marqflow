@@ -89,6 +89,25 @@ def region_neighbors(labels: np.ndarray) -> dict[int, set[int]]:
     return neighbors
 
 
+def shared_boundaries(labels: np.ndarray) -> list[dict[str, Any]]:
+    """Return raster shared-boundary metrics for each adjacent region pair."""
+
+    boundaries: dict[tuple[int, int], int] = defaultdict(int)
+    right = labels[:, 1:] != labels[:, :-1]
+    for y, x in zip(*np.nonzero(right), strict=False):
+        pair = tuple(sorted((int(labels[y, x]), int(labels[y, x + 1]))))
+        boundaries[pair] += 1
+    down = labels[1:, :] != labels[:-1, :]
+    for y, x in zip(*np.nonzero(down), strict=False):
+        pair = tuple(sorted((int(labels[y, x]), int(labels[y + 1, x]))))
+        boundaries[pair] += 1
+    return [
+        {'region_a': region_a, 'region_b': region_b, 'edge_px': edge_px}
+        for (region_a, region_b), edge_px in sorted(boundaries.items())
+        if region_a > 0 and region_b > 0
+    ]
+
+
 def contour_for_mask(mask: np.ndarray, tolerance: float = 1.0) -> tuple[tuple[float, float], ...]:
     """Extract one closed contour for a mask."""
 
