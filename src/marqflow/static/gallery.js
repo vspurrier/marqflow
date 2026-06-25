@@ -7,10 +7,20 @@ const el = /** @type {Record<string, any>} */ ({
   imageInput: document.getElementById('image-input'),
   targetRegions: document.getElementById('target-regions'),
   compactness: document.getElementById('compactness'),
+  gridRows: document.getElementById('grid-rows'),
+  gridCols: document.getElementById('grid-cols'),
+  minRegions: document.getElementById('min-regions'),
+  maxRegions: document.getElementById('max-regions'),
+  minCompactness: document.getElementById('min-compactness'),
+  maxCompactness: document.getElementById('max-compactness'),
   openImage: document.getElementById('open-image'),
+  candidateGrid: document.getElementById('candidate-grid'),
+  candidates: document.getElementById('candidates'),
   status: document.getElementById('status'),
   summary: document.getElementById('summary'),
+  mergeSuggestions: document.getElementById('merge-suggestions'),
   regions: document.getElementById('regions'),
+  undo: document.getElementById('undo'),
   viewSvg: document.getElementById('view-svg'),
   pack: document.getElementById('pack'),
   packOutput: document.getElementById('pack-output'),
@@ -39,7 +49,9 @@ async function refresh() {
 function render() {
   if (!workspace) {
     el.summary.textContent = 'No workspace.';
+    el.candidates.textContent = '';
     el.regions.textContent = '';
+    el.mergeSuggestions.textContent = '';
     return;
   }
   el.summary.textContent = JSON.stringify(
@@ -52,6 +64,8 @@ function render() {
     null,
     2,
   );
+  renderCandidates();
+  renderMergeSuggestions();
   el.regions.innerHTML = '';
   for (const region of workspace.regions) {
     const item = document.createElement('article');
@@ -80,6 +94,52 @@ function render() {
   }
 }
 
+function renderCandidates() {
+  el.candidates.innerHTML = '';
+  if (!workspace?.candidates.length) {
+    el.candidates.textContent = 'No candidate partitions yet.';
+    return;
+  }
+  for (const candidate of workspace.candidates) {
+    const item = document.createElement('article');
+    item.className = 'candidate';
+    item.innerHTML = `
+      <img alt="${candidate.candidate_id} preview" src="/api/workspace-file/${candidate.preview_path}" />
+      <strong>${candidate.candidate_id}</strong>
+      <small>${candidate.region_count} regions, compactness ${candidate.compactness}</small>
+      <button type="button">Use for design</button>
+    `;
+    item.querySelector('button')?.addEventListener('click', async () => {
+      await createDesign(candidate.candidate_id);
+    });
+    el.candidates.appendChild(item);
+  }
+}
+
+function renderMergeSuggestions() {
+  el.mergeSuggestions.innerHTML = '';
+  const suggestions = workspace?.merge_suggestions || [];
+  if (!suggestions.length) {
+    el.mergeSuggestions.textContent = 'No small/thin merge suggestions.';
+    return;
+  }
+  for (const suggestion of suggestions.slice(0, 8)) {
+    const item = document.createElement('div');
+    item.className = 'suggestion';
+    item.innerHTML = `
+      <span>
+        Merge ${suggestion.region_id} into ${suggestion.target_region_id}
+        <small>${suggestion.reason}${suggestion.same_veneer ? ', same veneer' : ''}</small>
+      </span>
+      <button type="button">Merge</button>
+    `;
+    item.querySelector('button')?.addEventListener('click', async () => {
+      await mergeRegions([suggestion.region_id, suggestion.target_region_id]);
+    });
+    el.mergeSuggestions.appendChild(item);
+  }
+}
+
 async function openImage() {
   if (!el.imageInput.files?.length) {
     setStatus('Choose an image first.', true);
@@ -100,6 +160,48 @@ async function openImage() {
   render();
 }
 
+async function generateCandidateGrid() {
+  if (!workspace) {
+    setStatus('Open an image before generating a grid.', true);
+    return;
+  }
+  setStatus('Generating candidate grid...');
+  const response = await fetch('/api/candidate-grid', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      rows: Number(el.gridRows.value || 4),
+      cols: Number(el.gridCols.value || 4),
+      min_regions: Number(el.minRegions.value || 20),
+      max_regions: Number(el.maxRegions.value || 140),
+      min_compactness: Number(el.minCompactness.value || 4),
+      max_compactness: Number(el.maxCompactness.value || 28),
+    }),
+  });
+  if (!response.ok) {
+    setStatus(await response.text(), true);
+    return;
+  }
+  workspace = await response.json();
+  setStatus('Candidate grid ready.');
+  render();
+}
+
+async function createDesign(candidateId) {
+  const response = await fetch('/api/design', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({candidate_id: candidateId, width: 8, height: 10, unit: 'in'}),
+  });
+  if (!response.ok) {
+    setStatus(await response.text(), true);
+    return;
+  }
+  workspace = await response.json();
+  setStatus(`Design seeded from ${candidateId}.`);
+  render();
+}
+
 async function assignVeneer(regionId, veneerId) {
   const response = await fetch('/api/design/veneer', {
     method: 'POST',
@@ -112,6 +214,32 @@ async function assignVeneer(regionId, veneerId) {
   }
   workspace = await response.json();
   setStatus(`Assigned region ${regionId}.`);
+  render();
+}
+
+async function mergeRegions(regionIds) {
+  const response = await fetch('/api/design/merge', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({region_ids: regionIds}),
+  });
+  if (!response.ok) {
+    setStatus(await response.text(), true);
+    return;
+  }
+  workspace = await response.json();
+  setStatus(`Merged ${regionIds.join(', ')}.`);
+  render();
+}
+
+async function undo() {
+  const response = await fetch('/api/design/undo', {method: 'POST'});
+  if (!response.ok) {
+    setStatus(await response.text(), true);
+    return;
+  }
+  workspace = await response.json();
+  setStatus('Undid last edit.');
   render();
 }
 
@@ -130,6 +258,8 @@ async function pack() {
 }
 
 el.openImage.addEventListener('click', openImage);
+el.candidateGrid.addEventListener('click', generateCandidateGrid);
+el.undo.addEventListener('click', undo);
 el.viewSvg.addEventListener('click', () => window.open('/api/design.svg', '_blank'));
 el.pack.addEventListener('click', pack);
 

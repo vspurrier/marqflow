@@ -34,11 +34,16 @@ uv run pytest -q
 
 - Image normalization with EXIF orientation and bounded working size.
 - One SLIC-based candidate generator.
+- Candidate-grid generation that stays separate from final design state.
 - Durable design seeded from a candidate label partition.
 - Partition validation for unassigned pixels and disconnected regions.
 - Region metrics with physical area, bbox, contour, neighbors, and warnings.
 - Default veneer palette and nearest-color veneer assignment.
 - Manual veneer override as a persisted edit operation.
+- Connected-region merge as a persisted edit operation.
+- Undo for veneer assignment and merge operations.
+- Merge suggestions for small/thin regions, preferring same-veneer neighbors.
+- Final label hitmap API for future canvas/SVG selection.
 - Veneer-grouped SVG export in physical units.
 - Simple veneer-grouped pack manifest.
 - Thin browser UI over the new API.
@@ -51,19 +56,19 @@ uv run pytest -q
    core invariant is enforced at the raster level, but vector smoothing/editing
    still needs a planar graph or shared-boundary model before advanced cleanup.
 
-2. Real cleanup tools.
+2. Real cleanup tools beyond merge.
 
-   The rewrite has warnings only. It still needs merge, split, smooth,
-   simplify, sliver repair, point editing, lock handling, and undo.
+   Merge and undo now exist. Split, smooth, simplify, sliver repair, point
+   editing, lock/unlock UI, and shared-boundary-safe cleanup are still open.
 
 3. Subject/detail logic.
 
    There is no subject mask or local detail budget yet.
 
-4. Candidate search grid.
+4. Browser selection tooling.
 
-   Only one generated candidate exists. The grid/refinement UX should return
-   later once the design model stays clean.
+   The hitmap API exists, but the UI still lacks click/drag selection over a
+   rendered final design. Region operations are currently list/button driven.
 
 5. Material planning.
 
@@ -84,6 +89,12 @@ uv run pytest -q
 
    Current tests are API/core level. Add browser tests after the new UI
    stabilizes.
+
+9. File/workspace lifecycle.
+
+   Uploaded images create temporary workspaces when no directory is provided.
+   The rewrite still needs explicit workspace naming, reload/delete behavior,
+   and a clear default storage location for real projects.
 
 ## Engineering Direction
 

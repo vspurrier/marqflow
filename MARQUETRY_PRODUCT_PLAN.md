@@ -51,9 +51,14 @@ The final design must stay a complete, non-overlapping puzzle.
 Implemented now:
 
 - image upload/load
-- one candidate generator
+- one-off candidate generation
+- candidate grid generation as a source-stage search tool
 - durable design partition
 - veneer assignments
+- manual connected-region merge
+- undo for veneer assignment and region merge edits
+- same-veneer-preferred merge suggestions for small/thin regions
+- final label hitmap API for browser selection tooling
 - partition validation
 - physical-unit SVG export
 - simple pack manifest
@@ -61,14 +66,49 @@ Implemented now:
 
 ## Next Milestones
 
-1. Add region merge and undo in `MarquetryDesign`.
-2. Add candidate grid generation as a source stage, not as design state.
-3. Add final-region hitmap selection to the new browser UI.
-4. Add same-veneer merge suggestions for small/thin regions.
-5. Add subject/detail masks for eyes/nose or user-selected focus zones.
-6. Add shared-boundary geometry before advanced smoothing.
-7. Add a packing adapter for an actual irregular nesting backend.
-8. Convert browser JS to TypeScript modules once the API stabilizes.
+1. Add browser hitmap interaction.
+
+   The API exposes the final label map. The UI still needs click/drag region
+   selection on the final design instead of list-only controls.
+
+2. Add subject/detail masks for eyes/nose or user-selected focus zones.
+
+   The candidate generator is still global. Marquetry portraits need local
+   detail budgets so eyes, nose, mouth, and other focal areas can preserve more
+   structure than background or clothing.
+
+3. Add shared-boundary geometry before advanced smoothing.
+
+   The raster partition is valid, but independently extracted vector contours
+   are not yet a robust planar graph. Advanced smoothing, point editing, and
+   no-gap/no-overlap SVG cleanup should be built on shared edges.
+
+4. Add cleanup operations on top of shared boundaries.
+
+   Needed operations: simplify shared edges, smooth selected boundaries, repair
+   slivers, lock regions, split selected regions, and edit vertices.
+
+5. Add veneer inventory logic.
+
+   Veneer objects exist, but the workflow needs editable swatches, available
+   sheet dimensions, grain direction review, and warnings when assignments
+   exceed stock.
+
+6. Add a packing adapter for an actual irregular nesting backend.
+
+   Current packing writes a grouped manifest plus SVG. The adapter should take
+   validated physical paths by veneer and return sheet placements.
+
+7. Convert browser JS to TypeScript modules once the API stabilizes.
+
+   The current browser code uses `checkJs` and declarations. A module split
+   becomes worthwhile after the core workflow stops shifting.
+
+8. Add browser-level regression tests.
+
+   API/core tests cover the model. Browser tests should cover image open,
+   candidate-grid selection, veneer assignment, merge, undo, SVG preview, and
+   pack export once the UI surface is stable.
 
 ## Non-Goals For This Branch
 

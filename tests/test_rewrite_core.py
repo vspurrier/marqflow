@@ -20,6 +20,15 @@ def _fixture_image(path: Path) -> None:
     Image.fromarray(image, mode='RGB').save(path)
 
 
+def _four_region_labels() -> np.ndarray:
+    labels = np.zeros((48, 48), dtype=np.int32)
+    labels[:24, :24] = 1
+    labels[:24, 24:] = 2
+    labels[24:, :24] = 3
+    labels[24:, 24:] = 4
+    return labels
+
+
 def test_workspace_creates_valid_design_and_exports(tmp_path: Path) -> None:
     image_path = tmp_path / 'source.png'
     _fixture_image(image_path)
@@ -49,6 +58,66 @@ def test_workspace_creates_valid_design_and_exports(tmp_path: Path) -> None:
     assert manifest['sheets']
     assert (tmp_path / 'packed' / 'pack.json').exists()
     assert (tmp_path / 'packed' / 'design.svg').exists()
+
+
+def test_candidate_grid_is_source_stage_only(tmp_path: Path) -> None:
+    image_path = tmp_path / 'source.png'
+    _fixture_image(image_path)
+    workspace = MarquetryWorkspace.create(image_path, tmp_path / 'workspace', max_edge=64)
+    seed = workspace.generate_candidate(target_regions=4, compactness=8.0)
+    workspace.create_design(seed.candidate_id, PhysicalSize(width=8, height=8, unit='in'))
+    original_design_source = workspace.design.source_candidate_id
+
+    candidates = workspace.generate_candidate_grid(rows=2, cols=3, min_regions=6, max_regions=18)
+
+    assert len(candidates) == 6
+    assert workspace.design.source_candidate_id == original_design_source
+    assert len(workspace.candidates) == 7
+
+
+def test_merge_regions_preserves_partition_and_undo_restores_it(tmp_path: Path) -> None:
+    image_path = tmp_path / 'source.png'
+    _fixture_image(image_path)
+    workspace = MarquetryWorkspace.create(image_path, tmp_path / 'workspace', max_edge=64)
+    candidate = workspace.generate_candidate(target_regions=4, compactness=8.0)
+    workspace.create_design(candidate.candidate_id, PhysicalSize(width=8, height=8, unit='in'))
+    workspace._write_design_labels(_four_region_labels())
+    workspace.design.veneer_assignments = {1: 'maple', 2: 'maple', 3: 'walnut', 4: 'black-dyed'}
+    workspace.save()
+
+    workspace.merge_regions([1, 2])
+    merged_summary = workspace.summary()
+    assert merged_summary['validation']['valid'] is True
+    assert merged_summary['validation']['region_count'] == 3
+    assert len(merged_summary['design']['edit_history']) == 1
+    assert merged_summary['regions'][0]['veneer_id'] == 'maple'
+
+    workspace.undo()
+    restored_summary = workspace.summary()
+    assert restored_summary['validation']['valid'] is True
+    assert restored_summary['validation']['region_count'] == 4
+    assert restored_summary['design']['veneer_assignments'] == {
+        '1': 'maple',
+        '2': 'maple',
+        '3': 'walnut',
+        '4': 'black-dyed',
+    }
+
+
+def test_merge_requires_connected_regions(tmp_path: Path) -> None:
+    image_path = tmp_path / 'source.png'
+    _fixture_image(image_path)
+    workspace = MarquetryWorkspace.create(image_path, tmp_path / 'workspace', max_edge=64)
+    candidate = workspace.generate_candidate(target_regions=4, compactness=8.0)
+    workspace.create_design(candidate.candidate_id, PhysicalSize(width=8, height=8, unit='in'))
+    workspace._write_design_labels(_four_region_labels())
+
+    try:
+        workspace.merge_regions([1, 4])
+    except ValueError as exc:
+        assert 'connected' in str(exc)
+    else:
+        raise AssertionError('disconnected merge should fail')
 
 
 def test_stock_overage_is_reported(tmp_path: Path) -> None:
@@ -105,3 +174,46 @@ def test_api_vertical_slice(tmp_path: Path) -> None:
     pack_response = client.post('/api/pack', json={'output_dir': str(tmp_path / 'packed')})
     assert pack_response.status_code == 200
     assert pack_response.json()['sheets']
+
+    grid_response = client.post(
+        '/api/candidate-grid',
+        json={
+            'rows': 1,
+            'cols': 2,
+            'min_regions': 4,
+            'max_regions': 8,
+            'min_compactness': 4,
+            'max_compactness': 8,
+        },
+    )
+    assert grid_response.status_code == 200
+    assert len(grid_response.json()['candidates']) == 3
+
+    preview_response = client.get(
+        f"/api/workspace-file/{grid_response.json()['candidates'][0]['preview_path']}"
+    )
+    assert preview_response.status_code == 200
+
+
+def test_api_merge_undo_and_hitmap(tmp_path: Path) -> None:
+    image_path = tmp_path / 'source.png'
+    _fixture_image(image_path)
+    workspace = MarquetryWorkspace.create(image_path, tmp_path / 'workspace', max_edge=64)
+    candidate = workspace.generate_candidate(target_regions=4, compactness=8.0)
+    workspace.create_design(candidate.candidate_id, PhysicalSize(width=8, height=8, unit='in'))
+    workspace._write_design_labels(_four_region_labels())
+    workspace.save()
+    client = TestClient(create_app(tmp_path / 'workspace'))
+
+    hitmap_response = client.get('/api/design/hitmap')
+    assert hitmap_response.status_code == 200
+    assert hitmap_response.json()['width'] == 48
+    assert hitmap_response.json()['height'] == 48
+
+    merge_response = client.post('/api/design/merge', json={'region_ids': [1, 2]})
+    assert merge_response.status_code == 200
+    assert merge_response.json()['validation']['region_count'] == 3
+
+    undo_response = client.post('/api/design/undo')
+    assert undo_response.status_code == 200
+    assert undo_response.json()['validation']['region_count'] == 4

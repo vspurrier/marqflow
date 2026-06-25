@@ -77,14 +77,20 @@ pre {
   margin: 0;
   overflow: auto;
 }
-.regions {
+.regions,
+.candidates {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 10px;
   max-height: 460px;
   overflow: auto;
 }
-.region {
+.candidates {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  max-height: none;
+}
+.region,
+.candidate {
   border: 1px solid var(--line);
   border-radius: 16px;
   padding: 12px;
@@ -92,6 +98,26 @@ pre {
   gap: 8px;
   background: rgba(255, 255, 255, 0.55);
 }
+.candidate img {
+  border-radius: 12px;
+  display: block;
+  width: 100%;
+}
+.suggestions {
+  display: grid;
+  gap: 8px;
+}
+.suggestion {
+  align-items: center;
+  background: rgba(159, 84, 47, 0.08);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+.suggestion small { color: var(--muted); }
 .swatch {
   width: 18px;
   height: 18px;

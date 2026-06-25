@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -22,6 +22,15 @@ class CandidateRequest(BaseModel):
     compactness: float = 18.0
 
 
+class CandidateGridRequest(BaseModel):
+    rows: int = Field(default=4, ge=1, le=8)
+    cols: int = Field(default=4, ge=1, le=8)
+    min_regions: int = Field(default=20, ge=2)
+    max_regions: int = Field(default=140, ge=2)
+    min_compactness: float = Field(default=4.0, gt=0)
+    max_compactness: float = Field(default=28.0, gt=0)
+
+
 class DesignRequest(BaseModel):
     candidate_id: str
     width: float = Field(default=8.0, gt=0)
@@ -32,6 +41,10 @@ class DesignRequest(BaseModel):
 class VeneerRequest(BaseModel):
     region_id: int
     veneer_id: str
+
+
+class MergeRequest(BaseModel):
+    region_ids: list[int] = Field(min_length=2)
 
 
 class PackRequest(BaseModel):
@@ -64,6 +77,17 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
     @app.get('/api/workspace')
     def workspace() -> JSONResponse:
         return JSONResponse(_load_workspace(workspace_path).summary())
+
+    @app.get('/api/workspace-file/{relative_path:path}')
+    def workspace_file(relative_path: str) -> FileResponse:
+        ws = _load_workspace(workspace_path)
+        root = ws.workspace_dir.resolve()
+        path = (root / relative_path).resolve()
+        if root not in path.parents and path != root:
+            raise HTTPException(status_code=400, detail='path escapes workspace')
+        if not path.is_file():
+            raise HTTPException(status_code=404, detail='file not found')
+        return FileResponse(path)
 
     @app.post('/api/workspace/open-image')
     async def open_image(
@@ -101,6 +125,26 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
         )
         return JSONResponse(ws.summary())
 
+    @app.post('/api/candidate-grid')
+    def generate_candidate_grid(request: CandidateGridRequest) -> JSONResponse:
+        if request.max_regions < request.min_regions:
+            raise HTTPException(status_code=400, detail='max_regions must be >= min_regions')
+        if request.max_compactness < request.min_compactness:
+            raise HTTPException(
+                status_code=400,
+                detail='max_compactness must be >= min_compactness',
+            )
+        ws = _load_workspace(workspace_path)
+        ws.generate_candidate_grid(
+            rows=request.rows,
+            cols=request.cols,
+            min_regions=request.min_regions,
+            max_regions=request.max_regions,
+            min_compactness=request.min_compactness,
+            max_compactness=request.max_compactness,
+        )
+        return JSONResponse(ws.summary())
+
     @app.post('/api/design')
     def create_design(request: DesignRequest) -> JSONResponse:
         ws = _load_workspace(workspace_path)
@@ -118,6 +162,36 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return JSONResponse(ws.summary())
+
+    @app.post('/api/design/merge')
+    def merge_regions(request: MergeRequest) -> JSONResponse:
+        ws = _load_workspace(workspace_path)
+        try:
+            ws.merge_regions(request.region_ids)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return JSONResponse(ws.summary())
+
+    @app.post('/api/design/undo')
+    def undo() -> JSONResponse:
+        ws = _load_workspace(workspace_path)
+        try:
+            ws.undo()
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return JSONResponse(ws.summary())
+
+    @app.get('/api/design/hitmap')
+    def design_hitmap() -> JSONResponse:
+        ws = _load_workspace(workspace_path)
+        labels = ws.design_labels()
+        return JSONResponse(
+            {
+                'width': int(labels.shape[1]),
+                'height': int(labels.shape[0]),
+                'labels': labels.astype(int).tolist(),
+            }
+        )
 
     @app.post('/api/design/veneers')
     def replace_veneers(veneers: list[Veneer]) -> JSONResponse:

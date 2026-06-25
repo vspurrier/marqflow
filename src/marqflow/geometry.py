@@ -42,6 +42,34 @@ def partition_validation(labels: np.ndarray) -> dict[str, Any]:
     }
 
 
+def merge_labels(labels: np.ndarray, region_ids: set[int]) -> tuple[np.ndarray, dict[int, int]]:
+    """Merge selected labels and return normalized labels plus old-to-new id map."""
+
+    if len(region_ids) < 2:
+        raise ValueError('choose at least two regions to merge')
+    existing = {int(value) for value in np.unique(labels) if int(value) > 0}
+    missing = sorted(region_ids - existing)
+    if missing:
+        raise ValueError(f'unknown region ids: {missing}')
+
+    target_id = min(region_ids)
+    merged = labels.copy()
+    for region_id in region_ids:
+        merged[labels == region_id] = target_id
+
+    normalized = normalize_labels(merged)
+    id_map: dict[int, int] = {}
+    for old_id in existing:
+        old_mask = labels == old_id
+        if not np.any(old_mask):
+            continue
+        new_values = np.unique(normalized[old_mask])
+        if len(new_values) != 1:
+            raise ValueError(f'region {old_id} did not map to one merged label')
+        id_map[old_id] = int(new_values[0])
+    return normalized, id_map
+
+
 def region_neighbors(labels: np.ndarray) -> dict[int, set[int]]:
     """Find 4-connected region adjacency."""
 

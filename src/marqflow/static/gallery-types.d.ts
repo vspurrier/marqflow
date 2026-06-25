@@ -13,6 +13,22 @@ interface Region {
   warnings: string[];
 }
 
+interface MergeSuggestion {
+  region_id: number;
+  target_region_id: number;
+  reason: string;
+  same_veneer: boolean;
+  area_physical: number;
+}
+
+interface Candidate {
+  candidate_id: string;
+  preview_path: string;
+  target_regions: number;
+  compactness: number;
+  region_count: number;
+}
+
 interface WorkspaceSummary {
   source: {
     original_width: number;
@@ -20,8 +36,9 @@ interface WorkspaceSummary {
     working_width: number;
     working_height: number;
   };
-  candidates: Array<{candidate_id: string; region_count: number}>;
+  candidates: Candidate[];
   design: null | {veneers: Veneer[]};
   regions: Region[];
+  merge_suggestions: MergeSuggestion[];
   validation: {valid: boolean; region_count?: number; unassigned_px?: number};
 }

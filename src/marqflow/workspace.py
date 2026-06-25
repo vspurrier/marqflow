@@ -17,9 +17,11 @@ from skimage.segmentation import slic
 from .geometry import (
     build_regions,
     design_to_svg,
+    merge_labels,
     normalize_labels,
     partition_validation,
     preview_image,
+    region_neighbors,
 )
 from .models import (
     Candidate,
@@ -34,6 +36,7 @@ from .models import (
 MANIFEST = 'workspace.json'
 SOURCE_IMAGE = 'source.png'
 DESIGN_LABELS = 'design-labels.npy'
+HISTORY_DIR = 'history'
 
 
 def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
@@ -127,6 +130,22 @@ class MarquetryWorkspace:
             raise ValueError('create a design from a candidate first')
         return np.load(self.workspace_dir / self.design.labels_path)
 
+    def _write_design_labels(self, labels: np.ndarray) -> None:
+        if self.design is None:
+            raise ValueError('create a design first')
+        np.save(self.workspace_dir / self.design.labels_path, labels)
+
+    def _next_op_id(self) -> int:
+        if self.design is None:
+            raise ValueError('create a design first')
+        return len(self.design.edit_history) + 1
+
+    def _snapshot_labels(self, op_id: int) -> str:
+        path = Path(HISTORY_DIR) / f'op-{op_id}-labels.npy'
+        (self.workspace_dir / path).parent.mkdir(parents=True, exist_ok=True)
+        np.save(self.workspace_dir / path, self.design_labels())
+        return str(path)
+
     def generate_candidate(
         self,
         target_regions: int = 80,
@@ -163,6 +182,40 @@ class MarquetryWorkspace:
         self.save()
         return candidate
 
+    def generate_candidate_grid(
+        self,
+        rows: int = 4,
+        cols: int = 4,
+        min_regions: int = 20,
+        max_regions: int = 140,
+        min_compactness: float = 4.0,
+        max_compactness: float = 28.0,
+    ) -> list[Candidate]:
+        """Generate a coarse-to-detailed candidate grid without changing the design."""
+
+        rows = max(1, int(rows))
+        cols = max(1, int(cols))
+        region_values = np.linspace(
+            max(2, int(min_regions)),
+            max(2, int(max_regions)),
+            rows,
+        )
+        compactness_values = np.linspace(
+            max(0.1, float(min_compactness)),
+            max(0.1, float(max_compactness)),
+            cols,
+        )
+        candidates = []
+        for target_regions in region_values:
+            for compactness in compactness_values:
+                candidates.append(
+                    self.generate_candidate(
+                        target_regions=int(round(target_regions)),
+                        compactness=float(compactness),
+                    )
+                )
+        return candidates
+
     def create_design(
         self,
         candidate_id: str,
@@ -198,15 +251,186 @@ class MarquetryWorkspace:
             raise ValueError('create a design first')
         if veneer_id not in {veneer.veneer_id for veneer in self.design.veneers}:
             raise ValueError(f'unknown veneer: {veneer_id}')
+        if int(region_id) not in set(int(value) for value in np.unique(self.design_labels())):
+            raise ValueError(f'unknown region: {region_id}')
+        previous_veneer = self.design.veneer_assignments.get(int(region_id))
         self.design.veneer_assignments[int(region_id)] = veneer_id
         self.design.edit_history.append(
             EditOperation(
-                op_id=len(self.design.edit_history) + 1,
+                op_id=self._next_op_id(),
                 kind='assign_veneer',
-                payload={'region_id': int(region_id), 'veneer_id': veneer_id},
+                payload={
+                    'region_id': int(region_id),
+                    'veneer_id': veneer_id,
+                    'previous_veneer_id': previous_veneer,
+                },
             )
         )
         self.save()
+
+    def _selected_regions_are_connected(
+        self,
+        selected_region_ids: set[int],
+        neighbors: dict[int, set[int]],
+    ) -> bool:
+        start = next(iter(selected_region_ids))
+        seen = {start}
+        stack = [start]
+        while stack:
+            current = stack.pop()
+            for neighbor in neighbors.get(current, set()):
+                if neighbor in selected_region_ids and neighbor not in seen:
+                    seen.add(neighbor)
+                    stack.append(neighbor)
+        return seen == selected_region_ids
+
+    def _remap_veneer_assignments(
+        self,
+        id_map: dict[int, int],
+        selected_region_ids: set[int],
+        labels_before: np.ndarray,
+    ) -> dict[int, str]:
+        if self.design is None:
+            raise ValueError('create a design first')
+        remapped: dict[int, str] = {}
+        selected_areas = {
+            region_id: int(np.count_nonzero(labels_before == region_id))
+            for region_id in selected_region_ids
+        }
+        selected_with_veneers = [
+            (selected_areas[region_id], self.design.veneer_assignments[region_id])
+            for region_id in selected_region_ids
+            if region_id in self.design.veneer_assignments
+        ]
+        merged_veneer = (
+            max(selected_with_veneers, key=lambda item: item[0])[1]
+            if selected_with_veneers
+            else None
+        )
+        merged_id = id_map[min(selected_region_ids)]
+
+        for old_id, new_id in id_map.items():
+            if old_id in selected_region_ids:
+                continue
+            veneer_id = self.design.veneer_assignments.get(old_id)
+            if veneer_id is not None:
+                remapped[new_id] = veneer_id
+        if merged_veneer is not None:
+            remapped[merged_id] = merged_veneer
+        return remapped
+
+    def merge_regions(self, region_ids: list[int] | set[int]) -> None:
+        """Merge connected regions while preserving the full raster partition."""
+
+        if self.design is None:
+            raise ValueError('create a design first')
+        selected_region_ids = {int(region_id) for region_id in region_ids}
+        if len(selected_region_ids) < 2:
+            raise ValueError('choose at least two regions to merge')
+        locked = selected_region_ids & self.design.locked_region_ids
+        if locked:
+            raise ValueError(f'locked regions cannot be merged: {sorted(locked)}')
+
+        labels_before = self.design_labels()
+        neighbors = region_neighbors(labels_before)
+        if not self._selected_regions_are_connected(selected_region_ids, neighbors):
+            raise ValueError('merge selection must be connected')
+
+        op_id = self._next_op_id()
+        previous_labels_path = self._snapshot_labels(op_id)
+        previous_assignments = dict(self.design.veneer_assignments)
+        labels_after, id_map = merge_labels(labels_before, selected_region_ids)
+        validation = partition_validation(labels_after)
+        if not validation['valid']:
+            raise ValueError(f'merge would create invalid partition: {validation}')
+
+        self._write_design_labels(labels_after)
+        self.design.veneer_assignments = self._remap_veneer_assignments(
+            id_map,
+            selected_region_ids,
+            labels_before,
+        )
+        self.design.locked_region_ids = {
+            id_map[region_id]
+            for region_id in self.design.locked_region_ids
+            if region_id in id_map
+        }
+        self.design.edit_history.append(
+            EditOperation(
+                op_id=op_id,
+                kind='merge_regions',
+                payload={
+                    'region_ids': sorted(selected_region_ids),
+                    'previous_labels_path': previous_labels_path,
+                    'previous_veneer_assignments': {
+                        str(region_id): veneer_id
+                        for region_id, veneer_id in sorted(previous_assignments.items())
+                    },
+                },
+            )
+        )
+        self.save()
+
+    def undo(self) -> None:
+        """Undo the most recent persisted design edit."""
+
+        if self.design is None:
+            raise ValueError('create a design first')
+        if not self.design.edit_history:
+            raise ValueError('nothing to undo')
+        edit = self.design.edit_history.pop()
+        if edit.kind == 'assign_veneer':
+            region_id = int(edit.payload['region_id'])
+            previous_veneer = edit.payload.get('previous_veneer_id')
+            if previous_veneer is None:
+                self.design.veneer_assignments.pop(region_id, None)
+            else:
+                self.design.veneer_assignments[region_id] = str(previous_veneer)
+        elif edit.kind == 'merge_regions':
+            labels_path = self.workspace_dir / str(edit.payload['previous_labels_path'])
+            self._write_design_labels(np.load(labels_path))
+            self.design.veneer_assignments = {
+                int(region_id): str(veneer_id)
+                for region_id, veneer_id in edit.payload[
+                    'previous_veneer_assignments'
+                ].items()
+            }
+        else:
+            raise ValueError(f'cannot undo edit kind: {edit.kind}')
+        self.save()
+
+    def merge_suggestions(self) -> list[dict[str, Any]]:
+        """Suggest neighbor merges for regions that are physically hard to cut."""
+
+        if self.design is None:
+            return []
+        regions = build_regions(self.source_array(), self.design_labels(), self.design)
+        by_id = {region.region_id: region for region in regions}
+        suggestions = []
+        for region in regions:
+            if region.locked or not region.warnings:
+                continue
+            neighbor_regions = [
+                by_id[neighbor_id]
+                for neighbor_id in region.neighbors
+                if neighbor_id in by_id and not by_id[neighbor_id].locked
+            ]
+            if not neighbor_regions:
+                continue
+            same_veneer = [
+                neighbor for neighbor in neighbor_regions if neighbor.veneer_id == region.veneer_id
+            ]
+            target = max(same_veneer or neighbor_regions, key=lambda item: item.area_px)
+            suggestions.append(
+                {
+                    'region_id': region.region_id,
+                    'target_region_id': target.region_id,
+                    'reason': ', '.join(region.warnings),
+                    'same_veneer': target.veneer_id == region.veneer_id,
+                    'area_physical': region.area_physical,
+                }
+            )
+        return suggestions
 
     def regions(self) -> list[dict[str, Any]]:
         if self.design is None:
@@ -283,6 +507,7 @@ class MarquetryWorkspace:
             'candidates': [candidate.to_dict() for candidate in self.candidates],
             'design': self.design.to_dict() if self.design else None,
             'regions': self.regions(),
+            'merge_suggestions': self.merge_suggestions(),
             'validation': self.validation(),
         }
 
