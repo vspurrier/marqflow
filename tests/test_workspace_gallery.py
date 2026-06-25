@@ -64,13 +64,20 @@ def test_grid_workspace_gallery_flow(tmp_path: Path) -> None:
     assert summary['source_image_size']['width'] > 0
     assert summary['source_image_size']['height'] > 0
     assert summary['partition_validation']['partition_valid'] is True
+    assert summary['composite_consistency'] == {'consistent': True, 'mismatches': []}
 
     active_id = summary['active_candidate_id']
     candidate = client.get(f'/api/workspace/candidates/{active_id}').json()
     assert candidate['regions']
     assert candidate['preview_url'].endswith('/preview')
     assert candidate['svg_url'].endswith('/svg')
+    assert candidate['hitmap_url'].endswith('/hitmap')
     assert client.get(candidate['thumb_url']).status_code == 200
+    candidate_hitmap = client.get(candidate['hitmap_url']).json()
+    assert candidate_hitmap['width'] == candidate['size']['width']
+    assert candidate_hitmap['height'] == candidate['size']['height']
+    assert len(candidate_hitmap['labels']) == candidate['size']['height']
+    assert len(candidate_hitmap['labels'][0]) == candidate['size']['width']
 
     selected_ids = [candidate['regions'][0]['region_id']]
     if len(candidate['regions']) > 1:
@@ -146,6 +153,7 @@ def test_grid_workspace_gallery_flow(tmp_path: Path) -> None:
     )
     assert first_region['veneer_id'] == 'blue'
     assert first_region['veneer_override_id'] == 'blue'
+    assert updated_workspace['composite_consistency']['consistent'] is True
 
     duplicate_palette_response = client.post(
         '/api/workspace/veneer-palette',
@@ -177,6 +185,7 @@ def test_grid_workspace_gallery_flow(tmp_path: Path) -> None:
                     'color_rgb': [80, 55, 38],
                     'sheet_width': 12.0,
                     'sheet_height': 11.0,
+                    'sheet_count': 1,
                     'grain_direction': 'horizontal',
                     'notes': 'wide test sheet',
                 },
@@ -196,6 +205,7 @@ def test_grid_workspace_gallery_flow(tmp_path: Path) -> None:
     )
     assert walnut['sheet_width'] == 12.0
     assert walnut['sheet_height'] == 11.0
+    assert walnut['sheet_count'] == 1
     assert walnut['grain_direction'] == 'horizontal'
     assert walnut['notes'] == 'wide test sheet'
     assert first_final_region_id not in {
@@ -214,6 +224,26 @@ def test_grid_workspace_gallery_flow(tmp_path: Path) -> None:
         if region['region_id'] == first_final_region_id
     )
     assert first_region['veneer_id'] == 'walnut'
+
+    undo_veneer_response = client.post('/api/workspace/final/undo')
+    assert undo_veneer_response.status_code == 200
+    undone_region = next(
+        region
+        for region in undo_veneer_response.json()['final_regions']
+        if region['region_id'] == first_final_region_id
+    )
+    assert undone_region['veneer_override_id'] is None
+    assert undo_veneer_response.json()['composite_consistency']['consistent'] is True
+    assert any(
+        edit['op'] == 'set_veneer'
+        for edit in undo_veneer_response.json()['composite_design']['undone_manual_edits']
+    )
+
+    veneer_response = client.post(
+        '/api/workspace/final/veneer',
+        json={'region_id': first_final_region_id, 'veneer_id': 'walnut'},
+    )
+    assert veneer_response.status_code == 200
 
     lock_response = client.post(
         '/api/workspace/final/lock',
@@ -303,6 +333,7 @@ def test_grid_workspace_gallery_flow(tmp_path: Path) -> None:
     cleanup_summary = cleanup_response.json()['design_summary']
     assert cleanup_summary['small_region_ids']
     assert cleanup_summary['thin_region_ids']
+    assert cleanup_summary['sliver_region_ids']
 
     composite_preview = client.get('/api/workspace/composite/preview?merge_threshold=0')
     assert composite_preview.status_code == 200
@@ -358,6 +389,10 @@ def test_grid_workspace_gallery_flow(tmp_path: Path) -> None:
     assert walnut_sheets
     assert all(sheet['sheet_width'] == 12.0 for sheet in walnut_sheets)
     assert all(sheet['sheet_height'] == 11.0 for sheet in walnut_sheets)
+    assert all(sheet['available_sheet_count'] == 1 for sheet in walnut_sheets)
+    assert all(sheet['grain_direction'] == 'horizontal' for sheet in walnut_sheets)
+    assert all(sheet['rotation_allowed'] is False for sheet in walnut_sheets)
+    assert any('over_stock_capacity' in sheet for sheet in walnut_sheets)
     assert (tmp_path / 'packed' / 'pack.json').exists()
     packed_pieces = json.loads((tmp_path / 'packed' / 'pieces.json').read_text())
     assert packed_pieces

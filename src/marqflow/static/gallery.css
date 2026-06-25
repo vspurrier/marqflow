@@ -295,7 +295,7 @@
     }
     .veneer-row {
       display: grid;
-      grid-template-columns: minmax(76px, 0.8fr) minmax(105px, 1fr) 44px 72px 72px minmax(70px, 0.7fr) minmax(90px, 1fr) auto;
+      grid-template-columns: minmax(76px, 0.8fr) minmax(105px, 1fr) 44px 68px 68px 58px minmax(70px, 0.7fr) minmax(90px, 1fr) auto;
       gap: 8px;
       align-items: center;
     }
@@ -371,34 +371,16 @@
       user-select: none;
       -webkit-user-drag: none;
     }
-    .compose-candidate-svg {
+    .compose-candidate-hitmap {
+      display: block;
       position: absolute;
       inset: 0;
-      pointer-events: auto;
-    }
-    .compose-candidate-svg svg {
+      z-index: 2;
       width: 100%;
       height: 100%;
-      display: block;
       pointer-events: auto;
-    }
-    .compose-candidate-svg path {
-      opacity: 0.85;
-      stroke: rgba(255,255,255,0.16);
-      stroke-width: 1;
-      vector-effect: non-scaling-stroke;
-      pointer-events: all;
       cursor: pointer;
-    }
-    .compose-candidate-svg path:hover {
-      stroke: var(--accent-2);
-      stroke-width: 2;
-      opacity: 1;
-    }
-    .compose-candidate-svg path.selected {
-      stroke: var(--accent);
-      stroke-width: 3;
-      opacity: 1;
+      image-rendering: auto;
     }
     .compose-candidate .foot {
       display: flex;
@@ -837,6 +819,9 @@
     }
     .final-region-item.thin-piece {
       border-color: rgba(226, 109, 91, 0.72);
+    }
+    .final-region-item.sliver-piece {
+      box-shadow: inset 3px 0 0 rgba(255, 68, 90, 0.82);
     }
     .final-region-item.geometry-warning {
       box-shadow: inset 3px 0 0 rgba(226, 109, 91, 0.82);

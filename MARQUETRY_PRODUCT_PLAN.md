@@ -61,8 +61,8 @@ Implemented but not yet product-complete:
 - Image tab uploads and normalizes through the existing project pipeline and now records original versus working dimensions, but does not yet expose crop/orientation decisions clearly.
 - Size tab persists physical dimensions, and SVG export now scales into physical units, but the packing geometry is still bounding-box based.
 - Subject tab persists notes and protection flags, but those settings do not affect segmentation, local refinement, locking, or cleanup.
-- Shapes tab can generate and keep candidates, but generation is still synchronous and the parameter grid is still tied to the current SLIC/Felzenszwalb generator assumptions.
-- Hues tab still paints candidate source regions into the final preview, while final regions have veneer override and lock controls in Cleanup. It now has an editable veneer inventory with stock dimensions and grain notes, but it is still not a true material workflow with availability quantities or grain-aware placement.
+- Shapes tab can generate and keep candidates through background jobs with progress, but the parameter grid is still tied to the current SLIC/Felzenszwalb generator assumptions.
+- Hues tab still paints candidate source regions into the final preview, while final regions have veneer override and lock controls in Cleanup. Candidate region picking now uses canvas hitmaps with click and drag-brush selection instead of live SVG DOM. Hues has an editable veneer inventory with stock dimensions, stock counts, and grain notes, but it is still not a true material workflow with purchasing quantities, grain-orientation review, or out-of-stock warnings.
 - Cleanup tab exposes final region lists, merge/split actions, bulk merge suggestions, veneer overrides, lock controls, a basic canvas hitmap, direct point editing, contour smoothing, hover inspection, drag selection, small/thin/vector/geometry warning overlays, and basic geometry warnings, but still lacks sliver repair and shared-boundary repair.
 - Pack tab now writes veneer-grouped SVG sheets and respects per-veneer stock dimensions, but the packing is still bounding-box based rather than a true nesting solver.
 
@@ -89,11 +89,11 @@ Validated as implemented:
 - Composite preview, composite SVG, and summary share the runtime `_composite_region_records()` path.
 - Project loading is cached by `_load_project_cached()`.
 - Merge threshold affects preview, summary, and export.
-- API, static asset, and browser smoke tests exist and currently pass: `9 passed`.
+- API, static asset, and browser smoke tests exist and currently pass: `12 passed`.
 
 Implemented but not sufficient:
 
-- Compose uses Canvas only for the final preview. Palette interaction still injects SVG paths into the DOM, so high region counts remain expensive.
+- Hues uses canvas hitmaps for source-region picking and the final preview uses canvas. High region counts are still a performance risk because the app lacks high-region stress tests and generation-keyed invalidation for regenerated assets.
 - Composite state is partially explicit. The base candidate contributes all regions, later paint events update final labels, and `CompositeDesign` persists paint events and final-region metadata. Workspace fields still mirror that state.
 - Last-paint-wins behavior is modeled by ordered paint events for candidate-region selection, but there is no user-facing paint history and final-region edits are not yet represented as first-class event types.
 - The composite can create overlapping conceptual regions because source masks are layered. It is rendered as pixels, but exported paths are still independent shapes rather than one normalized planar partition.
@@ -104,10 +104,10 @@ Implemented but not sufficient:
 
 Outstanding from the review:
 
-- Veneer/material palette semantics are partially implemented through editable swatches with stock dimensions and grain notes, but availability quantities and grain-aware packing are still open.
+- Veneer/material palette semantics are partially implemented through editable swatches with stock dimensions, stock counts, and grain notes. Packing now records stock counts and grain metadata, disables rotation when a grain direction is set, and surfaces pack-time stock overages in the browser. Rich purchasing quantities and explicit grain-orientation review are still open.
 - Explicit persisted composite model.
-- Canvas plus hitmap interaction.
-- Background jobs and progress for generation/refinement.
+- Canvas plus hitmap interaction for Hues and Cleanup, including Hues drag-brush painting.
+- Richer job cancellation/retry controls for generation/refinement.
 - Broader browser-level tests.
 - Manual merge/edit workflow.
 - Partition validation: no gaps, no overlaps, no unassigned pixels/areas.
@@ -119,10 +119,10 @@ Outstanding from the review:
 
 Corrections applied to `CODEBASE_REVIEW.md`:
 
-- Update test count from 6 to 7.
+- Update test count from stale values to the current 12-test suite.
 - Mark backend project-load caching as done.
-- Keep "selection still rerenders Compose" open.
-- Keep "Canvas plus hitmap" open.
+- Keep bulk Hues refresh and cache-invalidation work open.
+- Mark Hues/Cleanup canvas-plus-hitmap interaction as implemented while keeping richer Cleanup brush tooling open.
 - Keep "background jobs" open.
 - Keep "veneer/material palette" open.
 
@@ -131,7 +131,7 @@ Additional 2026-06-22 validation:
 - The seven-tab UI exists, but it should be treated as a shell until each tab mutates an explicit marquetry design model.
 - The obsolete `DesignState` class has been removed; `CompositeDesign` is the persisted design aggregate, though some workspace fields still mirror it for compatibility.
 - The current final raster is a useful working partition, but it is not enough for physical marquetry unless converted into a shared-boundary vector partition with stronger validation.
-- Candidate SVG DOM interaction remains a performance risk in the Hues tab.
+- Candidate SVG DOM interaction has been removed from the Hues tab. Single-region Hues clicks and drag-brush strokes update the clicked card and final preview in place; bulk Paint all and Clear still refresh the tab.
 - Packing is a placeholder and must not be described as production nesting.
 - Subject protection is currently advisory metadata only.
 - Veneer assignment has per-region user overrides, but it is not yet a full material inventory workflow.
@@ -360,7 +360,7 @@ Backend:
 
 Frontend:
 
-- Move interactive region editing away from live SVG DOM.
+- Keep interactive region editing away from live SVG DOM.
 - Use Canvas for display.
 - Use a region hitmap for click/hover/paint selection.
 - Keep SVG only for export and optional static inspection.
@@ -393,12 +393,12 @@ These are ordered so each step gives the next one a stable foundation.
 
 - Phase 1 is partial. Browser workflows have bounded working images through the existing project creation path, default to a 768 px working edge, report original versus working dimensions, and start image-first. Crop and orientation controls are still missing.
 - Phase 2 is partial but not complete. A final label raster exists, ordered paint events are persisted, and a `CompositeDesign` aggregate plus canvas hitmap are now written and served. Final-region editing now updates that aggregate directly, but the workspace still mirrors the same state for compatibility. This remains the highest-priority model gap.
-- Phase 3 is partial. Editable veneer swatches, stock dimensions, grain notes, nearest-color suggestions, manual veneer override controls, veneer-grouped final SVG export, and veneer-grouped pack output exist, but they still need availability quantities and grain-aware packing constraints.
+- Phase 3 is partial. Editable veneer swatches, stock dimensions, stock counts, grain notes, nearest-color suggestions, manual veneer override controls, veneer-grouped final SVG export, and veneer-grouped pack output exist. Packing records stock capacity metadata and disables fallback rotation when grain direction is set, but the product still needs richer availability warnings and explicit grain-orientation review.
 - Phase 4 is partial. Manual merge/split endpoints exist, cleanup canvas selection exists, warning overlays exist, per-region and bulk merge suggestions exist, and automatic merge logic is still limited.
 - Phase 5 is mostly open. Subject settings exist, but detail locks and local segmentation are not connected to the pipeline.
 - Phase 6 is partial. Simplification tolerance affects contour extraction, point editing, smoothing, hover inspection, drag-selection controls, canvas warning overlays, and vector export validation exist, but there is no shared-boundary smoothing, sliver repair, or non-destructive cleanup preview.
 - Phase 7 is partial. Packing now emits veneer-grouped SVG sheets in physical units, writes traceable JSON/CSV piece manifests, blocks invalid dimensions/partitions, and has a file-based external SVG nester adapter via `MARQFLOW_NESTER_CMD`. The default backend remains bounding-box based; true irregular nesting depends on configuring an external SVGnest/Deepnest-style runner.
-- Phase 8 is partial. There are API/static tests and one browser smoke test that now covers upload, keep, paint-all, cleanup hover, drag selection, point edits, smoothing, and pack, but not a full workflow suite.
+- Phase 8 is partial. There are API/static tests and one browser smoke test that now covers upload, keep, Hues hitmap brush-painting, paint-all, cleanup hover, drag selection, point edits, smoothing, pack, and stock-check summary output, but not a full workflow suite.
 
 Highest-value next slice:
 
@@ -407,7 +407,7 @@ Highest-value next slice:
 3. Add stronger geometry validation for holes, slivers, and shared-boundary risks. Vector contour validation is implemented; shared-boundary and sliver repair are still open.
 4. Expand the browser smoke test into a full workflow suite.
 
-Do not spend more time polishing the current Hues palette SVG DOM workflow before the explicit design model exists.
+Do not reintroduce SVG DOM interaction for the Hues palette. Further Hues work should focus on the explicit design model, cache invalidation, and material-planning semantics.
 
 ### Phase 1: Stabilize Performance And Startup
 
@@ -588,7 +588,7 @@ Suggested fifth assignment:
 ## Risks
 
 - Superpixels alone will not produce final marquetry-quality pieces. They are useful for initial candidates but weak for final cut geometry.
-- SVG DOM editing will keep failing at high region counts. Canvas plus hitmap is the correct direction for interaction.
+- SVG DOM editing would fail at high region counts. Hues and Cleanup now use Canvas plus hitmap interaction; the next performance targets are generation-keyed cache invalidation, high-region browser tests, and Cleanup brush-style hitmap tools.
 - Automatic merge by RGB will fight the physical material workflow. Veneer groups need to become first-class.
 - Without an explicit composite design, every additional edit feature will be bolted onto candidate selections and become harder to reason about.
 - Without an explicit partition invariant, the app can keep producing shapes that look plausible on screen but are not a valid puzzle for fabrication.

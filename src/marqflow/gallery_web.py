@@ -90,6 +90,7 @@ class VeneerSwatchRequest(BaseModel):
     color_rgb: tuple[int, int, int]
     sheet_width: float = 0.0
     sheet_height: float = 0.0
+    sheet_count: int = 0
     grain_direction: str = ''
     notes: str = ''
 
@@ -149,6 +150,7 @@ def _candidate_payload(candidate: dict[str, object]) -> dict[str, object]:
     candidate['preview_url'] = f'/api/workspace/candidates/{candidate_id}/preview'
     candidate['thumb_url'] = f'/api/workspace/candidates/{candidate_id}/thumb'
     candidate['svg_url'] = f'/api/workspace/candidates/{candidate_id}/svg'
+    candidate['hitmap_url'] = f'/api/workspace/candidates/{candidate_id}/hitmap'
     return candidate
 
 
@@ -261,6 +263,14 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
         if candidate is None:
             raise HTTPException(status_code=404, detail='candidate not found')
         return FileResponse(candidate.svg_path, media_type='image/svg+xml')
+
+    @app.get('/api/workspace/candidates/{candidate_id}/hitmap')
+    def candidate_hitmap(candidate_id: str) -> JSONResponse:
+        workspace = _load_workspace(workspace_path)
+        hitmap = workspace.candidate_hitmap(candidate_id)
+        if hitmap is None:
+            raise HTTPException(status_code=404, detail='candidate not found')
+        return JSONResponse(hitmap)
 
     @app.get('/api/workspace/composite/preview')
     def composite_preview(merge_threshold: float = 0.0) -> Response:
@@ -472,6 +482,14 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
                 raise HTTPException(status_code=404, detail='no suggested regions merged')
             return JSONResponse(_workspace_summary(workspace))
 
+    @app.post('/api/workspace/final/undo')
+    def undo_final_edit() -> JSONResponse:
+        with workspace_lock:
+            workspace = _load_workspace(workspace_path)
+            if workspace.undo_last_manual_edit() is None:
+                raise HTTPException(status_code=404, detail='no reversible edit to undo')
+            return JSONResponse(_workspace_summary(workspace))
+
     @app.post('/api/workspace/final/split')
     def split_final(request: SplitRequest) -> JSONResponse:
         with workspace_lock:
@@ -507,6 +525,7 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
                             color_rgb=swatch.color_rgb,
                             sheet_width=swatch.sheet_width,
                             sheet_height=swatch.sheet_height,
+                            sheet_count=swatch.sheet_count,
                             grain_direction=swatch.grain_direction,
                             notes=swatch.notes,
                         )

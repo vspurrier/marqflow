@@ -65,6 +65,7 @@ class VeneerSwatch:
     color_rgb: tuple[int, int, int]
     sheet_width: float = 0.0
     sheet_height: float = 0.0
+    sheet_count: int = 0
     grain_direction: str = ''
     notes: str = ''
 
@@ -81,6 +82,7 @@ class VeneerSwatch:
             color_rgb=tuple(int(value) for value in data.get('color_rgb', (0, 0, 0))),
             sheet_width=float(data.get('sheet_width', 0.0) or 0.0),
             sheet_height=float(data.get('sheet_height', 0.0) or 0.0),
+            sheet_count=max(0, int(data.get('sheet_count', 0) or 0)),
             grain_direction=str(data.get('grain_direction', '')),
             notes=str(data.get('notes', '')),
         )
@@ -180,6 +182,7 @@ class CompositeDesign:
     final_region_locked_ids: set[int] = field(default_factory=set)
     manual_edits: list[dict[str, Any]] = field(default_factory=list)
     validation: dict[str, Any] = field(default_factory=dict)
+    undone_manual_edits: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -203,6 +206,7 @@ class CompositeDesign:
             'final_region_locked_ids': sorted(self.final_region_locked_ids),
             'manual_edits': self.manual_edits,
             'validation': self.validation,
+            'undone_manual_edits': self.undone_manual_edits,
         }
 
     @classmethod
@@ -242,6 +246,7 @@ class CompositeDesign:
             },
             manual_edits=[dict(item) for item in data.get('manual_edits', [])],
             validation=dict(data.get('validation', {})),
+            undone_manual_edits=[dict(item) for item in data.get('undone_manual_edits', [])],
         )
 
 
@@ -331,6 +336,20 @@ def sheet_size_for_veneer(
     sheet_width = swatch.sheet_width if swatch.sheet_width > 0 else fallback_width
     sheet_height = swatch.sheet_height if swatch.sheet_height > 0 else fallback_height
     return sheet_width, sheet_height
+
+
+def sheet_count_for_veneer(veneer_id: str, palette: list[VeneerSwatch]) -> int:
+    """Return available stock count for a veneer, or 0 for unlimited/unknown."""
+
+    swatch = veneer_by_id(veneer_id, palette)
+    return max(0, swatch.sheet_count) if swatch is not None else 0
+
+
+def grain_direction_for_veneer(veneer_id: str, palette: list[VeneerSwatch]) -> str:
+    """Return grain direction metadata for a veneer."""
+
+    swatch = veneer_by_id(veneer_id, palette)
+    return swatch.grain_direction if swatch is not None else ''
 
 
 def _contour_length(points: tuple[tuple[float, float], ...]) -> float:
@@ -828,7 +847,8 @@ def pack_region_sheets(
             physical_size,
             fallback_sheet,
         )
-        packer = newPacker(rotation=False)
+        grain_direction = grain_direction_for_veneer(veneer_id, palette)
+        packer = newPacker(rotation=not bool(grain_direction))
         contour_bounds: dict[int, tuple[float, float, float, float]] = {}
         for region in items:
             contour = tuple(
@@ -892,6 +912,9 @@ def pack_region_sheets(
                 'veneer_id': veneer_id,
                 'sheet_width': sheet_width,
                 'sheet_height': sheet_height,
+                'available_sheet_count': sheet_count_for_veneer(veneer_id, palette),
+                'grain_direction': grain_direction,
+                'rotation_allowed': not bool(grain_direction),
                 'pieces': packed_items,
                 'sheet_svg': sheet_svg,
             }

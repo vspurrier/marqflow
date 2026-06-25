@@ -9,16 +9,18 @@ const state = {
   previewRequestId: 0,
   previewAbortController: null,
   candidateDetailCache: {},
-  candidateSvgCache: {},
+  candidateHitmapCache: {},
+  huesRenderId: 0,
   selectedFinalRegionIds: new Set(),
   activeFinalRegionId: null,
   finalHitmap: null,
   cleanupDragStart: null,
   cleanupDragSelection: false,
+  huesBrush: null,
   activeJobId: null,
 };
 
-const el = {
+const el = /** @type {Record<string, any>} */ ({
   landing: document.getElementById('landing'),
   landingStatus: document.getElementById('landing-status'),
   sourceImageInput: document.getElementById('source-image-input'),
@@ -74,6 +76,7 @@ const el = {
   mergeSelectedBtn: document.getElementById('merge-selected-btn'),
   mergeSuggestionsBtn: document.getElementById('merge-suggestions-btn'),
   splitSelectedBtn: document.getElementById('split-selected-btn'),
+  undoFinalEditBtn: document.getElementById('undo-final-edit-btn'),
   composeKeptCount: document.getElementById('compose-kept-count'),
   veneerPaletteList: document.getElementById('veneer-palette-list'),
   addVeneerBtn: document.getElementById('add-veneer-btn'),
@@ -98,7 +101,7 @@ const el = {
   exportDir: document.getElementById('export-dir'),
   exportBtn: document.getElementById('export-btn'),
   exportFinalBtn: document.getElementById('export-final-btn'),
-};
+});
 
 function setBusy(isBusy) {
   document.body.classList.toggle('busy', isBusy);
@@ -268,8 +271,15 @@ function renderSubjectTab(workspace) {
 
 function updateFinalSelectionState() {
   document.querySelectorAll('.final-region-item').forEach((item) => {
-    item.classList.toggle('selected', state.selectedFinalRegionIds.has(Number(item.dataset.regionId)));
-    item.classList.toggle('active', Number(item.dataset.regionId) === state.activeFinalRegionId);
+    const regionItem = /** @type {HTMLElement} */ (item);
+    regionItem.classList.toggle(
+      'selected',
+      state.selectedFinalRegionIds.has(Number(regionItem.dataset.regionId)),
+    );
+    regionItem.classList.toggle(
+      'active',
+      Number(regionItem.dataset.regionId) === state.activeFinalRegionId,
+    );
   });
   if (state.workspace && state.mode === 'cleanup') {
     renderSelectedRegionEditor(state.workspace);
@@ -309,6 +319,15 @@ function regionIdsInRect(hitmap, x0, y0, x1, y1) {
     }
   }
   return [...ids];
+}
+
+function regionIdAtPoint(hitmap, point) {
+  if (!point.inside || !hitmap || !Array.isArray(hitmap.labels)) {
+    return null;
+  }
+  const row = hitmap.labels[point.y] || [];
+  const regionId = Number(row[point.x]);
+  return regionId > 0 ? regionId : null;
 }
 
 function selectedFinalRegion(workspace) {
@@ -539,6 +558,29 @@ async function fetchCandidate(candidateId) {
   return response.json();
 }
 
+async function candidateDetailForRender(candidate) {
+  const cached = state.candidateDetailCache[candidate.candidate_id];
+  if (cached && cached.selection_revision === candidate.selection_revision) {
+    return cached;
+  }
+  const detail = await fetchCandidate(candidate.candidate_id);
+  state.candidateDetailCache[candidate.candidate_id] = detail;
+  return detail;
+}
+
+async function fetchCandidateHitmap(candidateId, hitmapUrl = null) {
+  if (state.candidateHitmapCache[candidateId]) {
+    return state.candidateHitmapCache[candidateId];
+  }
+  const response = await fetch(hitmapUrl || `/api/workspace/candidates/${candidateId}/hitmap`);
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+  const hitmap = await response.json();
+  state.candidateHitmapCache[candidateId] = hitmap;
+  return hitmap;
+}
+
 async function openCandidate(candidateId) {
   setBusy(true);
   try {
@@ -574,6 +616,8 @@ async function syncActiveCandidate(candidateId) {
 }
 
 async function renderHuesTab(workspace) {
+  const renderId = state.huesRenderId + 1;
+  state.huesRenderId = renderId;
   renderVeneerInventory(workspace);
   const kept = workspace.candidates.filter((candidate) => candidate.kept);
   el.composeKeptCount.textContent = kept.length;
@@ -588,11 +632,15 @@ async function renderHuesTab(workspace) {
     return;
   }
 
-  await renderFinalPreview(el.composeCanvas, el.composeSummary, 0);
-
-  await Promise.all(
-    kept.map((candidate) => renderHueCandidate(candidate).catch((error) => setStatus(String(error), true))),
+  const previewPromise = renderFinalPreview(el.composeCanvas, el.composeSummary, 0).catch((error) =>
+    setStatus(String(error), true),
   );
+  await Promise.all(
+    kept.map((candidate) =>
+      renderHueCandidate(candidate, renderId).catch((error) => setStatus(String(error), true)),
+    ),
+  );
+  await previewPromise;
 }
 
 function rgbToHex(color) {
@@ -628,6 +676,7 @@ function renderVeneerInventory(workspace) {
         rgbToHex(swatch.color_rgb),
         swatch.sheet_width || 0,
         swatch.sheet_height || 0,
+        swatch.sheet_count || 0,
         swatch.grain_direction || '',
         swatch.notes || '',
       ),
@@ -635,7 +684,16 @@ function renderVeneerInventory(workspace) {
   });
 }
 
-function buildVeneerRow(veneerId, name, color, sheetWidth = 0, sheetHeight = 0, grain = '', notes = '') {
+function buildVeneerRow(
+  veneerId,
+  name,
+  color,
+  sheetWidth = 0,
+  sheetHeight = 0,
+  sheetCount = 0,
+  grain = '',
+  notes = '',
+) {
   const row = document.createElement('div');
   row.className = 'veneer-row';
   const idInput = document.createElement('input');
@@ -667,6 +725,13 @@ function buildVeneerRow(veneerId, name, color, sheetWidth = 0, sheetHeight = 0, 
   heightInput.step = '0.1';
   heightInput.value = String(sheetHeight || 0);
   heightInput.title = 'Available veneer sheet height. Use 0 to fall back to final piece height.';
+  const countInput = document.createElement('input');
+  countInput.className = 'veneer-sheet-count';
+  countInput.type = 'number';
+  countInput.min = '0';
+  countInput.step = '1';
+  countInput.value = String(sheetCount || 0);
+  countInput.title = 'Available sheet count. Use 0 when the count is unknown or unlimited.';
   const grainInput = document.createElement('input');
   grainInput.className = 'veneer-grain';
   grainInput.type = 'text';
@@ -691,6 +756,7 @@ function buildVeneerRow(veneerId, name, color, sheetWidth = 0, sheetHeight = 0, 
     colorInput,
     widthInput,
     heightInput,
+    countInput,
     grainInput,
     notesInput,
     removeButton,
@@ -713,10 +779,45 @@ function collectVeneerPalette() {
       color_rgb: hexToRgb(row.querySelector('.veneer-color').value),
       sheet_width: Number(row.querySelector('.veneer-sheet-width').value) || 0,
       sheet_height: Number(row.querySelector('.veneer-sheet-height').value) || 0,
+      sheet_count: Number(row.querySelector('.veneer-sheet-count').value) || 0,
       grain_direction: row.querySelector('.veneer-grain').value.trim(),
       notes: row.querySelector('.veneer-notes').value.trim(),
     }))
     .filter((swatch) => swatch.veneer_id);
+}
+
+function drawCandidateSelectionOverlay(canvas, hitmap, selectedRegionIds) {
+  if (!canvas || !hitmap || !Array.isArray(hitmap.labels)) {
+    return;
+  }
+  const width = Number(hitmap.width) || 0;
+  const height = Number(hitmap.height) || 0;
+  if (!width || !height) {
+    return;
+  }
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
+  }
+  const selected = new Set((selectedRegionIds || []).map(Number));
+  const ctx = canvas.getContext('2d');
+  const image = ctx.createImageData(width, height);
+  for (let y = 0; y < height; y += 1) {
+    const row = hitmap.labels[y] || [];
+    for (let x = 0; x < width; x += 1) {
+      const regionId = Number(row[x]);
+      const index = (y * width + x) * 4;
+      if (selected.has(regionId)) {
+        image.data[index] = 217;
+        image.data[index + 1] = 176;
+        image.data[index + 2] = 106;
+        image.data[index + 3] = 112;
+      } else {
+        image.data[index + 3] = 0;
+      }
+    }
+  }
+  ctx.putImageData(image, 0, 0);
 }
 
 async function saveVeneerPalette() {
@@ -738,7 +839,7 @@ async function saveVeneerPalette() {
   }
 }
 
-async function renderHueCandidate(candidate) {
+async function renderHueCandidate(candidate, renderId) {
   const card = document.createElement('article');
   card.className = 'compose-candidate' + (candidate.candidate_id === state.activeCandidateId ? ' active' : '');
   card.dataset.candidateId = candidate.candidate_id;
@@ -781,8 +882,9 @@ async function renderHueCandidate(candidate) {
   const img = document.createElement('img');
   img.src = candidate.preview_url;
   img.alt = candidateLabel(candidate);
-  const overlay = document.createElement('div');
-  overlay.className = 'compose-candidate-svg';
+  const overlay = document.createElement('canvas');
+  overlay.className = 'compose-candidate-hitmap';
+  overlay.title = 'Click a region to toggle it, or drag to brush-paint multiple regions.';
   preview.append(img, overlay);
 
   const foot = document.createElement('div');
@@ -791,47 +893,89 @@ async function renderHueCandidate(candidate) {
   selected.className = 'selected-stat';
   selected.textContent = `${(candidate.selected_region_ids || []).length} selected`;
   const selectAllHint = document.createElement('span');
-  selectAllHint.textContent = 'Click regions to paint';
+  selectAllHint.textContent = 'Click or drag to paint';
   foot.append(selected, selectAllHint);
 
-  card.append(head, preview, foot);
-  el.composePaletteList.appendChild(card);
-
-  const detail = state.candidateDetailCache[candidate.candidate_id] || (await fetchCandidate(candidate.candidate_id));
-  state.candidateDetailCache[candidate.candidate_id] = detail;
+  const detail = await candidateDetailForRender(candidate);
+  if (renderId !== state.huesRenderId) {
+    return;
+  }
   detail.selected_region_ids = candidate.selected_region_ids || detail.selected_region_ids || [];
   selected.textContent = `${detail.selected_region_ids.length} selected`;
 
-  const svgText =
-    state.candidateSvgCache[candidate.candidate_id] ||
-    (await (async () => {
-      const response = await fetch(detail.svg_url);
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
-      return response.text();
-    })());
-  state.candidateSvgCache[candidate.candidate_id] = svgText;
-  overlay.innerHTML = svgText;
-  const svg = overlay.querySelector('svg');
-  if (svg) {
-    svg.setAttribute('preserveAspectRatio', 'none');
-    svg.setAttribute('width', '100%');
-    svg.setAttribute('height', '100%');
-    svg.style.pointerEvents = 'auto';
-    svg.querySelectorAll('path').forEach((path) => {
-      const id = Number(path.dataset.regionId);
-      path.classList.toggle('selected', (detail.selected_region_ids || []).includes(id));
-    });
-    svg.addEventListener('click', async (event) => {
-      const path = event.target.closest('path');
-      if (!path || !svg.contains(path)) {
-        return;
-      }
-      event.stopPropagation();
-      await togglePaletteRegion(candidate.candidate_id, detail, Number(path.dataset.regionId));
-    });
+  const hitmap = await fetchCandidateHitmap(candidate.candidate_id, detail.hitmap_url);
+  if (renderId !== state.huesRenderId) {
+    return;
   }
+  drawCandidateSelectionOverlay(overlay, hitmap, detail.selected_region_ids);
+  overlay.dataset.ready = 'true';
+  overlay.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) {
+      return;
+    }
+    const point = canvasPointFromEvent(overlay, event, hitmap);
+    const regionId = regionIdAtPoint(hitmap, point);
+    if (!regionId) {
+      return;
+    }
+    event.preventDefault();
+    overlay.setPointerCapture(event.pointerId);
+    state.huesBrush = {
+      candidateId: candidate.candidate_id,
+      detail,
+      overlay,
+      selectedEl: selected,
+      startRegionId: regionId,
+      regionIds: new Set([regionId]),
+      moved: false,
+    };
+  });
+  overlay.addEventListener('pointermove', (event) => {
+    const brush = state.huesBrush;
+    if (!brush || brush.candidateId !== candidate.candidate_id) {
+      return;
+    }
+    const point = canvasPointFromEvent(overlay, event, hitmap);
+    const regionId = regionIdAtPoint(hitmap, point);
+    if (!regionId) {
+      return;
+    }
+    if (regionId !== brush.startRegionId || brush.regionIds.size > 1) {
+      brush.moved = true;
+    }
+    brush.regionIds.add(regionId);
+  });
+  overlay.addEventListener('pointerup', async (event) => {
+    const brush = state.huesBrush;
+    if (!brush || brush.candidateId !== candidate.candidate_id) {
+      return;
+    }
+    event.preventDefault();
+    state.huesBrush = null;
+    if (overlay.hasPointerCapture(event.pointerId)) {
+      overlay.releasePointerCapture(event.pointerId);
+    }
+    if (brush.moved || brush.regionIds.size > 1) {
+      await paintPaletteRegions(
+        candidate.candidate_id,
+        detail,
+        [...brush.regionIds],
+        overlay,
+        selected,
+      );
+    } else {
+      await togglePaletteRegion(candidate.candidate_id, detail, brush.startRegionId, overlay, selected);
+    }
+  });
+  overlay.addEventListener('pointercancel', () => {
+    state.huesBrush = null;
+  });
+  overlay.addEventListener('click', async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  });
+  card.append(head, preview, foot);
+  el.composePaletteList.appendChild(card);
 }
 
 function fitZoomForCanvas(canvas) {
@@ -1075,6 +1219,7 @@ function drawCleanupWarningOverlay(workspace) {
   const summary = workspace.design_summary || {};
   const smallIds = new Set(summary.small_region_ids || []);
   const thinIds = new Set(summary.thin_region_ids || []);
+  const sliverIds = new Set(summary.sliver_region_ids || []);
   const geometryIds = new Set([
     ...(summary.complex_region_ids || []),
     ...(summary.hole_region_ids || []),
@@ -1083,7 +1228,7 @@ function drawCleanupWarningOverlay(workspace) {
     ...(summary.out_of_bounds_region_ids || []),
     ...(summary.zero_area_region_ids || []),
   ]);
-  if (!smallIds.size && !thinIds.size && !geometryIds.size) {
+  if (!smallIds.size && !thinIds.size && !sliverIds.size && !geometryIds.size) {
     return;
   }
   const ctx = el.mergeCanvas.getContext('2d');
@@ -1096,6 +1241,8 @@ function drawCleanupWarningOverlay(workspace) {
       let color = null;
       if (geometryIds.has(regionId)) {
         color = [226, 109, 91, 0.42];
+      } else if (sliverIds.has(regionId)) {
+        color = [255, 68, 90, 0.40];
       } else if (thinIds.has(regionId)) {
         color = [255, 94, 70, 0.36];
       } else if (smallIds.has(regionId)) {
@@ -1123,6 +1270,7 @@ async function renderFinalRegionList(workspace) {
   const summary = workspace.design_summary || {};
   const smallIds = new Set(summary.small_region_ids || []);
   const thinIds = new Set(summary.thin_region_ids || []);
+  const sliverIds = new Set(summary.sliver_region_ids || []);
   const complexIds = new Set(summary.complex_region_ids || []);
   const holeIds = new Set(summary.hole_region_ids || []);
   const disconnectedIds = new Set(summary.disconnected_region_ids || []);
@@ -1146,6 +1294,9 @@ async function renderFinalRegionList(workspace) {
     if (thinIds.has(region.region_id)) {
       item.classList.add('thin-piece');
     }
+    if (sliverIds.has(region.region_id)) {
+      item.classList.add('sliver-piece');
+    }
     if (
       complexIds.has(region.region_id) ||
       holeIds.has(region.region_id) ||
@@ -1159,6 +1310,7 @@ async function renderFinalRegionList(workspace) {
     const warningLabels = [
       smallIds.has(region.region_id) ? 'Small region' : '',
       thinIds.has(region.region_id) ? 'Thin region' : '',
+      sliverIds.has(region.region_id) ? 'Sliver risk' : '',
       complexIds.has(region.region_id) ? 'High point count' : '',
       holeIds.has(region.region_id) ? 'Holes' : '',
       disconnectedIds.has(region.region_id) ? 'Disconnected islands' : '',
@@ -1220,7 +1372,9 @@ async function renderFinalRegionList(workspace) {
         await saveFinalRegionVeneer(region.region_id, veneerSelect.value || null);
       });
     }
-    const lockInput = item.querySelector('.final-region-lock input');
+    const lockInput = /** @type {HTMLInputElement | null} */ (
+      item.querySelector('.final-region-lock input')
+    );
     if (lockInput) {
       lockInput.addEventListener('click', (event) => {
         event.stopPropagation();
@@ -1291,14 +1445,41 @@ async function refreshWorkspace(workspace) {
   }
 }
 
-async function togglePaletteRegion(candidateId, detail, regionId) {
+async function togglePaletteRegion(candidateId, detail, regionId, overlay = null, selectedEl = null) {
   const next = new Set(detail.selected_region_ids || []);
   if (next.has(regionId)) {
     next.delete(regionId);
   } else {
     next.add(regionId);
   }
-  await saveCandidateSelection(candidateId, [...next]);
+  await savePaletteSelection(candidateId, detail, next, overlay, selectedEl);
+}
+
+async function paintPaletteRegions(candidateId, detail, regionIds, overlay = null, selectedEl = null) {
+  const next = new Set(detail.selected_region_ids || []);
+  regionIds.forEach((regionId) => {
+    if (regionId) {
+      next.add(Number(regionId));
+    }
+  });
+  await savePaletteSelection(candidateId, detail, next, overlay, selectedEl);
+}
+
+async function savePaletteSelection(candidateId, detail, selectedRegionIdSet, overlay = null, selectedEl = null) {
+  const selectedRegionIds = [...selectedRegionIdSet].sort((a, b) => a - b);
+  const workspace = await saveCandidateSelection(candidateId, selectedRegionIds, {refresh: false});
+  detail.selected_region_ids = selectedRegionIds;
+  state.candidateDetailCache[candidateId] = detail;
+  if (selectedEl) {
+    selectedEl.textContent = `${selectedRegionIds.length} selected`;
+  }
+  if (overlay) {
+    const hitmap = await fetchCandidateHitmap(candidateId, detail.hitmap_url);
+    drawCandidateSelectionOverlay(overlay, hitmap, selectedRegionIds);
+  }
+  await renderFinalPreview(el.composeCanvas, el.composeSummary, 0);
+  renderShapesTab(workspace);
+  setStatus(`Painted ${selectedRegionIds.length} regions on ${candidateLabel(workspace.active_candidate)}`);
 }
 
 async function paintAllCandidate(candidateId) {
@@ -1339,7 +1520,8 @@ async function clearCandidateSelection(candidateId) {
   }
 }
 
-async function saveCandidateSelection(candidateId, regionIds) {
+async function saveCandidateSelection(candidateId, regionIds, options = {}) {
+  const {refresh = true} = options;
   setBusy(true);
   try {
     const response = await fetch('/api/workspace/selection', {
@@ -1355,8 +1537,16 @@ async function saveCandidateSelection(candidateId, regionIds) {
       throw new Error(await response.text());
     }
     const workspace = await response.json();
-    await refreshWorkspace(workspace);
-    setStatus(`Painted ${regionIds.length} regions on ${candidateLabel(workspace.active_candidate)}`);
+    if (refresh) {
+      await refreshWorkspace(workspace);
+      setStatus(`Painted ${regionIds.length} regions on ${candidateLabel(workspace.active_candidate)}`);
+    } else {
+      state.workspace = workspace;
+      setWorkspaceSummary(workspace);
+      renderImageTab(workspace);
+      renderKeptStrip(workspace);
+    }
+    return workspace;
   } finally {
     setBusy(false);
   }
@@ -1557,6 +1747,32 @@ async function exportPreviewSvg() {
   }
 }
 
+function describePackedSheets(packedSheets) {
+  const sheets = Array.isArray(packedSheets) ? packedSheets : [];
+  const overStock = sheets.filter((sheet) => sheet.over_stock_capacity);
+  const invalidPlacements = sheets.filter((sheet) => sheet.placement_valid === false);
+  const veneerCounts = sheets.reduce((counts, sheet) => {
+    const veneerId = sheet.veneer_id || 'unknown';
+    counts[veneerId] = (counts[veneerId] || 0) + 1;
+    return counts;
+  }, {});
+  const veneerText = Object.entries(veneerCounts)
+    .map(([veneerId, count]) => `${veneerId}: ${count}`)
+    .join(', ');
+  return [
+    `Packed ${sheets.length} veneer sheets.`,
+    veneerText ? `By veneer: ${veneerText}.` : '',
+    overStock.length
+      ? `Stock warning: ${overStock.length} sheet(s) exceed declared veneer inventory.`
+      : 'Stock check: no declared sheet-count overages.',
+    invalidPlacements.length
+      ? `Placement warning: ${invalidPlacements.length} sheet(s) have overlap defects.`
+      : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
 async function packFinal() {
   setBusy(true);
   try {
@@ -1570,7 +1786,7 @@ async function packFinal() {
     }
     const payload = await response.json();
     setStatus(`Packed ${payload.packed_sheets.length} veneer sheets to ${payload.output_dir}.`);
-    el.packSummary.textContent = `Packed ${payload.packed_sheets.length} veneer sheets.`;
+    el.packSummary.textContent = describePackedSheets(payload.packed_sheets);
   } finally {
     setBusy(false);
   }
@@ -1617,6 +1833,29 @@ async function mergeAllSuggestions() {
     state.selectedFinalRegionIds.clear();
     await renderCleanupTab(workspace);
     setStatus('Merged cleanup suggestions.');
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function undoFinalEdit() {
+  setBusy(true);
+  try {
+    const response = await fetch('/api/workspace/final/undo', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({}),
+    });
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+    const workspace = await response.json();
+    await refreshWorkspace(workspace);
+    state.selectedFinalRegionIds.clear();
+    if (state.mode === 'cleanup') {
+      await renderCleanupTab(workspace);
+    }
+    setStatus('Undid the latest reversible edit.');
   } finally {
     setBusy(false);
   }
@@ -1841,6 +2080,7 @@ el.saveVeneerPaletteBtn.addEventListener('click', saveVeneerPalette);
 el.mergeSelectedBtn.addEventListener('click', mergeSelectedRegions);
 el.mergeSuggestionsBtn.addEventListener('click', mergeAllSuggestions);
 el.splitSelectedBtn.addEventListener('click', splitSelectedRegion);
+el.undoFinalEditBtn.addEventListener('click', undoFinalEdit);
 el.exportBtn.addEventListener('click', exportPreviewSvg);
 el.exportFinalBtn.addEventListener('click', packFinal);
 el.finalPointMoveBtn.addEventListener('click', async () => {

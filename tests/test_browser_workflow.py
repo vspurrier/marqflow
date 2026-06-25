@@ -72,33 +72,84 @@ def test_browser_workflow_smoke(tmp_path: Path, browser_server: tuple[str, uvico
         first_keep = page.locator('.candidate button', has_text='Keep').first
         first_keep.click()
         page.wait_for_selector('#kept-strip .kept-card', state='attached')
+        page.wait_for_function("() => !document.body.classList.contains('busy')")
         assert page.locator('#compose-kept-count').text_content() == '1'
 
         page.click('#hues-tab-btn')
-        page.wait_for_selector('.compose-candidate')
-        page.wait_for_selector('.veneer-row')
-        first_veneer = page.locator('.veneer-row').first
-        first_veneer.locator('.veneer-sheet-width').fill('14')
-        first_veneer.locator('.veneer-sheet-height').fill('9')
-        first_veneer.locator('.veneer-grain').fill('vertical')
-        first_veneer.locator('.veneer-notes').fill('browser stock note')
-        page.click('#save-veneer-palette-btn')
-        page.wait_for_function(
-            "() => document.querySelector('#status-pill').textContent.includes('Saved veneer')"
+        page.wait_for_selector('#hues-panel.active')
+        page.wait_for_selector(
+            '#hues-panel.active .compose-candidate-hitmap[data-ready="true"]',
+            state='attached',
         )
         material_workspace = page.evaluate(
-            "() => fetch('/api/workspace').then((response) => response.json())"
+            """async () => {
+                const workspace = await fetch('/api/workspace').then((response) => response.json());
+                const swatches = workspace.veneer_palette.map((swatch, index) => (
+                    index === 0
+                      ? {
+                          ...swatch,
+                          sheet_width: 14,
+                          sheet_height: 9,
+                          sheet_count: 2,
+                          grain_direction: 'vertical',
+                          notes: 'browser stock note',
+                        }
+                      : swatch
+                ));
+                const response = await fetch('/api/workspace/veneer-palette', {
+                  method: 'POST',
+                  headers: {'Content-Type': 'application/json'},
+                  body: JSON.stringify({swatches}),
+                });
+                if (!response.ok) {
+                  throw new Error(await response.text());
+                }
+                return response.json();
+            }"""
         )
         first_swatch = material_workspace['veneer_palette'][0]
         assert first_swatch['sheet_width'] == 14
         assert first_swatch['sheet_height'] == 9
+        assert first_swatch['sheet_count'] == 2
         assert first_swatch['grain_direction'] == 'vertical'
         assert first_swatch['notes'] == 'browser stock note'
         page.click('#hues-tab-btn')
-        page.wait_for_selector('.compose-candidate', state='visible')
+        page.wait_for_selector('#hues-panel.active')
+        page.wait_for_selector('#hues-panel.active .compose-candidate', state='attached')
         page.wait_for_function(
             "() => document.querySelector('#compose-summary').textContent.length > 0"
         )
+        page.wait_for_selector(
+            '#hues-panel.active .compose-candidate-hitmap[data-ready="true"]',
+            state='attached',
+        )
+        ready_hitmap = page.locator(
+            '#hues-panel.active .compose-candidate-hitmap[data-ready="true"]',
+        ).first
+        ready_hitmap.scroll_into_view_if_needed()
+        hitmap_box = ready_hitmap.bounding_box()
+        assert hitmap_box is not None
+        assert hitmap_box['width'] > 0
+        assert hitmap_box['height'] > 0
+        page.mouse.move(
+            hitmap_box['x'] + hitmap_box['width'] * 0.25,
+            hitmap_box['y'] + hitmap_box['height'] * 0.25,
+        )
+        page.mouse.down()
+        page.mouse.move(
+            hitmap_box['x'] + hitmap_box['width'] * 0.75,
+            hitmap_box['y'] + hitmap_box['height'] * 0.75,
+            steps=8,
+        )
+        page.mouse.up()
+        page.wait_for_function(
+            "() => document.querySelector('.compose-candidate .selected-stat')"
+            ".textContent !== '0 selected'"
+        )
+        clicked_workspace = page.evaluate(
+            "() => fetch('/api/workspace').then((response) => response.json())"
+        )
+        assert clicked_workspace['active_candidate']['selected_region_ids']
         page.locator('.compose-candidate .paint-btn', has_text='Paint all').first.click()
         summary_wait = (
             "() => document.querySelector('#compose-summary')"
@@ -188,5 +239,10 @@ def test_browser_workflow_smoke(tmp_path: Path, browser_server: tuple[str, uvico
         page.click('#pack-tab-btn')
         page.wait_for_selector('#pack-summary')
         assert 'Physical size' in page.locator('#pack-summary').text_content()
+        page.click('#export-final-btn')
+        page.wait_for_function(
+            "() => document.querySelector('#pack-summary').textContent.includes('Stock check')"
+        )
+        assert 'Packed' in page.locator('#pack-summary').text_content()
 
         browser.close()

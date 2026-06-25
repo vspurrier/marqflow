@@ -10,9 +10,9 @@ That is a UI shell, not yet a complete marquetry design model. Several tabs stil
 
 ## Current Verification
 
-- Last verified commands before this audit:
+- Last verified commands in this audit:
   - `uv run ruff check src tests` passed.
-  - `uv run pytest -q` passed, with 10 tests.
+  - `uv run pytest -q` passed, with 12 tests.
   - `node --check src/marqflow/static/gallery.js` passed.
 - A live server check confirmed that `/`, `/static/gallery.css`, and `/static/gallery.js` are served from the FastAPI app.
 - The search page no longer renders the old large candidate preview canvas; it is now grid-first.
@@ -30,7 +30,7 @@ That is a UI shell, not yet a complete marquetry design model. Several tabs stil
 - Cleanup summary now reports high point count, hole, and disconnected-island warnings per final region.
 - Size input rejects non-positive physical dimensions, and pack/export validate basic partition invariants before writing files.
 - Pack and preview export now write `pieces.json` and `pieces.csv` bills of pieces with region IDs, veneer IDs, physical metrics, geometry warnings, and source references.
-- The Hues tab now includes an editable veneer inventory with persisted swatch IDs, names, display colors, stock dimensions, grain direction, and notes.
+- The Hues tab now includes an editable veneer inventory with persisted swatch IDs, names, display colors, stock dimensions, stock counts, grain direction, and notes.
 - Cleanup small/thin/geometry warnings are now visible as translucent overlays on the final canvas, not only in the region list.
 
 ## 2026-06-22 Implementation Audit
@@ -50,7 +50,7 @@ Implemented correctly:
 Important shortcomings:
 
 - `CompositeDesign` now exists and the main final-design mutation paths update it directly, but the workspace still mirrors final state across `GridWorkspace` fields such as selected candidate regions, `final_labels`, `final_region_sources`, `final_region_veneer_overrides`, `final_region_locked_ids`, and `manual_edits`.
-- Hues is still partly candidate-driven, but final regions now support explicit veneer overrides, region locks, and an editable veneer inventory with stock dimensions and grain notes. The workflow still needs a true material-planning model for availability quantities and grain-aware placement, not just swatches and override maps.
+- Hues is still partly candidate-driven, but final regions now support explicit veneer overrides, region locks, and an editable veneer inventory with stock dimensions, stock counts, and grain notes. The workflow still needs a richer material-planning model for veneer purchasing, grain orientation decisions, and out-of-stock warnings.
 - A persisted ordered paint-event log now exists, and a `CompositeDesign` aggregate is written to the manifest. Final-design operations now update the aggregate directly, but the workspace still mirrors those fields for compatibility.
 - Manual merge/split edits are stored against numeric region IDs. Those IDs can become stale if the base candidate or painted source layers change, because the code replays edits onto a rebuilt label raster.
 - Subject settings are metadata only. `detail_budget`, `protect_eyes`, and `protect_nose` do not influence candidate generation, local refinement, cleanup, or locking.
@@ -68,11 +68,11 @@ Important shortcomings:
 
 Current bugs or likely user-facing failures:
 
-- Candidate paint order is now persisted, and cleanup now exposes direct final-region point edits, but the UI still does not expose a real paint-event history or full brush editing. The current workflow remains candidate-driven rather than design-driven.
-- The Hues palette still injects candidate SVGs into the DOM for region clicks. Large candidates can remain slow even though previews use thumbnails/canvas elsewhere.
+- Candidate paint order is now persisted, and cleanup now exposes direct final-region point edits, but the UI still does not expose a real paint-event history or full cleanup brush editing. The current workflow remains candidate-driven rather than design-driven.
+- The Hues palette now uses candidate hitmap canvas overlays for region clicks and drag-brush painting instead of injecting candidate SVG DOM. This removes the highest-cost region-selection rendering path.
 - Cleanup selection happens through a text/list of final regions plus a canvas hitmap, hover inspection, and drag interactions, but it still lacks brush painting.
 - The merge threshold preview can imply fewer pieces, but the actual manual merge operation only merges selected connected final labels. This distinction is easy to misunderstand in the UI.
-- Automatic veneer choice still defaults to nearest palette color, but the UI now lets the user edit the palette, set stock dimensions/grain notes, override a final region's veneer, and lock regions. A richer material workflow with availability quantities and grain-aware placement is still missing.
+- Automatic veneer choice still defaults to nearest palette color, but the UI now lets the user edit the palette, set stock dimensions/counts/grain notes, override a final region's veneer, and lock regions. Pack output now surfaces stock-count overages. A richer material workflow with purchasing quantities and grain-orientation review is still missing.
 - `packFinal()` now sends only the output directory, which matches the current packing backend that exports veneer sheets from the final design.
 - `composite_summary()` now counts merged contours rather than raw records, but the merged preview/SVG can still differ from the summary when clusters produce multiple disconnected contours.
 
@@ -88,11 +88,11 @@ Done:
 - Expected composite export validation errors now return 400 responses.
 - Candidate open/sync now updates the server-side active candidate.
 - Browser UI assets have been split out of `gallery_web.py` into static HTML, CSS, and JS files.
-- The browser has basic caching for candidate detail and SVG text.
+- The browser has basic caching for candidate detail and candidate hitmaps.
 - The worst image cache-busting behavior was removed.
 - Composite summary no longer requires fetching the full SVG just to count paths.
 - Merge/composite preview requests now use request IDs and `AbortController` so stale renders do not repaint newer state.
-- Compose region selection uses delegated SVG click handling instead of one click listener per path.
+- Hues region selection uses canvas hitmaps for click and drag-brush painting instead of SVG path interaction.
 - The Compose UI now exposes Clear selection for a candidate.
 - The Search tab has been simplified to a grid-first layout without a large preview canvas.
 - The README now documents the gallery, compose, and merge workflow and the default `8000` browser port.
@@ -121,7 +121,7 @@ Done:
 - Pack/export now block invalid physical sizes and invalid partitions instead of writing misleading fabrication files.
 - Pack/export now write traceable JSON and CSV piece manifests beside the SVG artifacts.
 - Veneer swatches can now be edited from the Hues tab and saved through `/api/workspace/veneer-palette`.
-- Pack output now uses per-veneer stock dimensions when sheet width/height are set on a veneer swatch.
+- Pack output now uses per-veneer stock dimensions/counts when set on a veneer swatch, and the browser summary reports stock-count overages after packing.
 - Cleanup warnings now draw directly over the canvas for small, thin, and complex/problem regions.
 - Cleanup now includes a bulk Merge suggestions action that applies the current valid small/thin merge suggestions.
 - Export and pack now validate edited vector contours for invalid geometry, zero area, and out-of-bounds coordinates before writing fabrication files.
@@ -130,15 +130,15 @@ Done:
 Partial:
 
 - Frontend testing now includes static asset smoke coverage, API workflow coverage, and a headless browser workflow smoke test.
-- The UI is more cache-friendly, but candidate selection still rerenders more of the Hues/Cleanup view than it should.
+- The UI is more cache-friendly, but bulk Hues actions and some Cleanup actions still rerender more of the view than they should.
 - The final plan is now a non-overlapping physical partition with vector contour validation, but shared-boundary provenance is still coarse when cleanup edits are replayed after shape changes.
 - Manual merge and split exist. Point editing, smoothing, hover inspection, drag selection, and basic geometry diagnostics are implemented, but richer geometry repair and shared-boundary editing are still not implemented.
 
 Open:
 
 - Expand browser-level interaction tests beyond the current smoke path.
-- Add richer canvas-based cleanup interaction, especially brush selection and sliver overlays.
-- Add more nuanced sliver repair, shared-boundary cleanup, and undo/revert for manual edits.
+- Add richer canvas-based cleanup interaction, especially cleanup brush selection and sliver overlays.
+- Add more nuanced sliver repair and shared-boundary cleanup. Undo now exists for reversible manual edits, but merge/split revert remains limited.
 - Remove or formalize old single-project commands and helpers.
 - Review and remove unused dependencies if they remain unreferenced after the current dependency pass.
 
@@ -351,33 +351,33 @@ Open:
 
 1. Avoid hydrating every candidate SVG as live DOM.
 
-  Status: Partial.
+  Status: Done for Hues interaction.
 
-   Current state: Compose still injects SVG for kept candidates so regions can be clicked, but the cleanup view now uses a canvas hitmap for region selection. The palette still degrades with many regions.
+   Current state: Hues candidate cards now use preview images plus canvas hitmaps for region selection. Cleanup also uses a final-design hitmap. SVG is retained for export/static inspection instead of browser hit-testing.
 
-   Suggested fix: render kept-candidate previews with Canvas too, then use a hitmap or binary region map for selection.
+   Remaining concern: Paint all and Clear still use a full Hues refresh; single-region clicks and drag-brush strokes update in place.
 
-2. Use one delegated event listener instead of one listener per path.
+2. Use canvas hitmaps instead of one listener per path.
 
-   Status: Done for click selection.
+   Status: Done.
 
-   Current state: each Compose SVG root has one click listener and reads `event.target.closest('path')`. Hover styling is handled by CSS.
+   Current state: Hues cards use one canvas click handler per candidate and read the candidate label hitmap. Cleanup uses the final label hitmap.
 
-3. Cache candidate details, SVG text, and preview images.
+3. Cache candidate details, candidate hitmaps, and preview images.
 
    Status: Partial.
 
-   What changed: browser-side detail and SVG text caches exist, and preview URLs no longer get unconditional `Date.now()` cache busting.
+   What changed: browser-side detail and candidate hitmap caches exist, candidate detail cache reads are keyed by selection revision, and preview URLs no longer get unconditional `Date.now()` cache busting.
 
-   Remaining work: add explicit cache invalidation keyed by candidate ID and generation, and avoid rebuilding cards on every selection change.
+   Remaining work: add explicit cache invalidation keyed by candidate generation for regenerated candidate assets.
 
-4. Do not rerender the full compose palette after every region click.
+4. Do not rerender the full Hues palette after every region click.
 
-   Status: Open.
+   Status: Done for single-region clicks.
 
-   Current behavior: `saveCandidateSelection()` still refreshes the workspace and rerenders the full visible mode.
+   Current behavior: single-region Hues clicks and drag-brush strokes update the clicked candidate overlay and final preview in place. Bulk Paint all and Clear still refresh the tab because they intentionally replace a candidate's whole selection.
 
-   Suggested fix: update the clicked candidate card selection state in place, then refresh only the composite preview and summary.
+   Remaining work: add browser tests that assert this no-full-rerender path on high-region candidates.
 
 5. Debounce and cancel merge preview renders.
 
@@ -419,16 +419,15 @@ Open:
 
 ## Performance Priority List
 
-1. Stop rebuilding the whole Compose palette after every selection.
-2. Cache candidate project loads on the backend.
-3. Move interactive selection to Canvas plus hitmap.
-4. Add explicit cache invalidation keyed by candidate generation.
+1. Add explicit cache invalidation keyed by candidate generation for regenerated assets.
+2. Expand browser performance tests around high-region candidates.
+3. Add Cleanup brush-style hitmap selection.
 
 Completed from the original performance list:
 
 - Stop cache-busting every image request.
-- Add browser caches for candidate detail and SVG text.
-- Replace per-path click listeners with delegated SVG click handling.
+- Add browser caches for candidate detail and candidate hitmaps.
+- Replace candidate SVG DOM interaction with canvas plus hitmap selection.
 - Add cancellation/versioning for composite preview renders.
 - Add a lightweight composite summary endpoint.
 - Add debouncing for the merge slider.
@@ -492,11 +491,15 @@ For a first useful digital pass from image to marquetry design, build around the
 
 4. Improve interactive performance.
 
-   Stop full palette rerenders on every click, and cache project loads where it still matters.
+   Single-region Hues clicks now update in place, and backend project loads are cached.
+   Remaining performance work is explicit cache invalidation and high-region stress coverage.
 
 5. Move selection interaction to Canvas plus hitmap.
 
-   This becomes important once candidates have many hundreds or thousands of regions.
+   Status: Done for Hues and Cleanup.
+
+   Browser smoke coverage now exercises Hues hitmap brush painting. Remaining work is
+   Cleanup brush-style hitmap selection and high-region stress coverage.
 
 6. Improve final geometry.
 

@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "strict": false,
+    "skipLibCheck": true
+  },
+  "include": ["src/marqflow/static/**/*.js", "src/marqflow/static/**/*.d.ts"]
+}

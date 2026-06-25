@@ -340,14 +340,15 @@ class GridWorkspace:
             fallback=_default_composite_design(),
         )
         workspace._apply_composite_design_state()
-        provenance_payload = manifest.get('final_region_sources', {})
-        workspace.final_region_sources = {
-            int(region_id): tuple(
-                (str(candidate_id), int(source_region_id))
-                for candidate_id, source_region_id in refs
-            )
-            for region_id, refs in provenance_payload.items()
-        }
+        if manifest.get('composite_design') is None:
+            provenance_payload = manifest.get('final_region_sources', {})
+            workspace.final_region_sources = {
+                int(region_id): tuple(
+                    (str(candidate_id), int(source_region_id))
+                    for candidate_id, source_region_id in refs
+                )
+                for region_id, refs in provenance_payload.items()
+            }
         for candidate_data in manifest.get('candidates', []):
             preset_data = candidate_data['preset']
             project_dir = _resolve_path(workspace_path, candidate_data['project_dir'])
@@ -431,6 +432,7 @@ class GridWorkspace:
                 'veneer_palette': [swatch.to_dict() for swatch in self.veneer_palette],
                 'cleanup_settings': self.cleanup_settings.to_dict(),
                 'subject_settings': self.subject_settings.to_dict(),
+                # Legacy mirrors retained for older tooling; CompositeDesign is authoritative.
                 'final_region_veneer_overrides': {
                     str(region_id): veneer_id
                     for region_id, veneer_id in self.final_region_veneer_overrides.items()
@@ -642,6 +644,73 @@ class GridWorkspace:
             self.composite_design.manual_edits.append(dict(payload))
         return payload
 
+    def undo_last_manual_edit(self) -> dict[str, Any] | None:
+        """Undo the latest reversible final-design edit."""
+
+        while self.manual_edits:
+            edit = self.manual_edits.pop()
+            op = str(edit.get('op', ''))
+            if op == 'set_size':
+                previous = edit.get('previous')
+                if isinstance(previous, dict):
+                    self.physical_size = PhysicalSize.from_dict(previous, self.physical_size)
+            elif op == 'set_cleanup':
+                self.cleanup_settings = CleanupSettings.from_dict(edit.get('previous'))
+            elif op == 'set_subject':
+                self.subject_settings = SubjectSettings.from_dict(edit.get('previous'))
+            elif op == 'set_veneer_palette':
+                previous_palette = edit.get('previous_palette')
+                if isinstance(previous_palette, list) and previous_palette:
+                    self.veneer_palette = [
+                        VeneerSwatch.from_dict(item) for item in previous_palette
+                    ]
+            elif op == 'set_veneer':
+                region_id = int(edit.get('region_id', 0))
+                previous = edit.get('previous_veneer_id')
+                if previous:
+                    self.final_region_veneer_overrides[region_id] = str(previous)
+                else:
+                    self.final_region_veneer_overrides.pop(region_id, None)
+            elif op == 'set_lock':
+                region_id = int(edit.get('region_id', 0))
+                if edit.get('previous_locked'):
+                    self.final_region_locked_ids.add(region_id)
+                else:
+                    self.final_region_locked_ids.discard(region_id)
+            elif op in {'move_point', 'smooth'}:
+                region_id = int(edit.get('region_id', 0))
+                previous_contour = edit.get('previous_contour')
+                if previous_contour:
+                    self.final_region_contour_overrides[region_id] = tuple(
+                        (float(point[0]), float(point[1])) for point in previous_contour
+                    )
+                else:
+                    self.final_region_contour_overrides.pop(region_id, None)
+            else:
+                self._remember_undone_edit(edit, reversible=False)
+                continue
+
+            self._sync_composite_from_fields()
+            self._remember_undone_edit(edit, reversible=True)
+            self.save()
+            return edit
+        return None
+
+    def _remember_undone_edit(self, edit: dict[str, Any], reversible: bool) -> None:
+        design = self._ensure_composite_design()
+        undone = {'undone_at_ns': time_ns(), 'reversible': reversible, **dict(edit)}
+        design.undone_manual_edits.append(undone)
+
+    def _sync_composite_from_fields(self) -> None:
+        design = self._ensure_composite_design()
+        design.physical_size = self.physical_size
+        design.veneer_palette = list(self.veneer_palette)
+        design.cleanup = self.cleanup_settings
+        design.final_region_veneer_overrides = dict(self.final_region_veneer_overrides)
+        design.final_region_locked_ids = set(self.final_region_locked_ids)
+        design.final_region_contour_overrides = dict(self.final_region_contour_overrides)
+        design.manual_edits = [dict(item) for item in self.manual_edits]
+
     def _apply_paint_events(self) -> None:
         """Rebuild candidate selections from the paint-event log."""
 
@@ -690,6 +759,11 @@ class GridWorkspace:
     def _build_composite_design(self) -> CompositeDesign:
         """Build the persisted final design aggregate from workspace state."""
 
+        undone_manual_edits = (
+            [dict(item) for item in self.composite_design.undone_manual_edits]
+            if self.composite_design is not None
+            else []
+        )
         return CompositeDesign(
             base_candidate_id=self.composite_base_candidate_id,
             physical_size=self.physical_size,
@@ -702,6 +776,7 @@ class GridWorkspace:
             final_region_locked_ids=set(self.final_region_locked_ids),
             manual_edits=[dict(item) for item in self.manual_edits],
             validation=self.composite_summary(),
+            undone_manual_edits=undone_manual_edits,
         )
 
     def _sync_composite_design(self) -> None:
@@ -730,6 +805,30 @@ class GridWorkspace:
         self.final_region_contour_overrides = dict(design.final_region_contour_overrides)
         self.final_region_locked_ids = set(design.final_region_locked_ids)
         self.manual_edits = [dict(item) for item in design.manual_edits]
+
+    def _composite_consistency(self) -> dict[str, Any]:
+        """Report whether mirrored workspace fields match the design aggregate."""
+
+        design = self._ensure_composite_design()
+        checks = {
+            'base_candidate_id': self.composite_base_candidate_id == design.base_candidate_id,
+            'physical_size': self.physical_size.to_dict() == design.physical_size.to_dict(),
+            'cleanup': self.cleanup_settings.to_dict() == design.cleanup.to_dict(),
+            'veneer_palette': [item.to_dict() for item in self.veneer_palette]
+            == [item.to_dict() for item in design.veneer_palette],
+            'paint_events': [event.to_dict() for event in self.paint_events]
+            == [event.to_dict() for event in design.paint_events],
+            'final_region_sources': self.final_region_sources == design.final_region_sources,
+            'final_region_veneer_overrides': self.final_region_veneer_overrides
+            == design.final_region_veneer_overrides,
+            'final_region_contour_overrides': self.final_region_contour_overrides
+            == design.final_region_contour_overrides,
+            'final_region_locked_ids': self.final_region_locked_ids
+            == design.final_region_locked_ids,
+            'manual_edits': self.manual_edits == design.manual_edits,
+        }
+        mismatches = [name for name, passed in checks.items() if not passed]
+        return {'consistent': not mismatches, 'mismatches': mismatches}
 
     def _final_image_and_labels(
         self,
@@ -1155,28 +1254,37 @@ class GridWorkspace:
     def set_physical_size(self, width: float, height: float, unit: str) -> None:
         """Set the physical size of the final piece."""
 
+        previous = self.physical_size.to_dict()
         self.physical_size = PhysicalSize(width=float(width), height=float(height), unit=unit)
         design = self._ensure_composite_design()
         design.physical_size = self.physical_size
         self._record_manual_edit(
-            {'op': 'set_size', 'width': float(width), 'height': float(height), 'unit': unit}
+            {
+                'op': 'set_size',
+                'width': float(width),
+                'height': float(height),
+                'unit': unit,
+                'previous': previous,
+            }
         )
         self.save()
 
     def set_cleanup_settings(self, settings: CleanupSettings) -> None:
         """Persist cleanup thresholds used for highlighting and export."""
 
+        previous = self.cleanup_settings.to_dict()
         self.cleanup_settings = settings
         design = self._ensure_composite_design()
         design.cleanup = settings
-        self._record_manual_edit({'op': 'set_cleanup', **settings.to_dict()})
+        self._record_manual_edit({'op': 'set_cleanup', 'previous': previous, **settings.to_dict()})
         self.save()
 
     def set_subject_settings(self, settings: SubjectSettings) -> None:
         """Persist subject-focus metadata."""
 
+        previous = self.subject_settings.to_dict()
         self.subject_settings = settings
-        self._record_manual_edit({'op': 'set_subject', **settings.to_dict()})
+        self._record_manual_edit({'op': 'set_subject', 'previous': previous, **settings.to_dict()})
         self.save()
 
     def set_veneer_palette(self, palette: list[VeneerSwatch]) -> None:
@@ -1195,7 +1303,7 @@ class GridWorkspace:
                 raise ValueError(f'duplicate veneer ID: {veneer_id}')
             seen.add(veneer_id)
             color = tuple(max(0, min(255, int(value))) for value in swatch.color_rgb)
-            if swatch.sheet_width < 0 or swatch.sheet_height < 0:
+            if swatch.sheet_width < 0 or swatch.sheet_height < 0 or swatch.sheet_count < 0:
                 raise ValueError('veneer sheet dimensions cannot be negative')
             normalized.append(
                 VeneerSwatch(
@@ -1204,11 +1312,13 @@ class GridWorkspace:
                     color_rgb=color,
                     sheet_width=float(swatch.sheet_width),
                     sheet_height=float(swatch.sheet_height),
+                    sheet_count=max(0, int(swatch.sheet_count)),
                     grain_direction=swatch.grain_direction.strip(),
                     notes=swatch.notes.strip(),
                 )
             )
 
+        previous_palette = [swatch.to_dict() for swatch in self.veneer_palette]
         self.veneer_palette = normalized
         valid_ids = {swatch.veneer_id for swatch in normalized}
         self.final_region_veneer_overrides = {
@@ -1220,7 +1330,11 @@ class GridWorkspace:
         design.veneer_palette = list(normalized)
         design.final_region_veneer_overrides = dict(self.final_region_veneer_overrides)
         self._record_manual_edit(
-            {'op': 'set_veneer_palette', 'veneer_ids': [swatch.veneer_id for swatch in normalized]}
+            {
+                'op': 'set_veneer_palette',
+                'veneer_ids': [swatch.veneer_id for swatch in normalized],
+                'previous_palette': previous_palette,
+            }
         )
         self.save()
 
@@ -1231,6 +1345,7 @@ class GridWorkspace:
         if int(region_id) not in np.unique(labels):
             return False
         design = self._ensure_composite_design()
+        previous_veneer_id = self.final_region_veneer_overrides.get(int(region_id))
         if veneer_id is None:
             self.final_region_veneer_overrides.pop(int(region_id), None)
             design.final_region_veneer_overrides.pop(int(region_id), None)
@@ -1239,7 +1354,12 @@ class GridWorkspace:
             design.final_region_veneer_overrides[int(region_id)] = str(veneer_id)
         self.final_labels = labels
         self._record_manual_edit(
-            {'op': 'set_veneer', 'region_id': int(region_id), 'veneer_id': veneer_id}
+            {
+                'op': 'set_veneer',
+                'region_id': int(region_id),
+                'veneer_id': veneer_id,
+                'previous_veneer_id': previous_veneer_id,
+            }
         )
         self.save()
         return True
@@ -1252,6 +1372,7 @@ class GridWorkspace:
             return False
         region_id = int(region_id)
         design = self._ensure_composite_design()
+        previous_locked = region_id in self.final_region_locked_ids
         if locked:
             self.final_region_locked_ids.add(region_id)
             design.final_region_locked_ids.add(region_id)
@@ -1259,7 +1380,14 @@ class GridWorkspace:
             self.final_region_locked_ids.discard(region_id)
             design.final_region_locked_ids.discard(region_id)
         self.final_labels = labels
-        self._record_manual_edit({'op': 'set_lock', 'region_id': region_id, 'locked': bool(locked)})
+        self._record_manual_edit(
+            {
+                'op': 'set_lock',
+                'region_id': region_id,
+                'locked': bool(locked),
+                'previous_locked': previous_locked,
+            }
+        )
         self.save()
         return True
 
@@ -1277,6 +1405,9 @@ class GridWorkspace:
         if region is None or not region.contour:
             return False
         contour = [tuple(point) for point in region.contour]
+        previous_contour = [list(point) for point in self.final_region_contour_overrides.get(
+            int(region_id), region.contour
+        )]
         if point_index < 0 or point_index >= len(contour):
             return False
         contour[point_index] = (float(x), float(y))
@@ -1292,6 +1423,7 @@ class GridWorkspace:
                 'point_index': int(point_index),
                 'x': float(x),
                 'y': float(y),
+                'previous_contour': previous_contour,
             }
         )
         self.save()
@@ -1304,6 +1436,9 @@ class GridWorkspace:
         region = records.get(int(region_id))
         if region is None or not region.contour:
             return False
+        previous_contour = [list(point) for point in self.final_region_contour_overrides.get(
+            int(region_id), region.contour
+        )]
         simplified = approximate_polygon(np.asarray(region.contour), tolerance=float(tolerance))
         points = [(float(col), float(row)) for row, col in simplified]
         if len(points) < 3:
@@ -1314,7 +1449,12 @@ class GridWorkspace:
         design = self._ensure_composite_design()
         design.final_region_contour_overrides[int(region_id)] = tuple(points)
         self._record_manual_edit(
-            {'op': 'smooth', 'region_id': int(region_id), 'tolerance': float(tolerance)}
+            {
+                'op': 'smooth',
+                'region_id': int(region_id),
+                'tolerance': float(tolerance),
+                'previous_contour': previous_contour,
+            }
         )
         self.save()
         return True
@@ -1464,6 +1604,10 @@ class GridWorkspace:
 
         if self.physical_size.width <= 0 or self.physical_size.height <= 0:
             raise ValueError('physical size must be positive before export')
+        consistency = self._composite_consistency()
+        if not consistency['consistent']:
+            mismatches = ', '.join(consistency['mismatches'])
+            raise ValueError(f'composite design state is inconsistent: {mismatches}')
         validation = self._partition_validation(labels)
         if not validation['partition_valid']:
             raise ValueError(
@@ -1580,6 +1724,7 @@ class GridWorkspace:
             'final_region_count': len(final_regions),
             'partition_validation': self._partition_validation(self.final_labels),
             'vector_validation': self._vector_validation() if final_regions else {},
+            'composite_consistency': self._composite_consistency(),
             'composite_design': self.composite_design.to_dict()
             if self.composite_design is not None
             else self._build_composite_design().to_dict(),
@@ -1632,6 +1777,19 @@ class GridWorkspace:
             'size': {'width': region_map.size[0], 'height': region_map.size[1]},
             'region_count': len(region_map.regions),
             'regions': regions,
+        }
+
+    def candidate_hitmap(self, candidate_id: str) -> dict[str, Any] | None:
+        """Return a candidate label raster for canvas hit-testing."""
+
+        candidate = self.candidate_by_id(candidate_id)
+        if candidate is None:
+            return None
+        labels = _load_project_cached(str(candidate.project_dir)).labels
+        return {
+            'width': int(labels.shape[1]),
+            'height': int(labels.shape[0]),
+            'labels': labels.astype(int).tolist(),
         }
 
     def _composite_base_candidate(self) -> GridCandidate | None:
@@ -1746,6 +1904,7 @@ class GridWorkspace:
 
         small_region_ids: list[int] = []
         thin_region_ids: list[int] = []
+        sliver_region_ids: list[int] = []
         complex_region_ids: list[int] = []
         hole_region_ids: list[int] = []
         disconnected_region_ids: list[int] = []
@@ -1756,6 +1915,12 @@ class GridWorkspace:
         )
         region_by_id = {record.region_id: record for record in records}
         for record in records:
+            bbox_width_physical = (record.bbox[2] - record.bbox[0]) / max(1.0, px_per_unit_x)
+            bbox_height_physical = (record.bbox[3] - record.bbox[1]) / max(1.0, px_per_unit_y)
+            bbox_area_physical = max(0.0, bbox_width_physical * bbox_height_physical)
+            fill_ratio = (
+                record.area_physical / bbox_area_physical if bbox_area_physical > 0 else 1.0
+            )
             if (
                 self.cleanup_settings.highlight_small_area > 0
                 and record.area_physical <= self.cleanup_settings.highlight_small_area
@@ -1763,13 +1928,19 @@ class GridWorkspace:
                 small_region_ids.append(record.region_id)
             if (
                 self.cleanup_settings.highlight_thin_width > 0
-                and min(
-                    (record.bbox[2] - record.bbox[0]) / max(1.0, px_per_unit_x),
-                    (record.bbox[3] - record.bbox[1]) / max(1.0, px_per_unit_y),
-                )
+                and min(bbox_width_physical, bbox_height_physical)
                 <= self.cleanup_settings.highlight_thin_width
             ):
                 thin_region_ids.append(record.region_id)
+            if (
+                record.region_id in thin_region_ids
+                or (
+                    self.cleanup_settings.highlight_small_area > 0
+                    and fill_ratio < 0.35
+                    and record.area_physical <= self.cleanup_settings.highlight_small_area * 4
+                )
+            ):
+                sliver_region_ids.append(record.region_id)
             if len(record.contour) > 80:
                 complex_region_ids.append(record.region_id)
             if record.hole_count > 0:
@@ -1814,6 +1985,7 @@ class GridWorkspace:
             'vector_validation': vector_validation,
             'small_region_ids': small_region_ids,
             'thin_region_ids': thin_region_ids,
+            'sliver_region_ids': sliver_region_ids,
             'complex_region_ids': complex_region_ids,
             'hole_region_ids': hole_region_ids,
             'disconnected_region_ids': disconnected_region_ids,

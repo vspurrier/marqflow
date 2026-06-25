@@ -29,7 +29,9 @@ from .marquetry import (
     _render_sheet_svg,
     build_design_regions,
     default_veneer_palette,
+    grain_direction_for_veneer,
     labels_to_svg_path,
+    sheet_count_for_veneer,
     sheet_size_for_veneer,
 )
 from .marquetry import pack_region_sheets as _pack_region_sheets
@@ -90,6 +92,10 @@ def _safe_polygon(points: tuple[tuple[float, float], ...]) -> Polygon | None:
 def _annotate_sheet_metrics(sheets: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Add geometry metrics to packed sheets without changing placements."""
 
+    sheets_by_veneer: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for sheet in sheets:
+        sheets_by_veneer[str(sheet.get('veneer_id', ''))].append(sheet)
+
     for sheet in sheets:
         placed_polygons = []
         piece_area = 0.0
@@ -121,6 +127,10 @@ def _annotate_sheet_metrics(sheets: list[dict[str, Any]]) -> list[dict[str, Any]
         sheet['utilization'] = piece_area / sheet_area if sheet_area else 0.0
         sheet['overlap_area'] = overlap_area
         sheet['placement_valid'] = overlap_area <= 1e-6
+        available = int(sheet.get('available_sheet_count') or 0)
+        sheet_index = sheets_by_veneer[str(sheet.get('veneer_id', ''))].index(sheet) + 1
+        sheet['sheet_number_for_veneer'] = sheet_index
+        sheet['over_stock_capacity'] = bool(available and sheet_index > available)
     return sheets
 
 
@@ -245,6 +255,7 @@ def _pack_with_external_nester(
             physical_size,
             fallback_sheet,
         )
+        grain_direction = grain_direction_for_veneer(veneer_id, palette)
         nest_input_svg = _nest_input_svg(veneer_id, pieces, sheet_width, sheet_height)
         sheet_svg = _run_external_nester(command_template, nest_input_svg)
         sheets.append(
@@ -252,6 +263,9 @@ def _pack_with_external_nester(
                 'veneer_id': veneer_id,
                 'sheet_width': sheet_width,
                 'sheet_height': sheet_height,
+                'available_sheet_count': sheet_count_for_veneer(veneer_id, palette),
+                'grain_direction': grain_direction,
+                'rotation_allowed': not bool(grain_direction),
                 'pieces': pieces,
                 'sheet_svg': sheet_svg,
                 'nest_input_svg': nest_input_svg,
