@@ -41,6 +41,9 @@ const el = /** @type {Record<string, any>} */ ({
   splitSelected: document.getElementById('split-selected'),
   lockSelected: document.getElementById('lock-selected'),
   unlockSelected: document.getElementById('unlock-selected'),
+  focusMultiplier: document.getElementById('focus-multiplier'),
+  focusSelected: document.getElementById('focus-selected'),
+  applyFocus: document.getElementById('apply-focus'),
   applySuggestions: document.getElementById('apply-suggestions'),
   clearSelection: document.getElementById('clear-selection'),
   designCanvas: document.getElementById('design-canvas'),
@@ -488,6 +491,50 @@ async function lockSelected(locked) {
   render();
 }
 
+async function focusSelected() {
+  if (!selectedRegionIds.size) {
+    setStatus('Select at least one region for a focus zone.', true);
+    return;
+  }
+  const response = await fetch('/api/design/detail-zone-for-regions', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      region_ids: [...selectedRegionIds],
+      name: 'Selected focus',
+      detail_multiplier: Number(el.focusMultiplier.value || 3),
+    }),
+  });
+  if (!response.ok) {
+    setStatus(await response.text(), true);
+    return;
+  }
+  workspace = await response.json();
+  await loadHitmap();
+  setStatus('Created focus zone from selected regions.');
+  render();
+}
+
+async function applyFocus() {
+  const response = await fetch('/api/design/apply-detail-zones', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      max_splits: 10,
+      compactness: Number(el.splitCompactness.value || 10),
+    }),
+  });
+  if (!response.ok) {
+    setStatus(await response.text(), true);
+    return;
+  }
+  workspace = await response.json();
+  selectedRegionIds.clear();
+  await loadHitmap();
+  setStatus(`Applied ${workspace.applied_detail_split_count || 0} focus split(s).`);
+  render();
+}
+
 async function applySuggestions() {
   const response = await fetch('/api/design/apply-merge-suggestions', {
     method: 'POST',
@@ -540,6 +587,8 @@ el.mergeSelected.addEventListener('click', mergeSelected);
 el.splitSelected.addEventListener('click', splitSelected);
 el.lockSelected.addEventListener('click', () => lockSelected(true));
 el.unlockSelected.addEventListener('click', () => lockSelected(false));
+el.focusSelected.addEventListener('click', focusSelected);
+el.applyFocus.addEventListener('click', applyFocus);
 el.applySuggestions.addEventListener('click', applySuggestions);
 el.clearSelection.addEventListener('click', () => {
   selectedRegionIds.clear();

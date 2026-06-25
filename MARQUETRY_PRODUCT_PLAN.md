@@ -67,6 +67,8 @@ Implemented now:
 - bounded auto-merge cleanup for suggested small/thin regions
 - final label hitmap API and browser click/drag selection tooling
 - persisted rectangular detail zones
+- detail zones created from selected regions
+- focus-zone-driven local split pass
 - raster shared-boundary metrics
 - partition validation
 - physical-unit SVG export
@@ -77,10 +79,10 @@ Implemented now:
 
 1. Use subject/detail zones during candidate generation.
 
-   Rectangular focus zones are persisted and selected final regions can be
-   split manually. The SLIC candidate generator is still global. Marquetry
-   portraits need local detail budgets so eyes, nose, mouth, and other focal
-   areas preserve more structure than background or clothing.
+   Rectangular focus zones can be created from selected regions and applied to
+   split intersecting final regions. The SLIC candidate generator is still
+   global; future candidate generation should use focus zones before the final
+   design is seeded.
 
 2. Replace raster boundary metrics with shared-boundary vector geometry.
 

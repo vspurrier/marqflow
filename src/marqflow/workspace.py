@@ -396,6 +396,33 @@ class MarquetryWorkspace:
         self.save()
         return zone
 
+    def add_detail_zone_for_regions(
+        self,
+        region_ids: list[int] | set[int],
+        name: str = 'Focus zone',
+        detail_multiplier: float = 2.0,
+    ) -> DetailZone:
+        """Create a rectangular focus zone around the selected current regions."""
+
+        if self.design is None:
+            raise ValueError('create a design first')
+        selected_region_ids = {int(region_id) for region_id in region_ids}
+        if not selected_region_ids:
+            raise ValueError('choose at least one region')
+        labels = self.design_labels()
+        missing = sorted(selected_region_ids - self._current_region_ids())
+        if missing:
+            raise ValueError(f'unknown region ids: {missing}')
+        mask = np.isin(labels, list(selected_region_ids))
+        ys, xs = np.nonzero(mask)
+        if not len(xs):
+            raise ValueError('selected regions have no pixels')
+        return self.add_detail_zone(
+            name=name,
+            bbox=(int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1),
+            detail_multiplier=detail_multiplier,
+        )
+
     def _current_region_ids(self) -> set[int]:
         return {int(value) for value in np.unique(self.design_labels()) if int(value) > 0}
 
@@ -629,6 +656,45 @@ class MarquetryWorkspace:
             )
         )
         self.save()
+
+    def apply_detail_zones(self, max_splits: int = 10, compactness: float = 10.0) -> int:
+        """Split unlocked regions intersecting persisted detail zones."""
+
+        if self.design is None:
+            raise ValueError('create a design first')
+        applied = 0
+        for zone in self.design.detail_zones:
+            if applied >= max_splits:
+                break
+            labels = self.design_labels()
+            x0, y0, x1, y1 = zone.bbox
+            zone_labels = labels[y0:y1, x0:x1]
+            region_ids = [
+                int(value)
+                for value in np.unique(zone_labels)
+                if int(value) > 0 and int(value) not in self.design.locked_region_ids
+            ]
+            if not region_ids:
+                continue
+            region_ids.sort(
+                key=lambda region_id: int(np.count_nonzero(labels == region_id)),
+                reverse=True,
+            )
+            for region_id in region_ids:
+                if applied >= max_splits:
+                    break
+                target_parts = max(2, int(round(zone.detail_multiplier)))
+                try:
+                    self.split_region(
+                        region_id,
+                        target_parts=target_parts,
+                        compactness=compactness,
+                    )
+                except ValueError:
+                    continue
+                applied += 1
+                break
+        return applied
 
     def undo(self) -> None:
         """Undo the most recent persisted design edit."""

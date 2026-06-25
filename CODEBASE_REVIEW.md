@@ -53,6 +53,8 @@ uv run pytest -q
 - Bounded auto-merge cleanup using merge suggestions.
 - Final label hitmap API and canvas click/drag selection.
 - Persisted rectangular detail zones.
+- Detail zones can be created from selected regions.
+- Detail zones can drive bounded local split passes.
 - Raster shared-boundary metrics with physical edge lengths.
 - Veneer-grouped SVG export in physical units.
 - `rectpack` bounding-box pack manifest grouped by veneer.
@@ -75,9 +77,9 @@ uv run pytest -q
 
 3. Subject/detail logic.
 
-   Detail zones are persisted and selected regions can be split manually, but
-   candidate generation does not yet use focus zones to allocate more regions
-   locally.
+   Detail zones can drive local splits after a design exists. Candidate
+   generation does not yet use focus zones to allocate more regions before
+   seeding the final design.
 
 4. Browser selection tooling.
 

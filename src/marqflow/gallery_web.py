@@ -102,6 +102,17 @@ class DetailZoneRequest(BaseModel):
     detail_multiplier: float = Field(default=2.0, ge=1.0)
 
 
+class DetailZoneForRegionsRequest(BaseModel):
+    region_ids: list[int] = Field(min_length=1)
+    name: str = 'Focus zone'
+    detail_multiplier: float = Field(default=2.0, ge=1.0)
+
+
+class ApplyDetailZonesRequest(BaseModel):
+    max_splits: int = Field(default=10, ge=1, le=200)
+    compactness: float = Field(default=10.0, gt=0)
+
+
 class PackRequest(BaseModel):
     output_dir: str = './exported'
 
@@ -310,6 +321,33 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return JSONResponse(ws.summary())
+
+    @app.post('/api/design/detail-zone-for-regions')
+    def add_detail_zone_for_regions(request: DetailZoneForRegionsRequest) -> JSONResponse:
+        ws = _load_workspace(workspace_path)
+        try:
+            ws.add_detail_zone_for_regions(
+                request.region_ids,
+                name=request.name,
+                detail_multiplier=request.detail_multiplier,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return JSONResponse(ws.summary())
+
+    @app.post('/api/design/apply-detail-zones')
+    def apply_detail_zones(request: ApplyDetailZonesRequest) -> JSONResponse:
+        ws = _load_workspace(workspace_path)
+        try:
+            applied = ws.apply_detail_zones(
+                max_splits=request.max_splits,
+                compactness=request.compactness,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        payload = ws.summary()
+        payload['applied_detail_split_count'] = applied
+        return JSONResponse(payload)
 
     @app.get('/api/design/boundaries')
     def design_boundaries() -> JSONResponse:

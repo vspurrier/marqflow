@@ -211,6 +211,24 @@ def test_split_and_lock_are_undoable(tmp_path: Path) -> None:
     assert workspace.summary()['validation']['region_count'] == 4
 
 
+def test_focus_zone_from_regions_drives_local_split(tmp_path: Path) -> None:
+    image_path = tmp_path / 'source.png'
+    _fixture_image(image_path)
+    workspace = MarquetryWorkspace.create(image_path, tmp_path / 'workspace', max_edge=64)
+    candidate = workspace.generate_candidate(target_regions=4, compactness=8.0)
+    workspace.create_design(candidate.candidate_id, PhysicalSize(width=8, height=8, unit='in'))
+    workspace._write_design_labels(_four_region_labels())
+    workspace.design.veneer_assignments = {1: 'maple', 2: 'cherry', 3: 'walnut', 4: 'black-dyed'}
+    workspace.save()
+
+    zone = workspace.add_detail_zone_for_regions([1], name='left eye', detail_multiplier=3)
+    assert zone.bbox == (0, 0, 24, 24)
+    applied = workspace.apply_detail_zones(max_splits=1, compactness=8)
+    assert applied == 1
+    assert workspace.summary()['validation']['valid'] is True
+    assert workspace.summary()['validation']['region_count'] > 4
+
+
 def test_merge_requires_connected_regions(tmp_path: Path) -> None:
     image_path = tmp_path / 'source.png'
     _fixture_image(image_path)
@@ -364,6 +382,21 @@ def test_api_merge_undo_and_hitmap(tmp_path: Path) -> None:
     )
     assert split_response.status_code == 200
     assert split_response.json()['validation']['region_count'] > 4
+
+    client.post('/api/design/undo')
+    focus_response = client.post(
+        '/api/design/detail-zone-for-regions',
+        json={'region_ids': [1], 'name': 'eye', 'detail_multiplier': 3},
+    )
+    assert focus_response.status_code == 200
+    assert focus_response.json()['design']['detail_zones'][-1]['name'] == 'eye'
+
+    apply_focus_response = client.post(
+        '/api/design/apply-detail-zones',
+        json={'max_splits': 1, 'compactness': 8},
+    )
+    assert apply_focus_response.status_code == 200
+    assert apply_focus_response.json()['applied_detail_split_count'] == 1
 
 
 def test_api_size_and_veneer_inventory(tmp_path: Path) -> None:

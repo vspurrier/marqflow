@@ -62,6 +62,7 @@ interface WorkspaceSummary {
     }>;
   };
   applied_merge_count?: number;
+  applied_detail_split_count?: number;
 }
 
 interface DesignHitmap {
