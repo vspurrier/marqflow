@@ -44,6 +44,8 @@ const el = /** @type {Record<string, any>} */ ({
   focusMultiplier: document.getElementById('focus-multiplier'),
   focusSelected: document.getElementById('focus-selected'),
   applyFocus: document.getElementById('apply-focus'),
+  repairArea: document.getElementById('repair-area'),
+  repairSmall: document.getElementById('repair-small'),
   applySuggestions: document.getElementById('apply-suggestions'),
   clearSelection: document.getElementById('clear-selection'),
   designCanvas: document.getElementById('design-canvas'),
@@ -535,6 +537,26 @@ async function applyFocus() {
   render();
 }
 
+async function repairSmall() {
+  const response = await fetch('/api/design/repair-small-regions', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      max_area: Number(el.repairArea.value || 0.05),
+      max_repairs: 25,
+    }),
+  });
+  if (!response.ok) {
+    setStatus(await response.text(), true);
+    return;
+  }
+  workspace = await response.json();
+  selectedRegionIds.clear();
+  await loadHitmap();
+  setStatus(`Repaired ${workspace.repaired_region_count || 0} small region(s).`);
+  render();
+}
+
 async function applySuggestions() {
   const response = await fetch('/api/design/apply-merge-suggestions', {
     method: 'POST',
@@ -589,6 +611,7 @@ el.lockSelected.addEventListener('click', () => lockSelected(true));
 el.unlockSelected.addEventListener('click', () => lockSelected(false));
 el.focusSelected.addEventListener('click', focusSelected);
 el.applyFocus.addEventListener('click', applyFocus);
+el.repairSmall.addEventListener('click', repairSmall);
 el.applySuggestions.addEventListener('click', applySuggestions);
 el.clearSelection.addEventListener('click', () => {
   selectedRegionIds.clear();

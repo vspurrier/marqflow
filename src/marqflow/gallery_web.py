@@ -113,6 +113,11 @@ class ApplyDetailZonesRequest(BaseModel):
     compactness: float = Field(default=10.0, gt=0)
 
 
+class RepairSmallRegionsRequest(BaseModel):
+    max_area: float = Field(default=0.05, gt=0)
+    max_repairs: int = Field(default=25, ge=1, le=500)
+
+
 class PackRequest(BaseModel):
     output_dir: str = './exported'
 
@@ -347,6 +352,20 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         payload = ws.summary()
         payload['applied_detail_split_count'] = applied
+        return JSONResponse(payload)
+
+    @app.post('/api/design/repair-small-regions')
+    def repair_small_regions(request: RepairSmallRegionsRequest) -> JSONResponse:
+        ws = _load_workspace(workspace_path)
+        try:
+            applied = ws.repair_small_regions(
+                max_area=request.max_area,
+                max_repairs=request.max_repairs,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        payload = ws.summary()
+        payload['repaired_region_count'] = applied
         return JSONResponse(payload)
 
     @app.get('/api/design/boundaries')

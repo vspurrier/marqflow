@@ -229,6 +229,32 @@ def test_focus_zone_from_regions_drives_local_split(tmp_path: Path) -> None:
     assert workspace.summary()['validation']['region_count'] > 4
 
 
+def test_repair_small_regions_merges_slivers(tmp_path: Path) -> None:
+    image_path = tmp_path / 'source.png'
+    _fixture_image(image_path)
+    workspace = MarquetryWorkspace.create(image_path, tmp_path / 'workspace', max_edge=64)
+    candidate = workspace.generate_candidate(target_regions=4, compactness=8.0)
+    workspace.create_design(candidate.candidate_id, PhysicalSize(width=8, height=8, unit='in'))
+    labels = _four_region_labels()
+    labels[0:2, 0:2] = 5
+    workspace._write_design_labels(labels)
+    workspace.design.veneer_assignments = {
+        1: 'maple',
+        2: 'cherry',
+        3: 'walnut',
+        4: 'black-dyed',
+        5: 'maple',
+    }
+    workspace.save()
+
+    before = workspace.summary()['validation']['region_count']
+    repaired = workspace.repair_small_regions(max_area=0.12, max_repairs=5)
+
+    assert repaired == 1
+    assert workspace.summary()['validation']['valid'] is True
+    assert workspace.summary()['validation']['region_count'] == before - 1
+
+
 def test_merge_requires_connected_regions(tmp_path: Path) -> None:
     image_path = tmp_path / 'source.png'
     _fixture_image(image_path)
@@ -397,6 +423,13 @@ def test_api_merge_undo_and_hitmap(tmp_path: Path) -> None:
     )
     assert apply_focus_response.status_code == 200
     assert apply_focus_response.json()['applied_detail_split_count'] == 1
+
+    repair_response = client.post(
+        '/api/design/repair-small-regions',
+        json={'max_area': 0.05, 'max_repairs': 2},
+    )
+    assert repair_response.status_code == 200
+    assert 'repaired_region_count' in repair_response.json()
 
 
 def test_api_size_and_veneer_inventory(tmp_path: Path) -> None:

@@ -51,6 +51,7 @@ uv run pytest -q
   detail-zone, lock, and split operations.
 - Merge suggestions for small/thin regions, preferring same-veneer neighbors.
 - Bounded auto-merge cleanup using merge suggestions.
+- Physical-area sliver repair that respects locks.
 - Final label hitmap API and canvas click/drag selection.
 - Persisted rectangular detail zones.
 - Detail zones can be created from selected regions.
@@ -71,9 +72,9 @@ uv run pytest -q
 
 2. Real cleanup tools beyond merge.
 
-   Merge, targeted split, lock/unlock, bounded auto-merge, and undo now exist.
-   Smooth, simplify, sliver repair, point editing, and shared-boundary-safe
-   cleanup are still open.
+   Merge, targeted split, lock/unlock, physical-area sliver repair, bounded
+   auto-merge, and undo now exist. Smooth, simplify, point editing, and
+   shared-boundary-safe cleanup are still open.
 
 3. Subject/detail logic.
 

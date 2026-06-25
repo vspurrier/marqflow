@@ -84,6 +84,7 @@ The browser UI is deliberately minimal in this rewrite:
 - lock/unlock selected regions
 - create and apply focus zones for local detail
 - auto-merge small/thin suggested regions
+- repair regions below a physical area threshold
 - export SVG
 - write the bounding-box pack manifest
 

@@ -818,6 +818,66 @@ class MarquetryWorkspace:
             applied += 1
         return applied
 
+    def repair_small_regions(
+        self,
+        max_area: float = 0.05,
+        max_repairs: int = 25,
+    ) -> int:
+        """Merge regions below a physical area threshold into a neighboring region."""
+
+        if self.design is None:
+            raise ValueError('create a design first')
+        applied = 0
+        for _ in range(max(0, int(max_repairs))):
+            regions = build_regions(self.source_array(), self.design_labels(), self.design)
+            by_id = {region.region_id: region for region in regions}
+            small_regions = [
+                region
+                for region in regions
+                if region.area_physical <= max_area and not region.locked
+            ]
+            if not small_regions:
+                break
+            boundaries = self.boundary_summary()['boundaries']
+            boundary_lengths: dict[tuple[int, int], float] = {}
+            for boundary in boundaries:
+                pair = tuple(sorted((int(boundary['region_a']), int(boundary['region_b']))))
+                boundary_lengths[pair] = float(boundary['edge_length_physical'])
+            small_regions.sort(key=lambda region: region.area_physical)
+            repaired = False
+            for region in small_regions:
+                neighbors = [
+                    by_id[neighbor_id]
+                    for neighbor_id in region.neighbors
+                    if neighbor_id in by_id and not by_id[neighbor_id].locked
+                ]
+                if not neighbors:
+                    continue
+                same_veneer = [
+                    neighbor for neighbor in neighbors if neighbor.veneer_id == region.veneer_id
+                ]
+                candidates = same_veneer or neighbors
+                target = max(
+                    candidates,
+                    key=lambda neighbor: (
+                        boundary_lengths.get(
+                            tuple(sorted((region.region_id, neighbor.region_id))),
+                            0.0,
+                        ),
+                        neighbor.area_physical,
+                    ),
+                )
+                try:
+                    self.merge_regions([region.region_id, target.region_id])
+                except ValueError:
+                    continue
+                applied += 1
+                repaired = True
+                break
+            if not repaired:
+                break
+        return applied
+
     def regions(self) -> list[dict[str, Any]]:
         if self.design is None:
             return []

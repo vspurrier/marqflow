@@ -63,6 +63,7 @@ interface WorkspaceSummary {
   };
   applied_merge_count?: number;
   applied_detail_split_count?: number;
+  repaired_region_count?: number;
 }
 
 interface DesignHitmap {
