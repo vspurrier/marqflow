@@ -64,6 +64,7 @@ const el = /** @type {Record<string, any>} */ ({
   svgSimplify: document.getElementById('svg-simplify'),
   viewSvg: document.getElementById('view-svg'),
   pack: document.getElementById('pack'),
+  packSummary: document.getElementById('pack-summary'),
   packOutput: document.getElementById('pack-output'),
 });
 
@@ -786,8 +787,38 @@ async function pack() {
     setStatus(await response.text(), true);
     return;
   }
-  el.packOutput.textContent = JSON.stringify(await response.json(), null, 2);
-  setStatus('Pack manifest written.');
+  const manifest = await response.json();
+  renderPackSummary(manifest);
+  el.packOutput.textContent = JSON.stringify(manifest, null, 2);
+  const warnings = manifest.sheets.filter((sheet) => sheet.over_stock_capacity).length;
+  setStatus(
+    warnings ? `Pack manifest written with ${warnings} stock warning(s).` : 'Pack manifest written.',
+    warnings > 0,
+  );
+}
+
+/** @param {PackManifest} manifest */
+function renderPackSummary(manifest) {
+  el.packSummary.innerHTML = '';
+  if (!manifest.sheets?.length) {
+    el.packSummary.textContent = 'No pieces to pack.';
+    return;
+  }
+  for (const sheet of manifest.sheets) {
+    const unplaced = sheet.piece_count - sheet.placed_piece_count;
+    const card = document.createElement('article');
+    card.className = `pack-card${sheet.over_stock_capacity ? ' warning' : ''}`;
+    card.innerHTML = `
+      <strong>${sheet.veneer_id}</strong>
+      <span>${sheet.placed_piece_count}/${sheet.piece_count} pieces placed</span>
+      <span>${sheet.sheet_count_used} sheet(s) used${
+        sheet.available_sheet_count ? ` of ${sheet.available_sheet_count}` : ''
+      }</span>
+      <span>Sheet: ${sheet.sheet_width} x ${sheet.sheet_height}</span>
+      <small>${unplaced ? `${unplaced} piece(s) did not fit` : 'All pieces fit bounding boxes'}</small>
+    `;
+    el.packSummary.appendChild(card);
+  }
 }
 
 el.openImage.addEventListener('click', openImage);

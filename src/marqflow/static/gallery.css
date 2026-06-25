@@ -155,6 +155,22 @@ pre {
 .veneer-row .wide {
   grid-column: 1 / -1;
 }
+.pack-summary {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+.pack-card {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+}
+.pack-card.warning {
+  background: rgba(182, 51, 42, 0.09);
+  border-color: rgba(182, 51, 42, 0.42);
+}
 .swatch {
   width: 18px;
   height: 18px;

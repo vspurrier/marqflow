@@ -63,6 +63,7 @@ uv run pytest -q
 - Veneer-grouped SVG export in physical units with adjustable contour
   simplification.
 - `rectpack` bounding-box pack manifest grouped by veneer.
+- Browser pack summary with placed/unplaced counts and stock warnings.
 - Thin browser UI over the new API.
 
 ## Still Outstanding
@@ -95,9 +96,9 @@ uv run pytest -q
 
 5. Material planning.
 
-   Veneer inventory fields, replacement, and browser editing exist, but
-   purchasing quantities, deeper grain review, stock-fit checks, and texture
-   previews are not implemented.
+   Veneer inventory fields, replacement, browser editing, and stock-fit summary
+   exist, but purchasing quantities, deeper grain review, and texture previews
+   are not implemented.
 
 6. Real packing/nesting.
 

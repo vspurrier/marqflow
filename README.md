@@ -90,6 +90,7 @@ The browser UI is deliberately minimal in this rewrite:
 - smooth raster boundary noise while preserving a valid partition
 - export SVG with adjustable contour simplification
 - write the bounding-box pack manifest
+- review placed/unplaced piece counts and stock warnings
 
 The UI should stay thin until the core design model is strong.
 

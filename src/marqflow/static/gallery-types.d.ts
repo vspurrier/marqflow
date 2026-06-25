@@ -78,3 +78,19 @@ interface DesignHitmap {
   height: number;
   labels: number[][];
 }
+
+interface PackSheet {
+  veneer_id: string;
+  piece_count: number;
+  placed_piece_count: number;
+  sheet_width: number;
+  sheet_height: number;
+  available_sheet_count: number;
+  sheet_count_used: number;
+  over_stock_capacity: boolean;
+}
+
+interface PackManifest {
+  packing_backend: string;
+  sheets: PackSheet[];
+}

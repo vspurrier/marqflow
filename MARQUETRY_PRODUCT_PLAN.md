@@ -77,6 +77,7 @@ Implemented now:
 - partition validation
 - physical-unit SVG export with adjustable contour simplification
 - `rectpack` bounding-box pack manifest by veneer
+- browser stock-fit summary for pack results
 - minimal browser UI
 
 ## Next Milestones
@@ -103,9 +104,9 @@ Implemented now:
 
 4. Deepen veneer inventory logic.
 
-   Veneer replacement, stock fields, and browser swatch editing now exist. The
-   workflow still needs richer grain direction review, texture/photo swatches,
-   and clearer purchasing/overage warnings.
+   Veneer replacement, stock fields, browser swatch editing, and pack stock
+   warnings now exist. The workflow still needs richer grain direction review,
+   texture/photo swatches, and clearer purchasing quantities.
 
 5. Replace bounding-box packing with irregular nesting.
 
