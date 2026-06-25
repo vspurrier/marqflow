@@ -45,8 +45,10 @@ uv run pytest -q
 - Bulk veneer override as one persisted edit operation.
 - Veneer inventory replacement with sheet dimensions/count fields.
 - Connected-region merge as a persisted edit operation.
+- Targeted single-region split as a persisted edit operation.
+- Region lock/unlock as a persisted edit operation.
 - Undo for veneer assignment, bulk assignment, merge, size, veneer inventory,
-  and detail-zone operations.
+  detail-zone, lock, and split operations.
 - Merge suggestions for small/thin regions, preferring same-veneer neighbors.
 - Bounded auto-merge cleanup using merge suggestions.
 - Final label hitmap API and canvas click/drag selection.
@@ -67,14 +69,15 @@ uv run pytest -q
 
 2. Real cleanup tools beyond merge.
 
-   Merge, bounded auto-merge, and undo now exist. Split, smooth, simplify,
-   sliver repair, point editing, lock/unlock UI, and shared-boundary-safe
+   Merge, targeted split, lock/unlock, bounded auto-merge, and undo now exist.
+   Smooth, simplify, sliver repair, point editing, and shared-boundary-safe
    cleanup are still open.
 
 3. Subject/detail logic.
 
-   Detail zones are persisted, but candidate generation does not yet use them
-   to allocate more regions locally.
+   Detail zones are persisted and selected regions can be split manually, but
+   candidate generation does not yet use focus zones to allocate more regions
+   locally.
 
 4. Browser selection tooling.
 

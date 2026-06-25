@@ -176,6 +176,41 @@ def test_bulk_assignment_detail_zones_and_boundaries(tmp_path: Path) -> None:
     assert reloaded.summary()['design']['detail_zones'] == []
 
 
+def test_split_and_lock_are_undoable(tmp_path: Path) -> None:
+    image_path = tmp_path / 'source.png'
+    _fixture_image(image_path)
+    workspace = MarquetryWorkspace.create(image_path, tmp_path / 'workspace', max_edge=64)
+    candidate = workspace.generate_candidate(target_regions=4, compactness=8.0)
+    workspace.create_design(candidate.candidate_id, PhysicalSize(width=8, height=8, unit='in'))
+    workspace._write_design_labels(_four_region_labels())
+    workspace.design.veneer_assignments = {1: 'maple', 2: 'cherry', 3: 'walnut', 4: 'black-dyed'}
+    workspace.save()
+
+    workspace.lock_regions([1], locked=True)
+    assert workspace.summary()['regions'][0]['locked'] is True
+    try:
+        workspace.split_region(1, target_parts=3, compactness=8)
+    except ValueError as exc:
+        assert 'locked' in str(exc)
+    else:
+        raise AssertionError('locked region split should fail')
+    workspace.undo()
+    assert workspace.summary()['regions'][0]['locked'] is False
+
+    workspace.split_region(1, target_parts=3, compactness=8)
+    split_summary = workspace.summary()
+    assert split_summary['validation']['valid'] is True
+    assert split_summary['validation']['region_count'] > 4
+    split_child_ids = [
+        region['region_id']
+        for region in split_summary['regions']
+        if region['veneer_id'] == 'maple'
+    ]
+    assert len(split_child_ids) >= 2
+    workspace.undo()
+    assert workspace.summary()['validation']['region_count'] == 4
+
+
 def test_merge_requires_connected_regions(tmp_path: Path) -> None:
     image_path = tmp_path / 'source.png'
     _fixture_image(image_path)
@@ -314,6 +349,21 @@ def test_api_merge_undo_and_hitmap(tmp_path: Path) -> None:
     )
     assert cleanup_response.status_code == 200
     assert 'applied_merge_count' in cleanup_response.json()
+
+    lock_response = client.post('/api/design/lock', json={'region_ids': [1], 'locked': True})
+    assert lock_response.status_code == 200
+    assert lock_response.json()['regions'][0]['locked'] is True
+
+    unlock_response = client.post('/api/design/lock', json={'region_ids': [1], 'locked': False})
+    assert unlock_response.status_code == 200
+    assert unlock_response.json()['regions'][0]['locked'] is False
+
+    split_response = client.post(
+        '/api/design/split',
+        json={'region_id': 1, 'target_parts': 3, 'compactness': 8},
+    )
+    assert split_response.status_code == 200
+    assert split_response.json()['validation']['region_count'] > 4
 
 
 def test_api_size_and_veneer_inventory(tmp_path: Path) -> None:

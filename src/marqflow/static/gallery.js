@@ -36,6 +36,11 @@ const el = /** @type {Record<string, any>} */ ({
   selectedVeneer: document.getElementById('selected-veneer'),
   assignSelected: document.getElementById('assign-selected'),
   mergeSelected: document.getElementById('merge-selected'),
+  splitParts: document.getElementById('split-parts'),
+  splitCompactness: document.getElementById('split-compactness'),
+  splitSelected: document.getElementById('split-selected'),
+  lockSelected: document.getElementById('lock-selected'),
+  unlockSelected: document.getElementById('unlock-selected'),
   applySuggestions: document.getElementById('apply-suggestions'),
   clearSelection: document.getElementById('clear-selection'),
   designCanvas: document.getElementById('design-canvas'),
@@ -437,6 +442,52 @@ async function mergeSelected() {
   await mergeRegions([...selectedRegionIds]);
 }
 
+async function splitSelected() {
+  if (selectedRegionIds.size !== 1) {
+    setStatus('Select exactly one region to split.', true);
+    return;
+  }
+  const [regionId] = [...selectedRegionIds];
+  const response = await fetch('/api/design/split', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      region_id: regionId,
+      target_parts: Number(el.splitParts.value || 3),
+      compactness: Number(el.splitCompactness.value || 12),
+    }),
+  });
+  if (!response.ok) {
+    setStatus(await response.text(), true);
+    return;
+  }
+  workspace = await response.json();
+  selectedRegionIds.clear();
+  await loadHitmap();
+  setStatus(`Split region ${regionId}.`);
+  render();
+}
+
+async function lockSelected(locked) {
+  if (!selectedRegionIds.size) {
+    setStatus('Select at least one region first.', true);
+    return;
+  }
+  const response = await fetch('/api/design/lock', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({region_ids: [...selectedRegionIds], locked}),
+  });
+  if (!response.ok) {
+    setStatus(await response.text(), true);
+    return;
+  }
+  workspace = await response.json();
+  await loadHitmap();
+  setStatus(`${locked ? 'Locked' : 'Unlocked'} ${selectedRegionIds.size} region(s).`);
+  render();
+}
+
 async function applySuggestions() {
   const response = await fetch('/api/design/apply-merge-suggestions', {
     method: 'POST',
@@ -486,6 +537,9 @@ el.candidateGrid.addEventListener('click', generateCandidateGrid);
 el.updateSize.addEventListener('click', updateSize);
 el.assignSelected.addEventListener('click', assignSelected);
 el.mergeSelected.addEventListener('click', mergeSelected);
+el.splitSelected.addEventListener('click', splitSelected);
+el.lockSelected.addEventListener('click', () => lockSelected(true));
+el.unlockSelected.addEventListener('click', () => lockSelected(false));
 el.applySuggestions.addEventListener('click', applySuggestions);
 el.clearSelection.addEventListener('click', () => {
   selectedRegionIds.clear();

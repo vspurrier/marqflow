@@ -396,6 +396,39 @@ class MarquetryWorkspace:
         self.save()
         return zone
 
+    def _current_region_ids(self) -> set[int]:
+        return {int(value) for value in np.unique(self.design_labels()) if int(value) > 0}
+
+    def lock_regions(self, region_ids: list[int] | set[int], locked: bool = True) -> None:
+        """Lock or unlock current regions as one undoable edit."""
+
+        if self.design is None:
+            raise ValueError('create a design first')
+        selected_region_ids = {int(region_id) for region_id in region_ids}
+        if not selected_region_ids:
+            raise ValueError('choose at least one region')
+        missing = sorted(selected_region_ids - self._current_region_ids())
+        if missing:
+            raise ValueError(f'unknown region ids: {missing}')
+
+        previous_locked = sorted(self.design.locked_region_ids)
+        if locked:
+            self.design.locked_region_ids.update(selected_region_ids)
+        else:
+            self.design.locked_region_ids.difference_update(selected_region_ids)
+        self.design.edit_history.append(
+            EditOperation(
+                op_id=self._next_op_id(),
+                kind='lock_regions',
+                payload={
+                    'region_ids': sorted(selected_region_ids),
+                    'locked': bool(locked),
+                    'previous_locked_region_ids': previous_locked,
+                },
+            )
+        )
+        self.save()
+
     def _selected_regions_are_connected(
         self,
         selected_region_ids: set[int],
@@ -467,6 +500,7 @@ class MarquetryWorkspace:
         op_id = self._next_op_id()
         previous_labels_path = self._snapshot_labels(op_id)
         previous_assignments = dict(self.design.veneer_assignments)
+        previous_locked = sorted(self.design.locked_region_ids)
         labels_after, id_map = merge_labels(labels_before, selected_region_ids)
         validation = partition_validation(labels_after)
         if not validation['valid']:
@@ -493,6 +527,103 @@ class MarquetryWorkspace:
                     'previous_veneer_assignments': {
                         str(region_id): veneer_id
                         for region_id, veneer_id in sorted(previous_assignments.items())
+                    },
+                    'previous_locked_region_ids': previous_locked,
+                },
+            )
+        )
+        self.save()
+
+    def split_region(
+        self,
+        region_id: int,
+        target_parts: int = 3,
+        compactness: float = 12.0,
+    ) -> None:
+        """Subdivide one region inside its current mask while preserving the partition."""
+
+        if self.design is None:
+            raise ValueError('create a design first')
+        region_id = int(region_id)
+        if region_id in self.design.locked_region_ids:
+            raise ValueError(f'locked region cannot be split: {region_id}')
+        labels_before = self.design_labels()
+        mask = labels_before == region_id
+        if not np.any(mask):
+            raise ValueError(f'unknown region: {region_id}')
+
+        ys, xs = np.nonzero(mask)
+        x0, x1 = int(xs.min()), int(xs.max()) + 1
+        y0, y1 = int(ys.min()), int(ys.max()) + 1
+        crop_image = self.source_array()[y0:y1, x0:x1]
+        crop_mask = mask[y0:y1, x0:x1]
+        if int(crop_mask.sum()) < 4:
+            raise ValueError('region is too small to split')
+
+        split_labels = slic(
+            crop_image,
+            n_segments=max(2, int(target_parts)),
+            compactness=float(compactness),
+            sigma=0.5,
+            start_label=1,
+            channel_axis=-1,
+            mask=crop_mask,
+        )
+        split_ids = [int(value) for value in np.unique(split_labels) if int(value) > 0]
+        if len(split_ids) < 2:
+            raise ValueError('split did not create multiple regions')
+
+        op_id = self._next_op_id()
+        previous_labels_path = self._snapshot_labels(op_id)
+        previous_assignments = dict(self.design.veneer_assignments)
+        previous_locked = sorted(self.design.locked_region_ids)
+        labels_after = labels_before.copy()
+        next_id = int(labels_before.max()) + 1
+        for index, split_id in enumerate(split_ids):
+            child_mask = np.zeros_like(labels_before, dtype=bool)
+            child_mask[y0:y1, x0:x1] = split_labels == split_id
+            labels_after[child_mask] = region_id if index == 0 else next_id
+            next_id += 1
+        labels_after = normalize_labels(labels_after)
+        validation = partition_validation(labels_after)
+        if not validation['valid']:
+            raise ValueError(f'split would create invalid partition: {validation}')
+
+        self._write_design_labels(labels_after)
+        split_child_ids = {
+            int(value) for value in np.unique(labels_after[mask]) if int(value) > 0
+        }
+        split_veneer = previous_assignments.get(region_id)
+        remapped: dict[int, str] = {}
+        for old_id, veneer_id in previous_assignments.items():
+            if old_id == region_id:
+                continue
+            old_mask = labels_before == old_id
+            new_values = np.unique(labels_after[old_mask])
+            if len(new_values) == 1:
+                remapped[int(new_values[0])] = veneer_id
+        if split_veneer is not None:
+            for child_id in split_child_ids:
+                remapped[child_id] = split_veneer
+        self.design.veneer_assignments = remapped
+        self.design.locked_region_ids = {
+            int(np.unique(labels_after[labels_before == locked_id])[0])
+            for locked_id in self.design.locked_region_ids
+            if locked_id != region_id and np.any(labels_before == locked_id)
+        }
+        self.design.edit_history.append(
+            EditOperation(
+                op_id=op_id,
+                kind='split_region',
+                payload={
+                    'region_id': region_id,
+                    'target_parts': int(target_parts),
+                    'compactness': float(compactness),
+                    'previous_labels_path': previous_labels_path,
+                    'previous_locked_region_ids': previous_locked,
+                    'previous_veneer_assignments': {
+                        str(previous_region_id): veneer_id
+                        for previous_region_id, veneer_id in sorted(previous_assignments.items())
                     },
                 },
             )
@@ -528,6 +659,26 @@ class MarquetryWorkspace:
                 for region_id, veneer_id in edit.payload[
                     'previous_veneer_assignments'
                 ].items()
+            }
+            if 'previous_locked_region_ids' in edit.payload:
+                self.design.locked_region_ids = {
+                    int(region_id) for region_id in edit.payload['previous_locked_region_ids']
+                }
+        elif edit.kind == 'split_region':
+            labels_path = self.workspace_dir / str(edit.payload['previous_labels_path'])
+            self._write_design_labels(np.load(labels_path))
+            self.design.veneer_assignments = {
+                int(region_id): str(veneer_id)
+                for region_id, veneer_id in edit.payload[
+                    'previous_veneer_assignments'
+                ].items()
+            }
+            self.design.locked_region_ids = {
+                int(region_id) for region_id in edit.payload['previous_locked_region_ids']
+            }
+        elif edit.kind == 'lock_regions':
+            self.design.locked_region_ids = {
+                int(region_id) for region_id in edit.payload['previous_locked_region_ids']
             }
         elif edit.kind == 'update_physical_size':
             self.design.physical_size = PhysicalSize.from_dict(

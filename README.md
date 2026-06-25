@@ -26,10 +26,12 @@ The rewrite currently supports:
 6. Manually override veneers for one or many selected regions.
 7. Click or drag-select final regions from a canvas hitmap.
 8. Merge connected selected regions.
-9. Persist rectangular detail zones for subject areas.
-10. Validate the partition invariant.
-11. Export a veneer-grouped SVG in physical units.
-12. Write a `rectpack` bounding-box packing manifest.
+9. Split one selected region for local detail.
+10. Lock/unlock selected regions before cleanup passes.
+11. Persist rectangular detail zones for subject areas.
+12. Validate the partition invariant.
+13. Export a veneer-grouped SVG in physical units.
+14. Write a `rectpack` bounding-box packing manifest.
 
 This is intentionally smaller than the prototype. The goal is a clean core
 that can grow without repeating the previous tech debt.
@@ -77,6 +79,8 @@ The browser UI is deliberately minimal in this rewrite:
 - click or drag-select final regions
 - assign veneers to selected final regions
 - merge selected connected regions
+- split one selected region
+- lock/unlock selected regions
 - auto-merge small/thin suggested regions
 - export SVG
 - write the bounding-box pack manifest

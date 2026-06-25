@@ -81,6 +81,17 @@ class MergeRequest(BaseModel):
     region_ids: list[int] = Field(min_length=2)
 
 
+class SplitRequest(BaseModel):
+    region_id: int
+    target_parts: int = Field(default=3, ge=2, le=25)
+    compactness: float = Field(default=12.0, gt=0)
+
+
+class LockRequest(BaseModel):
+    region_ids: list[int] = Field(min_length=1)
+    locked: bool = True
+
+
 class ApplyMergeSuggestionsRequest(BaseModel):
     max_merges: int = Field(default=10, ge=1, le=200)
 
@@ -232,6 +243,28 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
         ws = _load_workspace(workspace_path)
         try:
             ws.merge_regions(request.region_ids)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return JSONResponse(ws.summary())
+
+    @app.post('/api/design/split')
+    def split_region(request: SplitRequest) -> JSONResponse:
+        ws = _load_workspace(workspace_path)
+        try:
+            ws.split_region(
+                request.region_id,
+                target_parts=request.target_parts,
+                compactness=request.compactness,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return JSONResponse(ws.summary())
+
+    @app.post('/api/design/lock')
+    def lock_regions(request: LockRequest) -> JSONResponse:
+        ws = _load_workspace(workspace_path)
+        try:
+            ws.lock_regions(request.region_ids, locked=request.locked)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return JSONResponse(ws.summary())

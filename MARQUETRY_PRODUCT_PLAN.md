@@ -58,9 +58,11 @@ Implemented now:
 - veneer assignments
 - editable veneer inventory with stock fields
 - manual connected-region merge
+- targeted single-region split for local detail
+- region lock/unlock
 - bulk veneer assignment
 - undo for veneer assignment, bulk veneer assignment, detail zones, size changes,
-  veneer inventory changes, and region merge edits
+  veneer inventory changes, lock changes, region split edits, and region merge edits
 - same-veneer-preferred merge suggestions for small/thin regions
 - bounded auto-merge cleanup for suggested small/thin regions
 - final label hitmap API and browser click/drag selection tooling
@@ -75,9 +77,10 @@ Implemented now:
 
 1. Use subject/detail zones during candidate generation.
 
-   Rectangular focus zones are persisted, but the SLIC generator is still
-   global. Marquetry portraits need local detail budgets so eyes, nose, mouth,
-   and other focal areas preserve more structure than background or clothing.
+   Rectangular focus zones are persisted and selected final regions can be
+   split manually. The SLIC candidate generator is still global. Marquetry
+   portraits need local detail budgets so eyes, nose, mouth, and other focal
+   areas preserve more structure than background or clothing.
 
 2. Replace raster boundary metrics with shared-boundary vector geometry.
 
@@ -87,9 +90,9 @@ Implemented now:
 
 3. Add cleanup operations on top of shared boundaries.
 
-   Current cleanup supports connected merge and bounded auto-merge suggestions.
-   Needed operations: simplify shared edges, smooth selected boundaries, repair
-   slivers, lock regions, split selected regions, and edit vertices.
+   Current cleanup supports connected merge, targeted split, lock/unlock, and
+   bounded auto-merge suggestions. Needed operations: simplify shared edges,
+   smooth selected boundaries, repair slivers, and edit vertices.
 
 4. Deepen veneer inventory logic.
 
