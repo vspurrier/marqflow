@@ -1,321 +1,51 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Marqflow Gallery</title>
+  <title>Marqflow</title>
   <link rel="stylesheet" href="/static/gallery.css" />
 </head>
 <body>
-  <section class="landing" id="landing">
-    <div class="landing-card">
-      <h1 class="title">Marqflow Gallery</h1>
-      <p class="subtitle">
-        Start by choosing an image. Nothing else is shown until a workspace is created.
-      </p>
-      <label class="file-picker" for="source-image-input">
-        <span>Choose image</span>
-        <input id="source-image-input" type="file" accept="image/*" />
-      </label>
-      <button id="open-image-btn" class="primary" type="button">Open image</button>
-      <div class="small" id="landing-status">No workspace loaded yet.</div>
-    </div>
-  </section>
-
-  <div id="workspace-shell" class="workspace-shell">
-    <header class="topbar">
-      <div class="topbar-row">
-        <div class="brand">
-          <h1 class="title">Marqflow Gallery</h1>
-          <p class="subtitle">
-            A literal marquetry workflow: Image, Size, Subject, Shapes, Hues, Cleanup, Pack.
-          </p>
-        </div>
-        <div class="status-row">
-          <div class="pill" id="workspace-pill">Loading workspace…</div>
-          <div class="pill" id="status-pill">Idle</div>
-        </div>
+  <main class="shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Marquetry planner</p>
+        <h1>Image to measured veneer puzzle</h1>
       </div>
-      <div class="tabs">
-        <button id="image-tab-btn" class="tab-btn active" type="button">Image</button>
-        <button id="size-tab-btn" class="tab-btn" type="button">Size</button>
-        <button id="subject-tab-btn" class="tab-btn" type="button">Subject</button>
-        <button id="shapes-tab-btn" class="tab-btn" type="button">Shapes</button>
-        <button id="hues-tab-btn" class="tab-btn" type="button">Hues</button>
-        <button id="cleanup-tab-btn" class="tab-btn" type="button">Cleanup</button>
-        <button id="pack-tab-btn" class="tab-btn" type="button">Pack</button>
-      </div>
+      <p id="status" class="status">Choose an image to start.</p>
     </header>
 
-    <div class="progress-shell" aria-hidden="true">
-      <div id="progress-bar" class="progress-bar"></div>
-    </div>
+    <section class="card">
+      <h2>1. Image and first partition</h2>
+      <div class="controls">
+        <input id="image-input" type="file" accept="image/*" />
+        <label>Regions <input id="target-regions" type="number" value="80" min="2" /></label>
+        <label>Compactness <input id="compactness" type="number" value="18" min="1" step="1" /></label>
+        <button id="open-image" type="button">Open image</button>
+      </div>
+    </section>
 
-    <main class="workspace-body">
-      <section id="image-panel" class="tab-panel active">
-        <div class="panel-card">
-          <div class="section-title">
-            <span>Image</span>
-            <span class="badge" id="image-badge">No image selected</span>
-          </div>
-          <div class="panel-grid two-col">
-            <div class="panel-stack">
-              <label class="file-picker" for="source-image-input-panel">
-                <span>Choose a source image</span>
-                <input id="source-image-input-panel" type="file" accept="image/*" />
-              </label>
-              <button id="open-image-btn-panel" class="primary" type="button">Open image</button>
-              <div class="small" id="image-summary">Upload or replace the source image here.</div>
-            </div>
-            <div class="preview-frame">
-              <img id="source-preview" alt="Source preview" />
-            </div>
-          </div>
-        </div>
-      </section>
+    <section class="grid">
+      <article class="card">
+        <h2>2. Design invariant</h2>
+        <pre id="summary">No workspace.</pre>
+      </article>
+      <article class="card">
+        <h2>3. Veneer assignment</h2>
+        <div id="regions" class="regions"></div>
+      </article>
+    </section>
 
-      <section id="size-panel" class="tab-panel">
-        <div class="panel-card">
-          <div class="section-title">
-            <span>Size</span>
-            <span class="badge">Physical dimensions</span>
-          </div>
-          <div class="panel-grid two-col">
-            <div class="panel-stack">
-              <label class="field" title="Final marquetry width in the selected units.">
-                <span>Width</span>
-                <input id="physical-width" type="number" min="0.1" step="0.1" value="1" />
-              </label>
-              <label class="field" title="Final marquetry height in the selected units.">
-                <span>Height</span>
-                <input id="physical-height" type="number" min="0.1" step="0.1" value="1" />
-              </label>
-              <label class="field" title="Measurement unit for the final piece.">
-                <span>Units</span>
-                <input id="physical-unit" type="text" value="px" />
-              </label>
-              <button id="apply-size-btn" type="button" class="primary">Set size</button>
-            </div>
-            <div class="info-card">
-              <div class="info-title">Why this matters</div>
-              <div class="small">
-                Physical size drives area warnings, piece thresholds, and the packing step.
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="subject-panel" class="tab-panel">
-        <div class="panel-card">
-          <div class="section-title">
-            <span>Subject</span>
-            <span class="badge">Detail priority</span>
-          </div>
-          <div class="panel-grid two-col">
-            <div class="panel-stack">
-              <label class="field" title="How much local detail to preserve.">
-                <span>Detail budget</span>
-                <input id="subject-detail-budget" type="range" min="0" max="100" step="1" value="50" />
-              </label>
-              <label class="field">
-                <span>Notes</span>
-                <textarea id="subject-notes" rows="6" placeholder="For example: preserve the eyes and nose, simplify the blanket."></textarea>
-              </label>
-              <label class="check-row">
-                <input id="subject-protect-eyes" type="checkbox" checked />
-                <span>Protect eyes</span>
-              </label>
-              <label class="check-row">
-                <input id="subject-protect-nose" type="checkbox" checked />
-                <span>Protect nose</span>
-              </label>
-              <button id="save-subject-btn" type="button" class="primary">Save subject settings</button>
-            </div>
-            <div class="info-card">
-              <div class="info-title">Literal workflow</div>
-              <div class="small">
-                This is where the subject-vs-background decision lives before you refine shapes.
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="shapes-panel" class="tab-panel">
-        <div class="panel-card">
-          <div class="section-title">
-            <span>Shapes</span>
-            <span class="badge" id="candidate-count">0</span>
-          </div>
-          <div class="panel-grid">
-            <div class="controls-row">
-              <label class="grid-control" title="Number of rows in the starting grid.">
-                <span>Rows</span>
-                <input id="grid-rows" type="number" min="2" max="8" step="1" value="4" />
-              </label>
-              <label class="grid-control" title="Number of columns in the starting grid.">
-                <span>Cols</span>
-                <input id="grid-cols" type="number" min="2" max="8" step="1" value="4" />
-              </label>
-              <button id="rebuild-grid-btn" type="button">Rebuild grid</button>
-              <button id="reset-workspace-btn" class="danger" type="button" title="Delete generated candidates and rebuild from the source image.">Reset workspace</button>
-            </div>
-            <div id="kept-strip" class="kept-strip" aria-label="Kept candidates"></div>
-            <div class="small" id="grid-help">
-              The grid is the shape search surface. Keep the promising candidates before moving on.
-            </div>
-            <div id="grid" class="candidate-grid"></div>
-          </div>
-        </div>
-      </section>
-
-      <section id="hues-panel" class="tab-panel">
-        <div class="panel-card">
-          <div class="section-title">
-            <span>Hues</span>
-            <span class="badge" id="compose-kept-count">0</span>
-          </div>
-          <div class="compose-shell">
-            <aside class="compose-palette">
-              <div class="veneer-inventory">
-                <div class="row">
-                  <strong>Veneer inventory</strong>
-                  <button id="add-veneer-btn" type="button">Add swatch</button>
-                </div>
-                <div id="veneer-palette-list" class="veneer-palette-list"></div>
-                <button id="save-veneer-palette-btn" class="primary" type="button">Save veneers</button>
-              </div>
-              <div class="veneer-assignment-panel">
-                <div class="row">
-                  <strong>Final region veneers</strong>
-                  <span class="small">Auto or override</span>
-                </div>
-                <div id="hues-final-region-list" class="hues-final-region-list"></div>
-              </div>
-              <div class="small">
-                Paint regions from the kept candidates into the working design. This is the veneer
-                assignment stage.
-              </div>
-              <div id="compose-palette-list" class="compose-palette-list"></div>
-            </aside>
-            <section class="compose-workbench">
-              <div class="compose-canvas-wrap">
-                <div class="compose-stage" id="compose-stage">
-                  <canvas id="compose-canvas"></canvas>
-                </div>
-              </div>
-              <div class="small" id="compose-summary">Paint candidate regions onto the composite.</div>
-            </section>
-          </div>
-        </div>
-      </section>
-
-      <section id="cleanup-panel" class="tab-panel">
-        <div class="panel-card">
-          <div class="section-title">
-            <span>Cleanup</span>
-            <span class="badge">Final partition</span>
-          </div>
-          <div class="merge-shell">
-            <div class="compose-workbench-bar">
-              <div class="small">
-                Merge small pieces, split regions, and review the final partition before packing.
-              </div>
-              <div class="compose-tools">
-                <label class="tool-field" title="Simplify paths before export.">
-                  <span>Simplify tolerance <span id="simplify-tolerance-value">1.0</span></span>
-                  <input id="simplify-tolerance" type="range" min="0" max="6" step="0.1" value="1" />
-                </label>
-                <label class="tool-field" title="Highlight regions below this physical area.">
-                  <span>Small area <span id="small-area-value">0.0</span></span>
-                  <input id="small-area" type="range" min="0" max="100" step="0.1" value="0" />
-                </label>
-                <label class="tool-field" title="Highlight regions narrower than this physical width.">
-                  <span>Thin width <span id="thin-width-value">0.0</span></span>
-                  <input id="thin-width" type="range" min="0" max="20" step="0.1" value="0" />
-                </label>
-                <label class="tool-field" title="Higher values merge more similar colors into the same final piece.">
-                  <span>Merge threshold <span id="merge-threshold-value">24</span></span>
-                  <input id="merge-threshold" type="range" min="0" max="80" step="1" value="24" />
-                </label>
-                <label class="tool-field">
-                  <span>Split target</span>
-                  <input id="split-target" type="number" min="2" max="16" step="1" value="4" />
-                </label>
-                <button id="save-cleanup-btn" type="button">Save cleanup</button>
-                <button id="merge-selected-btn" type="button">Merge selected</button>
-                <button id="merge-suggestions-btn" type="button">Merge suggestions</button>
-                <button id="split-selected-btn" type="button">Split selected</button>
-                <button id="undo-final-edit-btn" type="button">Undo edit</button>
-              </div>
-            </div>
-            <div class="compose-canvas-wrap">
-              <div class="compose-stage" id="merge-stage">
-                <canvas id="merge-canvas"></canvas>
-              </div>
-            </div>
-            <div class="cleanup-grid">
-              <div class="info-card">
-                <div class="info-title">Warnings</div>
-                <div class="small" id="merge-summary">Final partition will appear here.</div>
-                <div class="small cleanup-hover" id="cleanup-hover">Hover a region to inspect it.</div>
-              </div>
-              <div class="info-card">
-                <div class="info-title">Final regions</div>
-                <div id="final-region-list" class="final-region-list"></div>
-              </div>
-              <div class="info-card cleanup-editor" id="final-region-editor">
-                <div class="info-title">Selected region edit</div>
-                <div class="small" id="final-region-editor-note">
-                  Select one final region to edit points or smooth the edge.
-                </div>
-                <label class="field">
-                  <span>Point index</span>
-                  <input id="final-point-index" type="number" min="0" step="1" value="0" />
-                </label>
-                <div class="editor-row">
-                  <label class="field">
-                    <span>X</span>
-                    <input id="final-point-x" type="number" step="0.1" value="0" />
-                  </label>
-                  <label class="field">
-                    <span>Y</span>
-                    <input id="final-point-y" type="number" step="0.1" value="0" />
-                  </label>
-                </div>
-                <div class="editor-row">
-                  <button id="final-point-move-btn" type="button">Move point</button>
-                  <button id="final-smooth-btn" type="button">Smooth region</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="pack-panel" class="tab-panel">
-        <div class="panel-card">
-          <div class="section-title">
-            <span>Pack</span>
-            <span class="badge">Veneer sheets</span>
-          </div>
-          <div class="panel-grid two-col">
-            <div class="panel-stack">
-              <input id="export-dir" type="text" value="./exported" title="Export directory" />
-              <button id="export-final-btn" class="primary" type="button">Pack final</button>
-              <button id="export-btn" type="button">Export preview SVG</button>
-            </div>
-            <div class="info-card">
-              <div class="info-title">Packing output</div>
-              <div class="small" id="pack-summary">Packing plan will appear here.</div>
-            </div>
-          </div>
-        </div>
-      </section>
-    </main>
-  </div>
-
-  <script defer src="/static/gallery.js"></script>
+    <section class="card">
+      <h2>4. Export</h2>
+      <div class="controls">
+        <button id="view-svg" type="button">Open SVG</button>
+        <button id="pack" type="button">Pack manifest</button>
+      </div>
+      <pre id="pack-output"></pre>
+    </section>
+  </main>
+  <script src="/static/gallery.js"></script>
 </body>
 </html>

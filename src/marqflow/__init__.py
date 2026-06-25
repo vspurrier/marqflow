@@ -1,21 +1,14 @@
-"""Marqflow: region-based marquetry planning tools."""
+"""Marqflow: marquetry-first design planning."""
 
-from .config import SegmentationConfig, SuperpixelConfig
-from .pipeline import build_region_map, build_superpixel_preview, prepare_image
-from .project import MarqflowProject
-from .regions import Region, RegionMap
-from .workspace import GridCandidate, GridPreset, GridWorkspace
+from .models import Candidate, MarquetryDesign, PhysicalSize, Region, SourceImage, Veneer
+from .workspace import MarquetryWorkspace
 
 __all__ = [
-    'GridCandidate',
-    'GridPreset',
-    'GridWorkspace',
+    'Candidate',
+    'MarquetryDesign',
+    'MarquetryWorkspace',
+    'PhysicalSize',
     'Region',
-    'RegionMap',
-    'MarqflowProject',
-    'SegmentationConfig',
-    'SuperpixelConfig',
-    'build_region_map',
-    'build_superpixel_preview',
-    'prepare_image',
+    'SourceImage',
+    'Veneer',
 ]
