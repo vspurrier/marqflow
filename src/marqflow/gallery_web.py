@@ -38,9 +38,38 @@ class DesignRequest(BaseModel):
     unit: str = 'in'
 
 
+class PhysicalSizeRequest(BaseModel):
+    width: float = Field(gt=0)
+    height: float = Field(gt=0)
+    unit: str = 'in'
+
+
 class VeneerRequest(BaseModel):
     region_id: int
     veneer_id: str
+
+
+class VeneerModel(BaseModel):
+    veneer_id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    color_rgb: tuple[int, int, int]
+    sheet_width: float = Field(default=0.0, ge=0)
+    sheet_height: float = Field(default=0.0, ge=0)
+    sheet_count: int = Field(default=0, ge=0)
+    grain_direction: str = ''
+    notes: str = ''
+
+    def to_domain(self) -> Veneer:
+        return Veneer(
+            veneer_id=self.veneer_id,
+            name=self.name,
+            color_rgb=self.color_rgb,
+            sheet_width=self.sheet_width,
+            sheet_height=self.sheet_height,
+            sheet_count=self.sheet_count,
+            grain_direction=self.grain_direction,
+            notes=self.notes,
+        )
 
 
 class MergeRequest(BaseModel):
@@ -154,6 +183,17 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
         )
         return JSONResponse(ws.summary())
 
+    @app.post('/api/design/size')
+    def update_physical_size(request: PhysicalSizeRequest) -> JSONResponse:
+        ws = _load_workspace(workspace_path)
+        try:
+            ws.update_physical_size(
+                PhysicalSize(width=request.width, height=request.height, unit=request.unit)
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return JSONResponse(ws.summary())
+
     @app.post('/api/design/veneer')
     def assign_veneer(request: VeneerRequest) -> JSONResponse:
         ws = _load_workspace(workspace_path)
@@ -194,12 +234,12 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
         )
 
     @app.post('/api/design/veneers')
-    def replace_veneers(veneers: list[Veneer]) -> JSONResponse:
+    def replace_veneers(veneers: list[VeneerModel]) -> JSONResponse:
         ws = _load_workspace(workspace_path)
-        if ws.design is None:
-            raise HTTPException(status_code=400, detail='create a design first')
-        ws.design.veneers = veneers
-        ws.save()
+        try:
+            ws.replace_veneers([veneer.to_domain() for veneer in veneers])
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         return JSONResponse(ws.summary())
 
     @app.get('/api/design.svg')

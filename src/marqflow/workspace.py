@@ -232,19 +232,71 @@ class MarquetryWorkspace:
             physical_size=physical_size,
             veneers=veneers or default_veneers(),
         )
-        self._auto_assign_veneers()
+        self._auto_assign_veneers(overwrite=True)
         self.save()
         return self.design
 
-    def _auto_assign_veneers(self) -> None:
+    def update_physical_size(self, physical_size: PhysicalSize) -> None:
+        """Update finished dimensions used by cuttability metrics and SVG export."""
+
+        if self.design is None:
+            raise ValueError('create a design first')
+        previous_size = self.design.physical_size
+        self.design.physical_size = physical_size
+        self.design.edit_history.append(
+            EditOperation(
+                op_id=self._next_op_id(),
+                kind='update_physical_size',
+                payload={
+                    'physical_size': physical_size.to_dict(),
+                    'previous_physical_size': previous_size.to_dict(),
+                },
+            )
+        )
+        self.save()
+
+    def replace_veneers(self, veneers: list[Veneer]) -> None:
+        """Replace available veneers and repair assignments that reference removed stock."""
+
+        if self.design is None:
+            raise ValueError('create a design first')
+        if not veneers:
+            raise ValueError('at least one veneer is required')
+        previous_veneers = [veneer.to_dict() for veneer in self.design.veneers]
+        previous_assignments = dict(self.design.veneer_assignments)
+        self.design.veneers = veneers
+        valid_ids = {veneer.veneer_id for veneer in veneers}
+        self.design.veneer_assignments = {
+            region_id: veneer_id
+            for region_id, veneer_id in self.design.veneer_assignments.items()
+            if veneer_id in valid_ids
+        }
+        self._auto_assign_veneers(overwrite=False)
+        self.design.edit_history.append(
+            EditOperation(
+                op_id=self._next_op_id(),
+                kind='replace_veneers',
+                payload={
+                    'previous_veneers': previous_veneers,
+                    'previous_veneer_assignments': {
+                        str(region_id): veneer_id
+                        for region_id, veneer_id in sorted(previous_assignments.items())
+                    },
+                },
+            )
+        )
+        self.save()
+
+    def _auto_assign_veneers(self, overwrite: bool = False) -> None:
         if self.design is None:
             return
         image = self.source_array()
         labels = self.design_labels()
         regions = build_regions(image, labels, self.design)
-        self.design.veneer_assignments = {
-            region.region_id: region.suggested_veneer_id for region in regions
-        }
+        if overwrite:
+            self.design.veneer_assignments = {}
+        for region in regions:
+            self.design.veneer_assignments.setdefault(region.region_id, region.suggested_veneer_id)
 
     def assign_veneer(self, region_id: int, veneer_id: str) -> None:
         if self.design is None:
@@ -389,6 +441,20 @@ class MarquetryWorkspace:
         elif edit.kind == 'merge_regions':
             labels_path = self.workspace_dir / str(edit.payload['previous_labels_path'])
             self._write_design_labels(np.load(labels_path))
+            self.design.veneer_assignments = {
+                int(region_id): str(veneer_id)
+                for region_id, veneer_id in edit.payload[
+                    'previous_veneer_assignments'
+                ].items()
+            }
+        elif edit.kind == 'update_physical_size':
+            self.design.physical_size = PhysicalSize.from_dict(
+                edit.payload['previous_physical_size']
+            )
+        elif edit.kind == 'replace_veneers':
+            self.design.veneers = [
+                Veneer.from_dict(item) for item in edit.payload['previous_veneers']
+            ]
             self.design.veneer_assignments = {
                 int(region_id): str(veneer_id)
                 for region_id, veneer_id in edit.payload[

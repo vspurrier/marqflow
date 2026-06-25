@@ -75,6 +75,43 @@ def test_candidate_grid_is_source_stage_only(tmp_path: Path) -> None:
     assert len(workspace.candidates) == 7
 
 
+def test_size_and_veneer_inventory_edits_are_persisted_and_undoable(tmp_path: Path) -> None:
+    image_path = tmp_path / 'source.png'
+    _fixture_image(image_path)
+    workspace = MarquetryWorkspace.create(image_path, tmp_path / 'workspace', max_edge=64)
+    candidate = workspace.generate_candidate(target_regions=4, compactness=8.0)
+    workspace.create_design(candidate.candidate_id, PhysicalSize(width=8, height=8, unit='in'))
+    first_region_id = workspace.regions()[0]['region_id']
+    workspace.assign_veneer(first_region_id, 'walnut')
+
+    workspace.update_physical_size(PhysicalSize(width=6, height=9, unit='in'))
+    assert workspace.summary()['design']['physical_size'] == {
+        'width': 6.0,
+        'height': 9.0,
+        'unit': 'in',
+    }
+    workspace.undo()
+    assert workspace.summary()['design']['physical_size'] == {
+        'width': 8.0,
+        'height': 8.0,
+        'unit': 'in',
+    }
+
+    workspace.replace_veneers(
+        [
+            Veneer('walnut', 'Walnut', (82, 55, 38)),
+            Veneer('maple', 'Maple', (221, 204, 164)),
+        ]
+    )
+    assert {veneer['veneer_id'] for veneer in workspace.summary()['design']['veneers']} == {
+        'walnut',
+        'maple',
+    }
+    assert workspace.summary()['design']['veneer_assignments'][str(first_region_id)] == 'walnut'
+    workspace.undo()
+    assert len(workspace.summary()['design']['veneers']) == 5
+
+
 def test_merge_regions_preserves_partition_and_undo_restores_it(tmp_path: Path) -> None:
     image_path = tmp_path / 'source.png'
     _fixture_image(image_path)
@@ -217,3 +254,36 @@ def test_api_merge_undo_and_hitmap(tmp_path: Path) -> None:
     undo_response = client.post('/api/design/undo')
     assert undo_response.status_code == 200
     assert undo_response.json()['validation']['region_count'] == 4
+
+
+def test_api_size_and_veneer_inventory(tmp_path: Path) -> None:
+    image_path = tmp_path / 'source.png'
+    _fixture_image(image_path)
+    workspace = MarquetryWorkspace.create(image_path, tmp_path / 'workspace', max_edge=64)
+    candidate = workspace.generate_candidate(target_regions=4, compactness=8.0)
+    workspace.create_design(candidate.candidate_id, PhysicalSize(width=8, height=8, unit='in'))
+    workspace.save()
+    client = TestClient(create_app(tmp_path / 'workspace'))
+
+    size_response = client.post(
+        '/api/design/size',
+        json={'width': 5, 'height': 7, 'unit': 'in'},
+    )
+    assert size_response.status_code == 200
+    assert size_response.json()['design']['physical_size']['width'] == 5
+
+    veneers_response = client.post(
+        '/api/design/veneers',
+        json=[
+            {
+                'veneer_id': 'maple',
+                'name': 'Maple',
+                'color_rgb': [221, 204, 164],
+                'sheet_width': 4,
+                'sheet_height': 8,
+                'sheet_count': 2,
+            }
+        ],
+    )
+    assert veneers_response.status_code == 200
+    assert veneers_response.json()['design']['veneers'][0]['sheet_count'] == 2

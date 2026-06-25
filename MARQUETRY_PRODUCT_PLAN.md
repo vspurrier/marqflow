@@ -54,7 +54,9 @@ Implemented now:
 - one-off candidate generation
 - candidate grid generation as a source-stage search tool
 - durable design partition
+- editable final physical dimensions
 - veneer assignments
+- editable veneer inventory with stock fields
 - manual connected-region merge
 - undo for veneer assignment and region merge edits
 - same-veneer-preferred merge suggestions for small/thin regions
@@ -88,11 +90,11 @@ Implemented now:
    Needed operations: simplify shared edges, smooth selected boundaries, repair
    slivers, lock regions, split selected regions, and edit vertices.
 
-5. Add veneer inventory logic.
+5. Deepen veneer inventory logic.
 
-   Veneer objects exist, but the workflow needs editable swatches, available
-   sheet dimensions, grain direction review, and warnings when assignments
-   exceed stock.
+   Veneer replacement and stock fields now exist. The workflow still needs a
+   polished swatch editor, grain direction review, texture/photo swatches, and
+   clearer purchasing/overage warnings.
 
 6. Add a packing adapter for an actual irregular nesting backend.
 

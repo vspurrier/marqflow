@@ -18,6 +18,10 @@ const el = /** @type {Record<string, any>} */ ({
   candidates: document.getElementById('candidates'),
   status: document.getElementById('status'),
   summary: document.getElementById('summary'),
+  physicalWidth: document.getElementById('physical-width'),
+  physicalHeight: document.getElementById('physical-height'),
+  physicalUnit: document.getElementById('physical-unit'),
+  updateSize: document.getElementById('update-size'),
   mergeSuggestions: document.getElementById('merge-suggestions'),
   regions: document.getElementById('regions'),
   undo: document.getElementById('undo'),
@@ -64,6 +68,11 @@ function render() {
     null,
     2,
   );
+  if (workspace.design) {
+    el.physicalWidth.value = workspace.design.physical_size.width;
+    el.physicalHeight.value = workspace.design.physical_size.height;
+    el.physicalUnit.value = workspace.design.physical_size.unit;
+  }
   renderCandidates();
   renderMergeSuggestions();
   el.regions.innerHTML = '';
@@ -92,6 +101,29 @@ function render() {
     });
     el.regions.appendChild(item);
   }
+}
+
+async function updateSize() {
+  if (!workspace?.design) {
+    setStatus('Create a design before changing size.', true);
+    return;
+  }
+  const response = await fetch('/api/design/size', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      width: Number(el.physicalWidth.value || 8),
+      height: Number(el.physicalHeight.value || 10),
+      unit: String(el.physicalUnit.value || 'in'),
+    }),
+  });
+  if (!response.ok) {
+    setStatus(await response.text(), true);
+    return;
+  }
+  workspace = await response.json();
+  setStatus('Updated physical size.');
+  render();
 }
 
 function renderCandidates() {
@@ -259,6 +291,7 @@ async function pack() {
 
 el.openImage.addEventListener('click', openImage);
 el.candidateGrid.addEventListener('click', generateCandidateGrid);
+el.updateSize.addEventListener('click', updateSize);
 el.undo.addEventListener('click', undo);
 el.viewSvg.addEventListener('click', () => window.open('/api/design.svg', '_blank'));
 el.pack.addEventListener('click', pack);

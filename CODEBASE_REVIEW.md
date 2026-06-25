@@ -36,10 +36,12 @@ uv run pytest -q
 - One SLIC-based candidate generator.
 - Candidate-grid generation that stays separate from final design state.
 - Durable design seeded from a candidate label partition.
+- Editable physical dimensions for final output.
 - Partition validation for unassigned pixels and disconnected regions.
 - Region metrics with physical area, bbox, contour, neighbors, and warnings.
 - Default veneer palette and nearest-color veneer assignment.
 - Manual veneer override as a persisted edit operation.
+- Veneer inventory replacement with sheet dimensions/count fields.
 - Connected-region merge as a persisted edit operation.
 - Undo for veneer assignment and merge operations.
 - Merge suggestions for small/thin regions, preferring same-veneer neighbors.
@@ -72,8 +74,9 @@ uv run pytest -q
 
 5. Material planning.
 
-   Veneers exist, but purchasing quantities, grain review, stock-fit checks,
-   and texture previews are not implemented.
+   Veneer inventory fields and replacement exist, but purchasing quantities,
+   grain review, stock-fit checks, texture previews, and a polished swatch UI
+   are not implemented.
 
 6. Real packing/nesting.
 

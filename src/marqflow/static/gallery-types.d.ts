@@ -37,7 +37,10 @@ interface WorkspaceSummary {
     working_height: number;
   };
   candidates: Candidate[];
-  design: null | {veneers: Veneer[]};
+  design: null | {
+    veneers: Veneer[];
+    physical_size: {width: number; height: number; unit: string};
+  };
   regions: Region[];
   merge_suggestions: MergeSuggestion[];
   validation: {valid: boolean; region_count?: number; unassigned_px?: number};
