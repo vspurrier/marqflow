@@ -58,6 +58,7 @@ Implemented now:
 - editable final physical dimensions
 - veneer assignments
 - editable veneer inventory with stock fields
+- browser veneer palette editor
 - manual connected-region merge
 - targeted single-region split for local detail
 - region lock/unlock
@@ -102,9 +103,9 @@ Implemented now:
 
 4. Deepen veneer inventory logic.
 
-   Veneer replacement and stock fields now exist. The workflow still needs a
-   polished swatch editor, grain direction review, texture/photo swatches, and
-   clearer purchasing/overage warnings.
+   Veneer replacement, stock fields, and browser swatch editing now exist. The
+   workflow still needs richer grain direction review, texture/photo swatches,
+   and clearer purchasing/overage warnings.
 
 5. Replace bounding-box packing with irregular nesting.
 

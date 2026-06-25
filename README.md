@@ -78,6 +78,7 @@ The browser UI is deliberately minimal in this rewrite:
 - choose an image
 - generate and choose candidate partitions
 - inspect the generated design invariant and physical dimensions
+- edit veneer colors, sheet sizes, sheet counts, grain, and notes
 - click or drag-select final regions
 - assign veneers to selected final regions
 - merge selected connected regions

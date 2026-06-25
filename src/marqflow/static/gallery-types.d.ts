@@ -2,6 +2,11 @@ interface Veneer {
   veneer_id: string;
   name: string;
   color_rgb: [number, number, number];
+  sheet_width: number;
+  sheet_height: number;
+  sheet_count: number;
+  grain_direction: string;
+  notes: string;
 }
 
 interface DetailZone {

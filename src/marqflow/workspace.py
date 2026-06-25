@@ -265,6 +265,9 @@ class MarquetryWorkspace:
             raise ValueError('create a design first')
         if not veneers:
             raise ValueError('at least one veneer is required')
+        veneer_ids = [veneer.veneer_id for veneer in veneers]
+        if len(set(veneer_ids)) != len(veneer_ids):
+            raise ValueError('veneer IDs must be unique')
         previous_veneers = [veneer.to_dict() for veneer in self.design.veneers]
         previous_assignments = dict(self.design.veneer_assignments)
         self.design.veneers = veneers

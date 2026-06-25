@@ -36,6 +36,9 @@ const el = /** @type {Record<string, any>} */ ({
   physicalHeight: document.getElementById('physical-height'),
   physicalUnit: document.getElementById('physical-unit'),
   updateSize: document.getElementById('update-size'),
+  veneerEditor: document.getElementById('veneer-editor'),
+  addVeneer: document.getElementById('add-veneer'),
+  saveVeneers: document.getElementById('save-veneers'),
   mergeSuggestions: document.getElementById('merge-suggestions'),
   regions: document.getElementById('regions'),
   selectedVeneer: document.getElementById('selected-veneer'),
@@ -144,6 +147,7 @@ function render() {
     el.physicalUnit.value = workspace.design.physical_size.unit;
   }
   renderSelectedVeneerOptions();
+  renderVeneerEditor();
   renderCandidates();
   renderMergeSuggestions();
   drawDesign();
@@ -181,6 +185,104 @@ function renderSelectedVeneerOptions() {
   el.selectedVeneer.innerHTML = veneers
     .map((veneer) => `<option value="${veneer.veneer_id}">${veneer.name}</option>`)
     .join('');
+}
+
+function toHex(color) {
+  return `#${color.map((value) => value.toString(16).padStart(2, '0')).join('')}`;
+}
+
+function fromHex(hex) {
+  const normalized = hex.replace('#', '').padEnd(6, '0').slice(0, 6);
+  return [
+    parseInt(normalized.slice(0, 2), 16) || 0,
+    parseInt(normalized.slice(2, 4), 16) || 0,
+    parseInt(normalized.slice(4, 6), 16) || 0,
+  ];
+}
+
+function renderVeneerEditor() {
+  const veneers = workspace?.design?.veneers || [];
+  el.veneerEditor.innerHTML = '';
+  if (!veneers.length) {
+    el.veneerEditor.textContent = 'No veneers yet.';
+    return;
+  }
+  for (const veneer of veneers) {
+    const row = document.createElement('article');
+    row.className = 'veneer-row';
+    row.innerHTML = `
+      <label>ID <input data-field="veneer_id" value="${veneer.veneer_id}" /></label>
+      <label>Name <input data-field="name" value="${veneer.name}" /></label>
+      <label>Color <input data-field="color_rgb" type="color" value="${toHex(veneer.color_rgb)}" /></label>
+      <label>Sheet width <input data-field="sheet_width" type="number" min="0" step="0.1" value="${veneer.sheet_width || 0}" /></label>
+      <label>Sheet height <input data-field="sheet_height" type="number" min="0" step="0.1" value="${veneer.sheet_height || 0}" /></label>
+      <label>Sheet count <input data-field="sheet_count" type="number" min="0" step="1" value="${veneer.sheet_count || 0}" /></label>
+      <label>Grain <input data-field="grain_direction" value="${veneer.grain_direction || ''}" /></label>
+      <label class="wide">Notes <input data-field="notes" value="${veneer.notes || ''}" /></label>
+      <button data-remove="true" type="button">Remove</button>
+    `;
+    row.querySelector('[data-remove="true"]')?.addEventListener('click', () => row.remove());
+    el.veneerEditor.appendChild(row);
+  }
+}
+
+function collectVeneers() {
+  return [...el.veneerEditor.querySelectorAll('.veneer-row')].map((row) => {
+    const value = (field) => row.querySelector(`[data-field="${field}"]`)?.value || '';
+    return {
+      veneer_id: value('veneer_id').trim(),
+      name: value('name').trim() || value('veneer_id').trim(),
+      color_rgb: fromHex(value('color_rgb')),
+      sheet_width: Number(value('sheet_width') || 0),
+      sheet_height: Number(value('sheet_height') || 0),
+      sheet_count: Number(value('sheet_count') || 0),
+      grain_direction: value('grain_direction'),
+      notes: value('notes'),
+    };
+  });
+}
+
+function addVeneerRow() {
+  const veneers = collectVeneers();
+  const next = veneers.length + 1;
+  const current = workspace?.design?.veneers || [];
+  if (workspace?.design) {
+    workspace.design.veneers = [
+      ...current,
+      {
+        veneer_id: `veneer-${next}`,
+        name: `Veneer ${next}`,
+        color_rgb: [180, 130, 80],
+        sheet_width: 0,
+        sheet_height: 0,
+        sheet_count: 0,
+        grain_direction: '',
+        notes: '',
+      },
+    ];
+  }
+  renderVeneerEditor();
+}
+
+async function saveVeneers() {
+  const veneers = collectVeneers();
+  if (!veneers.length || veneers.some((veneer) => !veneer.veneer_id)) {
+    setStatus('Each veneer needs an ID.', true);
+    return;
+  }
+  const response = await fetch('/api/design/veneers', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(veneers),
+  });
+  if (!response.ok) {
+    setStatus(await response.text(), true);
+    return;
+  }
+  workspace = await response.json();
+  await loadHitmap();
+  setStatus('Saved veneer palette.');
+  render();
 }
 
 function updateSelectionStatus() {
@@ -694,6 +796,8 @@ el.openWorkspace.addEventListener('click', openSelectedWorkspace);
 el.deleteWorkspace.addEventListener('click', deleteSelectedWorkspace);
 el.candidateGrid.addEventListener('click', generateCandidateGrid);
 el.updateSize.addEventListener('click', updateSize);
+el.addVeneer.addEventListener('click', addVeneerRow);
+el.saveVeneers.addEventListener('click', saveVeneers);
 el.assignSelected.addEventListener('click', assignSelected);
 el.mergeSelected.addEventListener('click', mergeSelected);
 el.splitSelected.addEventListener('click', splitSelected);
