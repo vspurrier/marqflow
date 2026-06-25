@@ -52,12 +52,14 @@ uv run pytest -q
 - Merge suggestions for small/thin regions, preferring same-veneer neighbors.
 - Bounded auto-merge cleanup using merge suggestions.
 - Physical-area sliver repair that respects locks.
+- Raster boundary smoothing that validates the puzzle invariant before saving.
 - Final label hitmap API and canvas click/drag selection.
 - Persisted rectangular detail zones.
 - Detail zones can be created from selected regions.
 - Detail zones can drive bounded local split passes.
 - Raster shared-boundary metrics with physical edge lengths.
-- Veneer-grouped SVG export in physical units.
+- Veneer-grouped SVG export in physical units with adjustable contour
+  simplification.
 - `rectpack` bounding-box pack manifest grouped by veneer.
 - Thin browser UI over the new API.
 
@@ -72,9 +74,10 @@ uv run pytest -q
 
 2. Real cleanup tools beyond merge.
 
-   Merge, targeted split, lock/unlock, physical-area sliver repair, bounded
-   auto-merge, and undo now exist. Smooth, simplify, point editing, and
-   shared-boundary-safe cleanup are still open.
+   Merge, targeted split, lock/unlock, physical-area sliver repair, raster
+   smoothing, bounded auto-merge, and undo now exist. Vector simplify, selected
+   boundary smoothing, point editing, and shared-boundary-safe cleanup are still
+   open.
 
 3. Subject/detail logic.
 

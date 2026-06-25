@@ -46,11 +46,14 @@ const el = /** @type {Record<string, any>} */ ({
   applyFocus: document.getElementById('apply-focus'),
   repairArea: document.getElementById('repair-area'),
   repairSmall: document.getElementById('repair-small'),
+  smoothPasses: document.getElementById('smooth-passes'),
+  smoothBoundaries: document.getElementById('smooth-boundaries'),
   applySuggestions: document.getElementById('apply-suggestions'),
   clearSelection: document.getElementById('clear-selection'),
   designCanvas: document.getElementById('design-canvas'),
   selectionStatus: document.getElementById('selection-status'),
   undo: document.getElementById('undo'),
+  svgSimplify: document.getElementById('svg-simplify'),
   viewSvg: document.getElementById('view-svg'),
   pack: document.getElementById('pack'),
   packOutput: document.getElementById('pack-output'),
@@ -557,6 +560,23 @@ async function repairSmall() {
   render();
 }
 
+async function smoothBoundaries() {
+  const response = await fetch('/api/design/smooth-boundaries', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({iterations: Number(el.smoothPasses.value || 1)}),
+  });
+  if (!response.ok) {
+    setStatus(await response.text(), true);
+    return;
+  }
+  workspace = await response.json();
+  selectedRegionIds.clear();
+  await loadHitmap();
+  setStatus(`Smoothed ${workspace.smoothed_pixel_count || 0} boundary pixel(s).`);
+  render();
+}
+
 async function applySuggestions() {
   const response = await fetch('/api/design/apply-merge-suggestions', {
     method: 'POST',
@@ -612,6 +632,7 @@ el.unlockSelected.addEventListener('click', () => lockSelected(false));
 el.focusSelected.addEventListener('click', focusSelected);
 el.applyFocus.addEventListener('click', applyFocus);
 el.repairSmall.addEventListener('click', repairSmall);
+el.smoothBoundaries.addEventListener('click', smoothBoundaries);
 el.applySuggestions.addEventListener('click', applySuggestions);
 el.clearSelection.addEventListener('click', () => {
   selectedRegionIds.clear();
@@ -653,7 +674,10 @@ el.designCanvas.addEventListener('pointerup', (event) => {
   dragCurrent = null;
 });
 el.undo.addEventListener('click', undo);
-el.viewSvg.addEventListener('click', () => window.open('/api/design.svg', '_blank'));
+el.viewSvg.addEventListener('click', () => {
+  const tolerance = encodeURIComponent(String(el.svgSimplify.value || 1));
+  window.open(`/api/design.svg?simplify_tolerance=${tolerance}`, '_blank');
+});
 el.pack.addEventListener('click', pack);
 
 refresh().catch(() => render());

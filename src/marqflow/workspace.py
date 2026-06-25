@@ -742,6 +742,18 @@ class MarquetryWorkspace:
             self.design.locked_region_ids = {
                 int(region_id) for region_id in edit.payload['previous_locked_region_ids']
             }
+        elif edit.kind == 'smooth_boundaries':
+            labels_path = self.workspace_dir / str(edit.payload['previous_labels_path'])
+            self._write_design_labels(np.load(labels_path))
+            self.design.veneer_assignments = {
+                int(region_id): str(veneer_id)
+                for region_id, veneer_id in edit.payload[
+                    'previous_veneer_assignments'
+                ].items()
+            }
+            self.design.locked_region_ids = {
+                int(region_id) for region_id in edit.payload['previous_locked_region_ids']
+            }
         elif edit.kind == 'lock_regions':
             self.design.locked_region_ids = {
                 int(region_id) for region_id in edit.payload['previous_locked_region_ids']
@@ -878,6 +890,77 @@ class MarquetryWorkspace:
                 break
         return applied
 
+    def smooth_boundaries(self, iterations: int = 1) -> int:
+        """Denoise unlocked boundary pixels with local neighbor voting."""
+
+        if self.design is None:
+            raise ValueError('create a design first')
+        labels_before = self.design_labels()
+        labels_after = labels_before.copy()
+        locked_ids = set(self.design.locked_region_ids)
+        changed_total = 0
+
+        for _ in range(max(1, int(iterations))):
+            candidate = labels_after.copy()
+            changed = 0
+            for y in range(1, labels_after.shape[0] - 1):
+                for x in range(1, labels_after.shape[1] - 1):
+                    current = int(labels_after[y, x])
+                    if current in locked_ids:
+                        continue
+                    neighbors = [
+                        int(labels_after[y - 1, x]),
+                        int(labels_after[y + 1, x]),
+                        int(labels_after[y, x - 1]),
+                        int(labels_after[y, x + 1]),
+                    ]
+                    if len(set(neighbors)) == 1 and neighbors[0] != current:
+                        candidate[y, x] = neighbors[0]
+                        changed += 1
+                        continue
+                    counts = {
+                        neighbor: neighbors.count(neighbor)
+                        for neighbor in set(neighbors)
+                        if neighbor not in locked_ids
+                    }
+                    if not counts:
+                        continue
+                    winner, count = max(counts.items(), key=lambda item: item[1])
+                    if count >= 3 and winner != current:
+                        candidate[y, x] = winner
+                        changed += 1
+            if changed == 0:
+                break
+            validation = partition_validation(candidate)
+            if not validation['valid']:
+                break
+            labels_after = candidate
+            changed_total += changed
+
+        if changed_total == 0:
+            return 0
+        op_id = self._next_op_id()
+        previous_labels_path = self._snapshot_labels(op_id)
+        self._write_design_labels(labels_after)
+        self.design.edit_history.append(
+            EditOperation(
+                op_id=op_id,
+                kind='smooth_boundaries',
+                payload={
+                    'iterations': int(iterations),
+                    'changed_px': changed_total,
+                    'previous_labels_path': previous_labels_path,
+                    'previous_veneer_assignments': {
+                        str(region_id): veneer_id
+                        for region_id, veneer_id in sorted(self.design.veneer_assignments.items())
+                    },
+                    'previous_locked_region_ids': sorted(self.design.locked_region_ids),
+                },
+            )
+        )
+        self.save()
+        return changed_total
+
     def regions(self) -> list[dict[str, Any]]:
         if self.design is None:
             return []
@@ -906,7 +989,7 @@ class MarquetryWorkspace:
             boundary['edge_length_physical'] = boundary['edge_px'] / max(avg_px_per_unit, 1e-9)
         return {'boundary_count': len(boundaries), 'boundaries': boundaries}
 
-    def export_svg(self, output_path: str | Path) -> Path:
+    def export_svg(self, output_path: str | Path, simplify_tolerance: float = 1.0) -> Path:
         if self.design is None:
             raise ValueError('create a design first')
         validation = self.validation()
@@ -915,7 +998,12 @@ class MarquetryWorkspace:
         path = Path(output_path)
         path.parent.mkdir(parents=True, exist_ok=True)
         svg = design_to_svg(
-            build_regions(self.source_array(), self.design_labels(), self.design),
+            build_regions(
+                self.source_array(),
+                self.design_labels(),
+                self.design,
+                simplify_tolerance=max(0.0, float(simplify_tolerance)),
+            ),
             self.design.physical_size,
             (self.source.working_width, self.source.working_height),
         )

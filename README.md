@@ -85,7 +85,8 @@ The browser UI is deliberately minimal in this rewrite:
 - create and apply focus zones for local detail
 - auto-merge small/thin suggested regions
 - repair regions below a physical area threshold
-- export SVG
+- smooth raster boundary noise while preserving a valid partition
+- export SVG with adjustable contour simplification
 - write the bounding-box pack manifest
 
 The UI should stay thin until the core design model is strong.

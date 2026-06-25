@@ -52,6 +52,11 @@ def test_workspace_creates_valid_design_and_exports(tmp_path: Path) -> None:
     assert '<svg' in svg
     assert 'data-veneer-id=' in svg
     assert 'width="8in"' in svg
+    simplified_svg_path = workspace.export_svg(
+        tmp_path / 'design-simplified.svg',
+        simplify_tolerance=3.0,
+    )
+    assert simplified_svg_path.exists()
 
     manifest = workspace.pack(tmp_path / 'packed')
     assert manifest['packing_backend'] == 'rectpack-bounding-box'
@@ -255,6 +260,27 @@ def test_repair_small_regions_merges_slivers(tmp_path: Path) -> None:
     assert workspace.summary()['validation']['region_count'] == before - 1
 
 
+def test_smooth_boundaries_is_valid_and_undoable(tmp_path: Path) -> None:
+    image_path = tmp_path / 'source.png'
+    _fixture_image(image_path)
+    workspace = MarquetryWorkspace.create(image_path, tmp_path / 'workspace', max_edge=64)
+    candidate = workspace.generate_candidate(target_regions=4, compactness=8.0)
+    workspace.create_design(candidate.candidate_id, PhysicalSize(width=8, height=8, unit='in'))
+    labels = _four_region_labels()
+    labels[12, 12] = 2
+    workspace._write_design_labels(labels)
+    workspace.design.veneer_assignments = {1: 'maple', 2: 'cherry', 3: 'walnut', 4: 'black-dyed'}
+    workspace.save()
+
+    changed = workspace.smooth_boundaries(iterations=1)
+
+    assert changed == 1
+    assert workspace.design_labels()[12, 12] == 1
+    assert workspace.summary()['validation']['valid'] is True
+    workspace.undo()
+    assert workspace.design_labels()[12, 12] == 2
+
+
 def test_merge_requires_connected_regions(tmp_path: Path) -> None:
     image_path = tmp_path / 'source.png'
     _fixture_image(image_path)
@@ -318,7 +344,7 @@ def test_api_vertical_slice(tmp_path: Path) -> None:
     assert assign_response.status_code == 200
     assert assign_response.json()['regions'][0]['veneer_id'] == veneer_id
 
-    svg_response = client.get('/api/design.svg')
+    svg_response = client.get('/api/design.svg?simplify_tolerance=2')
     assert svg_response.status_code == 200
     assert svg_response.headers['content-type'].startswith('image/svg+xml')
 
@@ -430,6 +456,10 @@ def test_api_merge_undo_and_hitmap(tmp_path: Path) -> None:
     )
     assert repair_response.status_code == 200
     assert 'repaired_region_count' in repair_response.json()
+
+    smooth_response = client.post('/api/design/smooth-boundaries', json={'iterations': 1})
+    assert smooth_response.status_code == 200
+    assert 'smoothed_pixel_count' in smooth_response.json()
 
 
 def test_api_size_and_veneer_inventory(tmp_path: Path) -> None:

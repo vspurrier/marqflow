@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -116,6 +116,10 @@ class ApplyDetailZonesRequest(BaseModel):
 class RepairSmallRegionsRequest(BaseModel):
     max_area: float = Field(default=0.05, gt=0)
     max_repairs: int = Field(default=25, ge=1, le=500)
+
+
+class SmoothBoundariesRequest(BaseModel):
+    iterations: int = Field(default=1, ge=1, le=20)
 
 
 class PackRequest(BaseModel):
@@ -368,6 +372,17 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
         payload['repaired_region_count'] = applied
         return JSONResponse(payload)
 
+    @app.post('/api/design/smooth-boundaries')
+    def smooth_boundaries(request: SmoothBoundariesRequest) -> JSONResponse:
+        ws = _load_workspace(workspace_path)
+        try:
+            changed_px = ws.smooth_boundaries(iterations=request.iterations)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        payload = ws.summary()
+        payload['smoothed_pixel_count'] = changed_px
+        return JSONResponse(payload)
+
     @app.get('/api/design/boundaries')
     def design_boundaries() -> JSONResponse:
         ws = _load_workspace(workspace_path)
@@ -383,11 +398,16 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
         return JSONResponse(ws.summary())
 
     @app.get('/api/design.svg')
-    def design_svg() -> Response:
+    def design_svg(
+        simplify_tolerance: float = Query(default=1.0, ge=0.0, le=20.0),
+    ) -> Response:
         ws = _load_workspace(workspace_path)
         if ws.design is None:
             raise HTTPException(status_code=400, detail='create a design first')
-        svg_path = ws.export_svg(ws.workspace_dir / 'design.svg')
+        svg_path = ws.export_svg(
+            ws.workspace_dir / 'design.svg',
+            simplify_tolerance=simplify_tolerance,
+        )
         return Response(svg_path.read_text(encoding='utf-8'), media_type='image/svg+xml')
 
     @app.post('/api/pack')

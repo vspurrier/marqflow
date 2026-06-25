@@ -63,6 +63,8 @@
           <button id="apply-focus" type="button">Apply focus detail</button>
           <label>Min area <input id="repair-area" type="number" value="0.05" min="0.001" step="0.001" /></label>
           <button id="repair-small" type="button">Repair small pieces</button>
+          <label>Smooth passes <input id="smooth-passes" type="number" value="1" min="1" max="20" /></label>
+          <button id="smooth-boundaries" type="button">Smooth boundaries</button>
           <button id="apply-suggestions" type="button">Auto-merge small pieces</button>
           <button id="clear-selection" type="button">Clear selection</button>
           <button id="undo" type="button">Undo last edit</button>
@@ -79,6 +81,7 @@
     <section class="card">
       <h2>4. Export</h2>
       <div class="controls">
+        <label>SVG simplify <input id="svg-simplify" type="number" value="1" min="0" max="20" step="0.25" /></label>
         <button id="view-svg" type="button">Open SVG</button>
         <button id="pack" type="button">Pack manifest</button>
       </div>

@@ -45,11 +45,15 @@ def init(
 def export(
     workspace_dir: Annotated[Path, typer.Argument(..., exists=True, readable=True)],
     output_svg: Annotated[Path, typer.Argument(...)],
+    simplify_tolerance: float = typer.Option(
+        1.0,
+        help='SVG contour simplification tolerance in working-image pixels.',
+    ),
 ) -> None:
     """Export the current design as veneer-grouped SVG."""
 
     workspace = MarquetryWorkspace.load(workspace_dir)
-    path = workspace.export_svg(output_svg)
+    path = workspace.export_svg(output_svg, simplify_tolerance=simplify_tolerance)
     typer.echo(f'svg: {path}')
 
 
