@@ -116,6 +116,8 @@ interface PackManifest {
 }
 
 interface CleanupReport {
+  readiness_score: number;
+  readiness: string;
   region_count: number;
   locked_region_count: number;
   warning_counts: Record<string, number>;

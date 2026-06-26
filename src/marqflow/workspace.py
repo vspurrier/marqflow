@@ -1501,7 +1501,16 @@ class MarquetryWorkspace:
         veneer_counts: dict[str, int] = {}
         for region in regions:
             veneer_counts[region['veneer_id']] = veneer_counts.get(region['veneer_id'], 0) + 1
+        score = 100
+        score -= min(30, len(merge_suggestions) * 5)
+        score -= min(30, len(jagged_boundaries) * 2)
+        score -= min(20, len([region for region in regions if region['warnings']]) * 3)
+        if not self.validation()['valid']:
+            score = 0
+        readiness = 'ready' if score >= 85 else 'needs-review' if score >= 60 else 'rough'
         return {
+            'readiness_score': max(0, score),
+            'readiness': readiness,
             'region_count': len(regions),
             'locked_region_count': sum(1 for region in regions if region['locked']),
             'warning_counts': warning_counts,

@@ -313,6 +313,8 @@ def test_bulk_assignment_detail_zones_and_boundaries(tmp_path: Path) -> None:
     assert all(boundary['simplified_paths'] for boundary in boundary_summary['boundaries'])
     report = reloaded.cleanup_report()
     assert report['region_count'] == 4
+    assert 0 <= report['readiness_score'] <= 100
+    assert report['readiness'] in {'ready', 'needs-review', 'rough'}
     assert report['boundary_count'] == 4
     assert 'valid_partition' in report
     reloaded.undo()

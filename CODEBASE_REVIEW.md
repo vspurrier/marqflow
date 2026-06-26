@@ -94,7 +94,8 @@ uv run pytest -q
   merge/undo.
 - Browser smoke test for SVG preview generation.
 - Cleanup report endpoint/browser action summarizing warnings, merge
-  suggestions, jagged boundaries, veneers, mask, and partition validity.
+  suggestions, jagged boundaries, veneers, mask, partition validity, and a
+  simple readiness score.
 - `pack` writes `cleanup-report.json`, and the CLI can write the report without
   packing.
 - Thin browser UI over the new API.

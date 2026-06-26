@@ -1007,7 +1007,7 @@ async function cleanupReport() {
   const report = /** @type {CleanupReport} */ (await response.json());
   el.packOutput.textContent = JSON.stringify(report, null, 2);
   setStatus(
-    `Cleanup report: ${report.region_count} regions, ${report.merge_suggestion_count} merge suggestion(s), ${report.jagged_boundary_count} jagged boundary group(s).`,
+    `Cleanup report: ${report.readiness} (${report.readiness_score}/100), ${report.region_count} regions, ${report.merge_suggestion_count} merge suggestion(s), ${report.jagged_boundary_count} jagged boundary group(s).`,
   );
 }
 
