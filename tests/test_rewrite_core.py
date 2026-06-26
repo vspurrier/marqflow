@@ -72,6 +72,10 @@ def test_workspace_creates_valid_design_and_exports(tmp_path: Path) -> None:
     assert manifest['packing_backend'] == 'rectpack-bounding-box'
     assert manifest['sheets']
     assert 'placement' in manifest['sheets'][0]['pieces'][0]
+    assert manifest['sheets'][0]['recommended_sheet_count'] >= 1
+    assert manifest['sheets'][0]['total_piece_area'] > 0
+    assert manifest['sheets'][0]['total_bounding_box_area'] > 0
+    assert manifest['sheets'][0]['material_utilization'] > 0
     assert (tmp_path / 'packed' / 'pack.json').exists()
     assert (tmp_path / 'packed' / 'design.svg').exists()
 
@@ -381,6 +385,8 @@ def test_stock_overage_is_reported(tmp_path: Path) -> None:
 
     manifest = workspace.pack(tmp_path / 'packed')
     assert manifest['sheets'][0]['available_sheet_count'] == 0
+    assert manifest['sheets'][0]['recommended_sheet_count'] >= 1
+    assert manifest['sheets'][0]['stock_shortfall_count'] >= 1
     assert manifest['sheets'][0]['over_stock_capacity'] is False
 
 

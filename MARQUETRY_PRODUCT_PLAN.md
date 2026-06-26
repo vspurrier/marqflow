@@ -83,6 +83,8 @@ Implemented now:
 - physical-unit SVG export with adjustable contour simplification
 - `rectpack` bounding-box pack manifest by veneer
 - browser stock-fit summary for pack results
+- recommended sheet counts, stock shortfall, area totals, and material
+  utilization by veneer
 - workspace-root-constrained browser pack output
 - browser smoke test for image upload, candidate grid generation, and design
   seeding
@@ -118,9 +120,10 @@ Implemented now:
 
 4. Deepen veneer inventory logic.
 
-   Veneer replacement, stock fields, browser swatch editing, and pack stock
-   warnings now exist. The workflow still needs richer grain direction review,
-   texture/photo swatches, and clearer purchasing quantities.
+   Veneer replacement, stock fields, browser swatch editing, pack stock
+   warnings, purchasing quantity estimates, and utilization metrics now exist.
+   The workflow still needs richer grain direction review and texture/photo
+   swatches.
 
 5. Replace bounding-box packing with irregular nesting.
 

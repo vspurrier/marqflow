@@ -922,15 +922,21 @@ function renderPackSummary(manifest) {
   }
   for (const sheet of manifest.sheets) {
     const unplaced = sheet.piece_count - sheet.placed_piece_count;
+    const shortfall = sheet.stock_shortfall_count || 0;
     const card = document.createElement('article');
-    card.className = `pack-card${sheet.over_stock_capacity ? ' warning' : ''}`;
+    card.className = `pack-card${sheet.over_stock_capacity || shortfall ? ' warning' : ''}`;
     card.innerHTML = `
       <strong>${sheet.veneer_id}</strong>
       <span>${sheet.placed_piece_count}/${sheet.piece_count} pieces placed</span>
       <span>${sheet.sheet_count_used} sheet(s) used${
         sheet.available_sheet_count ? ` of ${sheet.available_sheet_count}` : ''
       }</span>
+      <span>${sheet.recommended_sheet_count} sheet(s) recommended${
+        shortfall ? `, buy ${shortfall}` : ''
+      }</span>
       <span>Sheet: ${sheet.sheet_width} x ${sheet.sheet_height}</span>
+      <span>${(sheet.material_utilization * 100).toFixed(1)}% bbox utilization</span>
+      <span>${sheet.total_piece_area.toFixed(2)} actual area, ${sheet.total_bounding_box_area.toFixed(2)} packed bbox area</span>
       <small>${unplaced ? `${unplaced} piece(s) did not fit` : 'All pieces fit bounding boxes'}</small>
     `;
     el.packSummary.appendChild(card);

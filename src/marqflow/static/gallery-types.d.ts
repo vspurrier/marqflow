@@ -87,6 +87,14 @@ interface PackSheet {
   sheet_height: number;
   available_sheet_count: number;
   sheet_count_used: number;
+  recommended_sheet_count: number;
+  stock_shortfall_count: number;
+  sheet_area: number;
+  material_area_available: number;
+  material_area_used: number;
+  total_piece_area: number;
+  total_bounding_box_area: number;
+  material_utilization: number;
   over_stock_capacity: boolean;
 }
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import shutil
 import tempfile
@@ -1101,15 +1102,19 @@ class MarquetryWorkspace:
             available_count = veneer.sheet_count or max(1, len(pieces))
             packer = newPacker(rotation=True)
             scale = 1000
+            px_per_unit_x, px_per_unit_y = self.design.physical_size.pixels_per_unit(
+                (self.source.working_width, self.source.working_height)
+            )
+            bbox_area_total = 0.0
+            piece_area_total = 0.0
             for piece in pieces:
                 x0, y0, x1, y1 = piece['bbox']
                 width_px = max(1, x1 - x0)
                 height_px = max(1, y1 - y0)
-                px_per_unit_x, px_per_unit_y = self.design.physical_size.pixels_per_unit(
-                    (self.source.working_width, self.source.working_height)
-                )
                 width_units = width_px / max(px_per_unit_x, 1e-9)
                 height_units = height_px / max(px_per_unit_y, 1e-9)
+                bbox_area_total += width_units * height_units
+                piece_area_total += float(piece['area_physical'])
                 packer.add_rect(
                     max(1, int(round(width_units * scale))),
                     max(1, int(round(height_units * scale))),
@@ -1138,6 +1143,15 @@ class MarquetryWorkspace:
                 )
                 + 1
             )
+            sheet_area = sheet_width * sheet_height
+            area_sheet_count = math.ceil(bbox_area_total / sheet_area) if sheet_area else 0
+            recommended_sheet_count = max(sheet_count_used, area_sheet_count, 1 if pieces else 0)
+            stock_shortfall_count = max(0, recommended_sheet_count - veneer.sheet_count)
+            material_area_available = sheet_area * veneer.sheet_count
+            material_area_used = sheet_area * sheet_count_used
+            material_utilization = (
+                bbox_area_total / material_area_used if material_area_used else 0.0
+            )
             packed_pieces = [
                 {
                     **piece,
@@ -1155,6 +1169,14 @@ class MarquetryWorkspace:
                     'sheet_height': sheet_height,
                     'available_sheet_count': veneer.sheet_count,
                     'sheet_count_used': sheet_count_used,
+                    'recommended_sheet_count': recommended_sheet_count,
+                    'stock_shortfall_count': stock_shortfall_count,
+                    'sheet_area': sheet_area,
+                    'material_area_available': material_area_available,
+                    'material_area_used': material_area_used,
+                    'total_piece_area': piece_area_total,
+                    'total_bounding_box_area': bbox_area_total,
+                    'material_utilization': material_utilization,
                     'over_stock_capacity': placed_count < len(pieces),
                     'pieces': packed_pieces,
                 }

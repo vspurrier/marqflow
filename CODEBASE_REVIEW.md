@@ -70,6 +70,8 @@ uv run pytest -q
   simplification.
 - `rectpack` bounding-box pack manifest grouped by veneer.
 - Browser pack summary with placed/unplaced counts and stock warnings.
+- Pack manifest includes recommended sheet counts, stock shortfall, area totals,
+  and bounding-box material utilization by veneer.
 - Browser pack output is constrained to the configured workspace root.
 - Browser smoke test for creating a workspace, generating a candidate grid, and
   seeding the design from a candidate.
@@ -110,9 +112,9 @@ uv run pytest -q
 
 5. Material planning.
 
-   Veneer inventory fields, replacement, browser editing, and stock-fit summary
-   exist, but purchasing quantities, deeper grain review, and texture previews
-   are not implemented.
+   Veneer inventory fields, replacement, browser editing, stock-fit summary,
+   purchasing quantity estimates, and material utilization exist. Deeper grain
+   review and texture previews are not implemented.
 
 6. Real packing/nesting.
 
