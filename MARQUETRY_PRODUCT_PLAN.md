@@ -84,6 +84,8 @@ Implemented now:
 - browser stock-fit summary for pack results
 - browser smoke test for image upload, candidate grid generation, and design
   seeding
+- browser smoke test for canvas selection, selected veneer assignment, undo, and
+  pack summary generation
 - minimal browser UI
 
 ## Next Milestones
@@ -128,9 +130,9 @@ Implemented now:
 7. Add browser-level regression tests.
 
    API/core tests cover the model. A browser smoke test covers image upload,
-   candidate-grid generation, and design seeding. Add coverage for veneer
-   assignment, merge, undo, SVG preview, pack export, zoom, and lasso
-   selection.
+   candidate-grid generation, design seeding, canvas selection, selected veneer
+   assignment, undo, and pack summary generation. Add coverage for merge, SVG
+   preview, zoom, and lasso selection.
 
 ## Non-Goals For This Branch
 

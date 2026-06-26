@@ -10,8 +10,8 @@ import pytest
 import uvicorn
 from PIL import Image
 from playwright.sync_api import Error as PlaywrightError
+from playwright.sync_api import Page, sync_playwright
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
-from playwright.sync_api import sync_playwright
 
 from marqflow.gallery_web import create_app
 
@@ -29,6 +29,29 @@ def _free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(('127.0.0.1', 0))
         return int(sock.getsockname()[1])
+
+
+def _wait_for_status(page: Page, text: str) -> None:
+    try:
+        page.wait_for_function(
+            (
+                "expected => document.querySelector('#status')?.textContent"
+                "?.includes(expected)"
+            ),
+            arg=text,
+            timeout=15000,
+        )
+    except PlaywrightTimeoutError as exc:
+        raise AssertionError(page.locator('#status').text_content()) from exc
+
+
+def _click_canvas_center(page: Page) -> None:
+    canvas = page.locator('#design-canvas')
+    canvas.scroll_into_view_if_needed()
+    box = canvas.bounding_box()
+    if box is None:
+        raise AssertionError('design canvas is not visible')
+    canvas.click(position={'x': box['width'] / 2, 'y': box['height'] / 2})
 
 
 def test_browser_can_create_workspace_from_image(tmp_path: Path) -> None:
@@ -64,13 +87,7 @@ def test_browser_can_create_workspace_from_image(tmp_path: Path) -> None:
             page.fill('#target-regions', '4')
             page.fill('#compactness', '8')
             page.click('#open-image')
-            try:
-                page.wait_for_function(
-                    "document.querySelector('#status')?.textContent?.includes('Workspace ready.')",
-                    timeout=15000,
-                )
-            except PlaywrightTimeoutError as exc:
-                raise AssertionError(page.locator('#status').text_content()) from exc
+            _wait_for_status(page, 'Workspace ready.')
 
             assert page.locator('#design-canvas').evaluate('node => node.width') == 48
             assert page.locator('.veneer-row').count() >= 1
@@ -83,31 +100,31 @@ def test_browser_can_create_workspace_from_image(tmp_path: Path) -> None:
             page.fill('#min-compactness', '4')
             page.fill('#max-compactness', '12')
             page.click('#candidate-grid')
-            try:
-                page.wait_for_function(
-                    (
-                        "document.querySelector('#status')?.textContent"
-                        "?.includes('Candidate grid ready.')"
-                    ),
-                    timeout=15000,
-                )
-            except PlaywrightTimeoutError as exc:
-                raise AssertionError(page.locator('#status').text_content()) from exc
+            _wait_for_status(page, 'Candidate grid ready.')
 
             assert page.locator('.candidate').count() >= 4
             page.locator('.candidate button').last.click()
-            try:
-                page.wait_for_function(
-                    (
-                        "document.querySelector('#status')?.textContent"
-                        "?.includes('Design seeded from')"
-                    ),
-                    timeout=15000,
-                )
-            except PlaywrightTimeoutError as exc:
-                raise AssertionError(page.locator('#status').text_content()) from exc
+            _wait_for_status(page, 'Design seeded from')
 
             assert page.locator('.region').count() >= 1
+            _click_canvas_center(page)
+            page.wait_for_function(
+                (
+                    "document.querySelector('#selection-status')?.textContent"
+                    "?.includes('Selected ')"
+                ),
+                timeout=15000,
+            )
+            if page.locator('#selected-veneer option').count() > 1:
+                veneer_id = page.locator('#selected-veneer option').nth(1).get_attribute('value')
+                page.select_option('#selected-veneer', veneer_id)
+            page.click('#assign-selected')
+            _wait_for_status(page, 'Assigned ')
+            page.click('#undo')
+            _wait_for_status(page, 'Undid last edit.')
+            page.click('#pack')
+            _wait_for_status(page, 'Pack manifest written')
+            assert page.locator('.pack-card').count() >= 1
             browser.close()
     finally:
         server.should_exit = True
