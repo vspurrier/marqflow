@@ -340,18 +340,26 @@ function renderBoundarySummary(ids) {
     (total, boundary) => total + boundary.edge_length_physical,
     0,
   );
+  const simplifiable = touching.reduce(
+    (total, boundary) => total + (boundary.simplified_vertex_reduction || 0),
+    0,
+  );
   const summary = document.createElement('article');
   summary.className = 'boundary-card';
   summary.innerHTML = `
     <strong>Selected boundaries</strong>
     <span>${internal.length} internal, ${external.length} external</span>
     <small>${internalLength.toFixed(2)} internal + ${externalLength.toFixed(2)} external length</small>
+    <small>${simplifiable} potential vertex reduction(s)</small>
   `;
   el.boundarySummary.appendChild(summary);
 
   for (const boundary of touching
     .slice()
-    .sort((a, b) => b.edge_length_physical - a.edge_length_physical)
+    .sort((a, b) => {
+      const reductionDelta = (b.simplified_vertex_reduction || 0) - (a.simplified_vertex_reduction || 0);
+      return reductionDelta || b.edge_length_physical - a.edge_length_physical;
+    })
     .slice(0, 5)) {
     const card = document.createElement('article');
     card.className = 'boundary-card';
