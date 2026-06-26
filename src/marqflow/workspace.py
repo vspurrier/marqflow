@@ -1462,6 +1462,60 @@ class MarquetryWorkspace:
         self.export_svg(output_path / 'design.svg')
         return manifest
 
+    def cleanup_report(self) -> dict[str, Any]:
+        """Return a single cut-readiness report for the current design."""
+
+        if self.design is None:
+            raise ValueError('create a design first')
+        regions = self.regions()
+        boundaries = self.boundary_summary()['boundaries']
+        merge_suggestions = self.merge_suggestions()
+        warning_counts: dict[str, int] = {}
+        for region in regions:
+            for warning in region['warnings']:
+                warning_counts[warning] = warning_counts.get(warning, 0) + 1
+        jagged_boundaries = [
+            boundary
+            for boundary in boundaries
+            if boundary.get('simplified_vertex_reduction', 0) > 0
+        ]
+        jagged_boundaries.sort(
+            key=lambda boundary: (
+                int(boundary.get('simplified_vertex_reduction', 0)),
+                float(boundary.get('edge_length_physical', 0.0)),
+            ),
+            reverse=True,
+        )
+        veneer_counts: dict[str, int] = {}
+        for region in regions:
+            veneer_counts[region['veneer_id']] = veneer_counts.get(region['veneer_id'], 0) + 1
+        return {
+            'region_count': len(regions),
+            'locked_region_count': sum(1 for region in regions if region['locked']),
+            'warning_counts': warning_counts,
+            'small_or_thin_region_ids': [
+                region['region_id'] for region in regions if region['warnings']
+            ],
+            'merge_suggestion_count': len(merge_suggestions),
+            'top_merge_suggestions': merge_suggestions[:10],
+            'boundary_count': len(boundaries),
+            'jagged_boundary_count': len(jagged_boundaries),
+            'top_jagged_boundaries': [
+                {
+                    'region_a': boundary['region_a'],
+                    'region_b': boundary['region_b'],
+                    'edge_length_physical': boundary['edge_length_physical'],
+                    'vertex_count': boundary['vertex_count'],
+                    'simplified_vertex_count': boundary['simplified_vertex_count'],
+                    'simplified_vertex_reduction': boundary['simplified_vertex_reduction'],
+                }
+                for boundary in jagged_boundaries[:10]
+            ],
+            'veneer_region_counts': dict(sorted(veneer_counts.items())),
+            'subject_mask': self.subject_mask_summary(),
+            'valid_partition': self.validation(),
+        }
+
     def summary(self) -> dict[str, Any]:
         return {
             'workspace_dir': str(self.workspace_dir),

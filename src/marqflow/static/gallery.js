@@ -80,6 +80,7 @@ const el = /** @type {Record<string, any>} */ ({
   undo: document.getElementById('undo'),
   svgSimplify: document.getElementById('svg-simplify'),
   viewSvg: document.getElementById('view-svg'),
+  cleanupReport: document.getElementById('cleanup-report'),
   pack: document.getElementById('pack'),
   packSummary: document.getElementById('pack-summary'),
   packOutput: document.getElementById('pack-output'),
@@ -997,6 +998,19 @@ async function pack() {
   );
 }
 
+async function cleanupReport() {
+  const response = await fetch('/api/cleanup-report');
+  if (!response.ok) {
+    setStatus(await response.text(), true);
+    return;
+  }
+  const report = await response.json();
+  el.packOutput.textContent = JSON.stringify(report, null, 2);
+  setStatus(
+    `Cleanup report: ${report.region_count} regions, ${report.merge_suggestion_count} merge suggestion(s), ${report.jagged_boundary_count} jagged boundary group(s).`,
+  );
+}
+
 /** @param {PackManifest} manifest */
 function renderPackSummary(manifest) {
   el.packSummary.innerHTML = '';
@@ -1118,6 +1132,7 @@ el.viewSvg.addEventListener('click', () => {
   const tolerance = encodeURIComponent(String(el.svgSimplify.value || 1));
   window.open(`/api/design.svg?simplify_tolerance=${tolerance}`, '_blank');
 });
+el.cleanupReport.addEventListener('click', cleanupReport);
 el.pack.addEventListener('click', pack);
 
 refresh().catch(() => render());

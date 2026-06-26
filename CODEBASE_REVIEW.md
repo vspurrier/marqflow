@@ -93,6 +93,8 @@ uv run pytest -q
 - Browser smoke test for zoom controls, lasso selection, box selection, and
   merge/undo.
 - Browser smoke test for SVG preview generation.
+- Cleanup report endpoint/browser action summarizing warnings, merge
+  suggestions, jagged boundaries, veneers, mask, and partition validity.
 - Thin browser UI over the new API.
 
 ## Still Outstanding

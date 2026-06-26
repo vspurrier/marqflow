@@ -97,6 +97,7 @@ The browser UI is deliberately minimal in this rewrite:
 - repair regions below a physical area threshold
 - smooth raster boundary noise while preserving a valid partition
 - export SVG with adjustable contour simplification
+- generate a cleanup report before final export
 - write the bounding-box pack manifest
 - review placed/unplaced piece counts and stock warnings
 

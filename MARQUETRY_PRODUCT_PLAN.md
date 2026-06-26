@@ -102,6 +102,7 @@ Implemented now:
 - browser smoke test for zoom controls, lasso selection, box selection, and
   merge/undo
 - browser smoke test for SVG preview generation
+- cleanup report for cut-readiness review
 - minimal browser UI
 
 ## Next Milestones

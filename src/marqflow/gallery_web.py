@@ -520,6 +520,14 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
         )
         return Response(svg_path.read_text(encoding='utf-8'), media_type='image/svg+xml')
 
+    @app.get('/api/cleanup-report')
+    def cleanup_report() -> JSONResponse:
+        ws = _load_workspace(workspace_path)
+        try:
+            return JSONResponse(ws.cleanup_report())
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @app.post('/api/pack')
     def pack(request: PackRequest) -> JSONResponse:
         ws = _load_workspace(workspace_path)

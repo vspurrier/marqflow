@@ -308,6 +308,10 @@ def test_bulk_assignment_detail_zones_and_boundaries(tmp_path: Path) -> None:
         for boundary in boundary_summary['boundaries']
     )
     assert all(boundary['simplified_paths'] for boundary in boundary_summary['boundaries'])
+    report = reloaded.cleanup_report()
+    assert report['region_count'] == 4
+    assert report['boundary_count'] == 4
+    assert 'valid_partition' in report
     reloaded.undo()
     assert reloaded.summary()['design']['detail_zones'] == []
 
@@ -603,6 +607,10 @@ def test_api_merge_undo_and_hitmap(tmp_path: Path) -> None:
     boundaries_response = client.get('/api/design/boundaries')
     assert boundaries_response.status_code == 200
     assert boundaries_response.json()['boundary_count'] == 4
+
+    report_response = client.get('/api/cleanup-report')
+    assert report_response.status_code == 200
+    assert report_response.json()['region_count'] == 4
 
     cleanup_response = client.post(
         '/api/design/apply-merge-suggestions',
