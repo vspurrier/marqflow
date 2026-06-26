@@ -90,6 +90,7 @@ Implemented now:
 - partition validation
 - physical-unit SVG export with adjustable contour simplification
 - `rectpack` bounding-box pack manifest by veneer
+- physical contour and SVG path data in each pack manifest piece
 - browser stock-fit summary for pack results
 - recommended sheet counts, stock shortfall, area totals, and material
   utilization by veneer
@@ -139,8 +140,9 @@ Implemented now:
 
 5. Replace bounding-box packing with irregular nesting.
 
-   Current packing uses `rectpack` against physical bounding boxes. The next
-   adapter should pack actual validated physical paths by veneer.
+   Current packing uses `rectpack` against physical bounding boxes, but the
+   manifest now includes actual physical contours and SVG path data per piece.
+   The next adapter should pack those validated physical paths by veneer.
 
 6. Convert browser JS to TypeScript modules once the API stabilizes.
 

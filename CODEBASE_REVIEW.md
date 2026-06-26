@@ -80,6 +80,8 @@ uv run pytest -q
 - Veneer-grouped SVG export in physical units with adjustable contour
   simplification.
 - `rectpack` bounding-box pack manifest grouped by veneer.
+- Pack manifest includes each piece's physical contour and SVG path for future
+  irregular nesting adapters.
 - Browser pack summary with placed/unplaced counts and stock warnings.
 - Pack manifest includes recommended sheet counts, stock shortfall, area totals,
   and bounding-box material utilization by veneer.
@@ -134,8 +136,10 @@ uv run pytest -q
 
 6. Real packing/nesting.
 
-   Packing now uses `rectpack` on physical bounding boxes. This is useful for
-   rough stock planning but is not irregular nesting of true cut paths.
+   Packing now uses `rectpack` on physical bounding boxes and includes true
+   physical contours/SVG paths in the manifest. This is useful for rough stock
+   planning and adapter development, but is not irregular nesting of true cut
+   paths.
 
 7. TypeScript migration.
 

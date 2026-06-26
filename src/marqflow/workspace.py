@@ -27,6 +27,7 @@ from .geometry import (
     region_neighbors,
     shared_boundaries,
     shared_boundary_paths,
+    svg_path,
 )
 from .models import (
     Candidate,
@@ -1415,6 +1416,18 @@ class MarquetryWorkspace:
             packed_pieces = [
                 {
                     **piece,
+                    'physical_contour': [
+                        [
+                            point[0] / max(px_per_unit_x, 1e-9),
+                            point[1] / max(px_per_unit_y, 1e-9),
+                        ]
+                        for point in piece['contour']
+                    ],
+                    'physical_svg_path': svg_path(
+                        tuple((float(point[0]), float(point[1])) for point in piece['contour']),
+                        px_per_unit_x,
+                        px_per_unit_y,
+                    ),
                     'placement': placements_by_region.get(piece['region_id']),
                     'packed': piece['region_id'] in placements_by_region,
                 }

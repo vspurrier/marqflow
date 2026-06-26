@@ -79,6 +79,8 @@ def test_workspace_creates_valid_design_and_exports(tmp_path: Path) -> None:
     assert manifest['packing_backend'] == 'rectpack-bounding-box'
     assert manifest['sheets']
     assert 'placement' in manifest['sheets'][0]['pieces'][0]
+    assert manifest['sheets'][0]['pieces'][0]['physical_contour']
+    assert manifest['sheets'][0]['pieces'][0]['physical_svg_path'].startswith('M ')
     assert manifest['sheets'][0]['recommended_sheet_count'] >= 1
     assert manifest['sheets'][0]['total_piece_area'] > 0
     assert manifest['sheets'][0]['total_bounding_box_area'] > 0
