@@ -1,8 +1,9 @@
 # Marqflow Product Plan
 
-Status date: 2026-06-25
+Status date: 2026-06-26
 
-This branch is a fresh rewrite guided by the lessons from the prototype.
+`main` is the active marquetry-first prototype guided by the lessons from the
+earlier gallery prototype.
 
 ## Product Model
 
@@ -88,6 +89,11 @@ Implemented now:
 - shared-boundary simplification analysis with vertex reduction estimates
 - topology graph endpoint with vertices, exterior/shared edges, and region-edge
   references
+- persisted topology graph artifacts
+- undoable topology graph simplification artifacts
+- SVG reconstruction from persisted graph linework
+- API and CLI access for graph persistence, simplification, loading, and
+  reconstructed graph SVG export
 - Shapely coverage validation for exported physical polygons
 - selected-boundary summary in the browser
 - partition validation
@@ -128,18 +134,21 @@ Implemented now:
    Shared-boundary polylines now exist for adjacent regions in pixel and
    physical units, including simplified-path analysis. A topology graph and
    Shapely coverage validation now provide the foundation for correctness, and
-   coverage-safe exports persist artifact metadata. Advanced smoothing, point
-   editing, and no-gap/no-overlap SVG cleanup should be built on persisted
-   shared vector edges.
+   coverage-safe exports persist artifact metadata. Topology graphs can now be
+   persisted, simplified into undoable vector artifacts, and reconstructed into
+   filled SVG. Advanced point editing and no-gap/no-overlap graph mutation
+   should be built on these persisted shared vector edges.
 
 3. Add cleanup operations on top of shared boundaries.
 
    Current cleanup supports connected merge, targeted split, lock/unlock,
    physical-area sliver repair, raster boundary smoothing, selected-region
    smoothing, selected-boundary inspection, and bounded auto-merge suggestions.
-   Coverage-safe shared-edge simplification exists for SVG export. Needed
-   operations: persist shared vector simplification/smoothing as edits, edit
-   vertices, and write edited shared edges back safely.
+   Coverage-safe shared-edge simplification exists for SVG export, and shared
+   graph simplification now persists as an undoable vector artifact. Needed
+   operations: selected-boundary vector smoothing, edit vertices, validate
+   arbitrary edited graph mutations, and write edited shared edges back safely
+   when the user promotes a vector artifact to the final design.
 
 4. Deepen veneer inventory logic.
 

@@ -24,6 +24,7 @@ from .geometry import (
     coverage_simplified_svg,
     coverage_summary,
     design_to_svg,
+    graph_to_svg,
     merge_labels,
     normalize_labels,
     partition_validation,
@@ -31,6 +32,7 @@ from .geometry import (
     region_neighbors,
     shared_boundaries,
     shared_boundary_paths,
+    simplify_topology_graph,
     svg_path,
 )
 from .models import (
@@ -41,6 +43,7 @@ from .models import (
     MarquetryDesign,
     PhysicalSize,
     SourceImage,
+    VectorGraphArtifact,
     Veneer,
     default_veneers,
 )
@@ -50,6 +53,7 @@ SOURCE_IMAGE = 'source.png'
 DESIGN_LABELS = 'design-labels.npy'
 SUBJECT_MASK = 'subject-mask.npy'
 HISTORY_DIR = 'history'
+VECTOR_DIR = 'vector'
 
 
 def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
@@ -1061,6 +1065,23 @@ class MarquetryWorkspace:
                     if previous_subject_mask_path is not None
                     else SUBJECT_MASK
                 )
+        elif edit.kind == 'simplify_vector_graph':
+            target_kind = str(edit.payload['target_kind'])
+            target_path = self.workspace_dir / str(edit.payload['target_path'])
+            previous_payload_path = edit.payload.get('previous_payload_path')
+            previous_artifact = edit.payload.get('previous_artifact')
+            self.design.vector_graphs = [
+                artifact
+                for artifact in self.design.vector_graphs
+                if artifact.kind != target_kind
+            ]
+            if previous_payload_path and previous_artifact:
+                shutil.copyfile(self.workspace_dir / str(previous_payload_path), target_path)
+                self.design.vector_graphs.append(
+                    VectorGraphArtifact.from_dict(previous_artifact)
+                )
+            else:
+                target_path.unlink(missing_ok=True)
         else:
             raise ValueError(f'cannot undo edit kind: {edit.kind}')
         self.save()
@@ -1332,6 +1353,170 @@ class MarquetryWorkspace:
         if self.design is None:
             raise ValueError('create a design first')
         return boundary_graph(self.design_labels(), self.design.physical_size)
+
+    def persist_topology_graph(self, kind: str = 'raster_topology') -> dict[str, Any]:
+        """Persist the current topology graph as a versioned vector artifact."""
+
+        if self.design is None:
+            raise ValueError('create a design first')
+        graph = self.topology_graph()
+        coverage = self.coverage_summary()
+        path = Path(VECTOR_DIR) / f'{kind}.json'
+        payload = {
+            'schema_version': 1,
+            'kind': kind,
+            'source': 'raster_labels',
+            'physical_size': self.design.physical_size.to_dict(),
+            'coverage': coverage,
+            'graph': graph,
+        }
+        _atomic_json(self.workspace_dir / path, payload)
+        self._record_vector_graph_artifact(
+            kind=kind,
+            path=path,
+            graph=graph,
+            coverage_valid=bool(coverage['valid']),
+        )
+        self.save()
+        return payload
+
+    def _record_vector_graph_artifact(
+        self,
+        kind: str,
+        path: Path,
+        graph: dict[str, Any],
+        coverage_valid: bool,
+    ) -> None:
+        if self.design is None:
+            raise ValueError('create a design first')
+        self.design.vector_graphs = [
+            artifact for artifact in self.design.vector_graphs if artifact.kind != kind
+        ]
+        self.design.vector_graphs.append(
+            VectorGraphArtifact(
+                kind=kind,
+                path=str(path),
+                topology_vertex_count=int(graph['vertex_count']),
+                topology_edge_count=int(graph['edge_count']),
+                coverage_valid=bool(coverage_valid),
+                created_at=datetime.now(timezone.utc).isoformat(),
+            )
+        )
+
+    def vector_graph_payload(self, kind: str = 'raster_topology') -> dict[str, Any]:
+        """Load a persisted graph artifact, creating the raster graph if needed."""
+
+        if self.design is None:
+            raise ValueError('create a design first')
+        for artifact in self.design.vector_graphs:
+            if artifact.kind == kind:
+                return json.loads(
+                    (self.workspace_dir / artifact.path).read_text(encoding='utf-8')
+                )
+        if kind == 'raster_topology':
+            return self.persist_topology_graph(kind=kind)
+        raise ValueError(f'vector graph not found: {kind}')
+
+    def simplify_vector_graph(
+        self,
+        tolerance: float = 1.25,
+        source_kind: str = 'raster_topology',
+        target_kind: str = 'simplified_topology',
+    ) -> dict[str, Any]:
+        """Persist a simplified shared-boundary graph without changing raster labels."""
+
+        if self.design is None:
+            raise ValueError('create a design first')
+        source_payload = self.vector_graph_payload(source_kind)
+        labels = self.design_labels()
+        graph = simplify_topology_graph(
+            source_payload['graph'],
+            tolerance=max(0.0, float(tolerance)),
+            physical_size=self.design.physical_size,
+            image_size=(labels.shape[1], labels.shape[0]),
+        )
+        coverage = self.coverage_summary()
+        path = Path(VECTOR_DIR) / f'{target_kind}.json'
+        previous_payload_path = None
+        previous_artifact = None
+        if self.design is not None:
+            for artifact in self.design.vector_graphs:
+                if artifact.kind == target_kind:
+                    previous_artifact = artifact.to_dict()
+                    existing = self.workspace_dir / artifact.path
+                    if existing.exists():
+                        op_id = self._next_op_id()
+                        previous_payload_path = Path(HISTORY_DIR) / f'op-{op_id}-{target_kind}.json'
+                        (self.workspace_dir / previous_payload_path).parent.mkdir(
+                            parents=True,
+                            exist_ok=True,
+                        )
+                        shutil.copyfile(existing, self.workspace_dir / previous_payload_path)
+                    break
+        op_id = self._next_op_id()
+        payload = {
+            'schema_version': 1,
+            'kind': target_kind,
+            'source': 'topology_graph',
+            'source_kind': source_kind,
+            'tolerance': max(0.0, float(tolerance)),
+            'physical_size': self.design.physical_size.to_dict(),
+            'coverage': coverage,
+            'graph': graph,
+        }
+        _atomic_json(self.workspace_dir / path, payload)
+        self._record_vector_graph_artifact(
+            kind=target_kind,
+            path=path,
+            graph=graph,
+            coverage_valid=bool(coverage['valid']),
+        )
+        self.design.edit_history.append(
+            EditOperation(
+                op_id=op_id,
+                kind='simplify_vector_graph',
+                payload={
+                    'source_kind': source_kind,
+                    'target_kind': target_kind,
+                    'target_path': str(path),
+                    'tolerance': max(0.0, float(tolerance)),
+                    'previous_payload_path': (
+                        str(previous_payload_path)
+                        if previous_payload_path is not None
+                        else None
+                    ),
+                    'previous_artifact': previous_artifact,
+                },
+            )
+        )
+        self.save()
+        return payload
+
+    def export_vector_graph_svg(
+        self,
+        output_path: str | Path,
+        kind: str = 'simplified_topology',
+    ) -> Path:
+        """Reconstruct filled region polygons from a persisted vector graph."""
+
+        if self.design is None:
+            raise ValueError('create a design first')
+        payload = self.vector_graph_payload(kind)
+        path = Path(output_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        svg = graph_to_svg(
+            payload['graph'],
+            self.design_labels(),
+            build_regions(
+                self.source_array(),
+                self.design_labels(),
+                self.design,
+                simplify_tolerance=0.0,
+            ),
+            self.design.physical_size,
+        )
+        path.write_text(svg, encoding='utf-8')
+        return path
 
     def coverage_summary(self) -> dict[str, Any]:
         """Return Shapely coverage validation for exported physical region polygons."""
@@ -1611,6 +1796,9 @@ class MarquetryWorkspace:
             ],
             'veneer_region_counts': dict(sorted(veneer_counts.items())),
             'subject_mask': self.subject_mask_summary(),
+            'vector_graphs': [
+                artifact.to_dict() for artifact in self.design.vector_graphs
+            ],
             'vector_exports': [
                 artifact.to_dict() for artifact in self.design.vector_exports
             ],

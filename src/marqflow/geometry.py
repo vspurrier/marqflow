@@ -10,7 +10,8 @@ from typing import Any
 import numpy as np
 from PIL import Image
 from shapely import coverage_invalid_edges, coverage_is_valid, coverage_simplify
-from shapely.geometry import Polygon
+from shapely.geometry import LineString, Polygon
+from shapely.ops import polygonize
 from skimage.measure import approximate_polygon, find_contours
 from skimage.measure import label as connected_components
 
@@ -378,6 +379,137 @@ def coverage_simplified_svg(
             'stroke="#111" stroke-width="0.01" '
             f'data-region-id="{region.region_id}" data-veneer-id="{escape(region.veneer_id)}" '
             'data-coverage-simplified="true" />'
+        )
+    body = ''.join(
+        f'<g id="veneer-{escape(veneer_id)}" data-veneer-id="{escape(veneer_id)}">'
+        + ''.join(paths)
+        + '</g>'
+        for veneer_id, paths in sorted(groups.items())
+    )
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" '
+        f'width="{physical_size.width}{physical_size.unit}" '
+        f'height="{physical_size.height}{physical_size.unit}" '
+        f'viewBox="0 0 {physical_size.width} {physical_size.height}">{body}</svg>'
+    )
+
+
+def simplify_topology_graph(
+    graph: dict[str, Any],
+    tolerance: float,
+    physical_size: PhysicalSize,
+    image_size: tuple[int, int],
+) -> dict[str, Any]:
+    """Return a copy of a topology graph with simplified edge paths."""
+
+    simplified = json_safe_graph(graph)
+    px_per_unit_x, px_per_unit_y = physical_size.pixels_per_unit(image_size)
+    vertices_by_id = {vertex['vertex_id']: vertex for vertex in simplified['vertices']}
+    for edge in simplified['edges']:
+        path = edge['path']
+        if len(path) > 2 and tolerance > 0:
+            simplified_path = approximate_polygon(np.asarray(path, dtype=float), tolerance)
+            path = [[float(x), float(y)] for x, y in simplified_path]
+        else:
+            path = [[float(x), float(y)] for x, y in path]
+        # Preserve endpoints exactly so adjacency references remain stable.
+        start_vertex = vertices_by_id[edge['vertex_ids'][0]]
+        end_vertex = vertices_by_id[edge['vertex_ids'][-1]]
+        path[0] = [float(start_vertex['point'][0]), float(start_vertex['point'][1])]
+        path[-1] = [float(end_vertex['point'][0]), float(end_vertex['point'][1])]
+        edge['path'] = path
+        edge['length_px'] = sum(
+            math.dist(path[index - 1], path[index]) for index in range(1, len(path))
+        )
+        physical_path = [
+            [
+                point[0] / max(px_per_unit_x, 1e-9),
+                point[1] / max(px_per_unit_y, 1e-9),
+            ]
+            for point in path
+        ]
+        edge['physical_path'] = physical_path
+        edge['length_physical'] = sum(
+            math.dist(physical_path[index - 1], physical_path[index])
+            for index in range(1, len(physical_path))
+        )
+    return simplified
+
+
+def json_safe_graph(graph: dict[str, Any]) -> dict[str, Any]:
+    """Round-trip a graph through plain JSON-compatible objects."""
+
+    return {
+        'vertex_count': int(graph['vertex_count']),
+        'edge_count': int(graph['edge_count']),
+        'vertices': [dict(vertex) for vertex in graph['vertices']],
+        'edges': [
+            {
+                **dict(edge),
+                'vertex_ids': [int(value) for value in edge['vertex_ids']],
+                'path': [[float(x), float(y)] for x, y in edge['path']],
+                'physical_path': [
+                    [float(x), float(y)] for x, y in edge.get('physical_path', [])
+                ],
+            }
+            for edge in graph['edges']
+        ],
+        'regions': [
+            {
+                'region_id': int(region['region_id']),
+                'edge_ids': [int(edge_id) for edge_id in region['edge_ids']],
+            }
+            for region in graph['regions']
+        ],
+    }
+
+
+def graph_to_svg(
+    graph: dict[str, Any],
+    labels: np.ndarray,
+    regions: list[Region],
+    physical_size: PhysicalSize,
+) -> str:
+    """Reconstruct region polygons from topology graph edges and export SVG."""
+
+    px_per_unit_x, px_per_unit_y = physical_size.pixels_per_unit(
+        (labels.shape[1], labels.shape[0])
+    )
+    region_by_id = {region.region_id: region for region in regions}
+    lines = []
+    for edge in graph['edges']:
+        path = edge['path']
+        if len(path) < 2:
+            continue
+        physical_path = [
+            (
+                float(x) / max(px_per_unit_x, 1e-9),
+                float(y) / max(px_per_unit_y, 1e-9),
+            )
+            for x, y in path
+        ]
+        lines.append(LineString(physical_path))
+
+    groups: dict[str, list[str]] = defaultdict(list)
+    for polygon in polygonize(lines):
+        if polygon.is_empty or polygon.area <= 0:
+            continue
+        sample = polygon.representative_point()
+        x = max(0, min(labels.shape[1] - 1, int(sample.x * px_per_unit_x)))
+        y = max(0, min(labels.shape[0] - 1, int(sample.y * px_per_unit_y)))
+        region_id = int(labels[y, x])
+        region = region_by_id.get(region_id)
+        if region is None:
+            continue
+        path = _physical_path([(float(x), float(y)) for x, y in polygon.exterior.coords])
+        if not path:
+            continue
+        groups[region.veneer_id].append(
+            f'<path id="region-{region.region_id}" d="{path}" '
+            f'fill="#{region.color_rgb[0]:02x}{region.color_rgb[1]:02x}{region.color_rgb[2]:02x}" '
+            'stroke="#111" stroke-width="0.01" '
+            f'data-region-id="{region.region_id}" data-veneer-id="{escape(region.veneer_id)}" '
+            'data-graph-reconstructed="true" />'
         )
     body = ''.join(
         f'<g id="veneer-{escape(veneer_id)}" data-veneer-id="{escape(veneer_id)}">'

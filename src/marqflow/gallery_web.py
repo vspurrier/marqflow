@@ -142,6 +142,12 @@ class SmoothBoundariesRequest(BaseModel):
     region_ids: list[int] = Field(default_factory=list)
 
 
+class SimplifyTopologyRequest(BaseModel):
+    tolerance: float = Field(default=1.25, ge=0.0, le=50.0)
+    source_kind: str = 'raster_topology'
+    target_kind: str = 'simplified_topology'
+
+
 class PackRequest(BaseModel):
     output_dir: str = './exported'
 
@@ -506,6 +512,36 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    @app.post('/api/design/topology/persist')
+    def persist_design_topology() -> JSONResponse:
+        ws = _load_workspace(workspace_path)
+        try:
+            return JSONResponse(ws.persist_topology_graph())
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post('/api/design/topology/simplify')
+    def simplify_design_topology(request: SimplifyTopologyRequest) -> JSONResponse:
+        ws = _load_workspace(workspace_path)
+        try:
+            return JSONResponse(
+                ws.simplify_vector_graph(
+                    tolerance=request.tolerance,
+                    source_kind=request.source_kind,
+                    target_kind=request.target_kind,
+                )
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get('/api/design/topology/{kind}')
+    def persisted_design_topology(kind: str) -> JSONResponse:
+        ws = _load_workspace(workspace_path)
+        try:
+            return JSONResponse(ws.vector_graph_payload(kind))
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
     @app.post('/api/design/veneers')
     def replace_veneers(veneers: list[VeneerModel]) -> JSONResponse:
         ws = _load_workspace(workspace_path)
@@ -539,6 +575,22 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
             svg_path = ws.export_coverage_svg(
                 ws.workspace_dir / 'design-coverage.svg',
                 tolerance=tolerance,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return Response(svg_path.read_text(encoding='utf-8'), media_type='image/svg+xml')
+
+    @app.get('/api/design-graph.svg')
+    def design_graph_svg(
+        kind: str = Query(default='simplified_topology'),
+    ) -> Response:
+        ws = _load_workspace(workspace_path)
+        if ws.design is None:
+            raise HTTPException(status_code=400, detail='create a design first')
+        try:
+            svg_path = ws.export_vector_graph_svg(
+                ws.workspace_dir / f'design-{kind}.svg',
+                kind=kind,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -65,6 +65,43 @@ def export(
 
 
 @app.command()
+def simplify_graph(
+    workspace_dir: Annotated[Path, typer.Argument(..., exists=True, readable=True)],
+    tolerance: float = typer.Option(
+        1.25,
+        help='Shared-boundary simplification tolerance in working-image pixels.',
+    ),
+    source_kind: str = typer.Option('raster_topology', help='Source vector graph artifact.'),
+    target_kind: str = typer.Option('simplified_topology', help='Target vector graph artifact.'),
+) -> None:
+    """Persist a simplified editable topology graph artifact."""
+
+    workspace = MarquetryWorkspace.load(workspace_dir)
+    payload = workspace.simplify_vector_graph(
+        tolerance=tolerance,
+        source_kind=source_kind,
+        target_kind=target_kind,
+    )
+    graph = payload['graph']
+    typer.echo(f'graph: {target_kind}')
+    typer.echo(f'vertices: {graph["vertex_count"]}')
+    typer.echo(f'edges: {graph["edge_count"]}')
+
+
+@app.command()
+def export_graph(
+    workspace_dir: Annotated[Path, typer.Argument(..., exists=True, readable=True)],
+    output_svg: Annotated[Path, typer.Argument(...)],
+    kind: str = typer.Option('simplified_topology', help='Vector graph artifact to export.'),
+) -> None:
+    """Export a reconstructed SVG from a persisted topology graph."""
+
+    workspace = MarquetryWorkspace.load(workspace_dir)
+    path = workspace.export_vector_graph_svg(output_svg, kind=kind)
+    typer.echo(f'svg: {path}')
+
+
+@app.command()
 def pack(
     workspace_dir: Annotated[Path, typer.Argument(..., exists=True, readable=True)],
     output_dir: Annotated[Path, typer.Argument(...)],

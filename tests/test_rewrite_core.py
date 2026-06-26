@@ -349,6 +349,46 @@ def test_bulk_assignment_detail_zones_and_boundaries(tmp_path: Path) -> None:
     assert reloaded.summary()['design']['detail_zones'] == []
 
 
+def test_vector_graph_artifacts_simplify_reconstruct_and_undo(tmp_path: Path) -> None:
+    image_path = tmp_path / 'source.png'
+    _fixture_image(image_path)
+    workspace = MarquetryWorkspace.create(image_path, tmp_path / 'workspace', max_edge=64)
+    candidate = workspace.generate_candidate(target_regions=4, compactness=8.0)
+    workspace.create_design(candidate.candidate_id, PhysicalSize(width=8, height=8, unit='in'))
+    workspace._write_design_labels(_four_region_labels())
+    workspace.save()
+
+    persisted = workspace.persist_topology_graph()
+    assert persisted['kind'] == 'raster_topology'
+    assert (workspace.workspace_dir / 'vector' / 'raster_topology.json').exists()
+    assert workspace.summary()['design']['vector_graphs'][0]['kind'] == 'raster_topology'
+
+    original_vertices = sum(len(edge['path']) for edge in persisted['graph']['edges'])
+    simplified = workspace.simplify_vector_graph(tolerance=2.0)
+    simplified_vertices = sum(len(edge['path']) for edge in simplified['graph']['edges'])
+    assert simplified['kind'] == 'simplified_topology'
+    assert simplified['graph']['edge_count'] == persisted['graph']['edge_count']
+    assert simplified_vertices <= original_vertices
+    assert all(edge['physical_path'] for edge in simplified['graph']['edges'])
+    assert any(
+        artifact['kind'] == 'simplified_topology'
+        for artifact in workspace.summary()['design']['vector_graphs']
+    )
+    assert workspace.cleanup_report()['vector_graphs']
+
+    graph_svg_path = workspace.export_vector_graph_svg(tmp_path / 'graph.svg')
+    graph_svg = graph_svg_path.read_text(encoding='utf-8')
+    assert '<svg' in graph_svg
+    assert 'data-graph-reconstructed="true"' in graph_svg
+
+    workspace.undo()
+    assert not (workspace.workspace_dir / 'vector' / 'simplified_topology.json').exists()
+    assert {
+        artifact['kind'] for artifact in workspace.summary()['design']['vector_graphs']
+    } == {'raster_topology'}
+    assert workspace.summary()['validation']['region_count'] == 4
+
+
 def test_split_and_lock_are_undoable(tmp_path: Path) -> None:
     image_path = tmp_path / 'source.png'
     _fixture_image(image_path)
@@ -551,6 +591,19 @@ def test_api_vertical_slice(tmp_path: Path) -> None:
     coverage_svg_response = client.get('/api/design-coverage.svg?tolerance=1')
     assert coverage_svg_response.status_code == 200
     assert 'data-coverage-simplified="true"' in coverage_svg_response.text
+
+    persist_topology_response = client.post('/api/design/topology/persist')
+    assert persist_topology_response.status_code == 200
+    assert persist_topology_response.json()['kind'] == 'raster_topology'
+    simplify_topology_response = client.post(
+        '/api/design/topology/simplify',
+        json={'tolerance': 2.0},
+    )
+    assert simplify_topology_response.status_code == 200
+    assert simplify_topology_response.json()['kind'] == 'simplified_topology'
+    graph_svg_response = client.get('/api/design-graph.svg?kind=simplified_topology')
+    assert graph_svg_response.status_code == 200
+    assert 'data-graph-reconstructed="true"' in graph_svg_response.text
 
     pack_response = client.post('/api/pack', json={'output_dir': str(tmp_path / 'packed')})
     assert pack_response.status_code == 200

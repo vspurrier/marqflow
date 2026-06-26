@@ -1,9 +1,9 @@
 # Marqflow Rewrite Review
 
-Status date: 2026-06-25
+Status date: 2026-06-26
 
-This branch, `marquetry-rewrite`, intentionally starts over. The prior gallery
-prototype remains recoverable from `grid-gallery`.
+`main` is the active marquetry-first prototype. Older exploratory branches have
+been retired; previous designs remain recoverable from Git history.
 
 ## What Changed
 
@@ -85,6 +85,13 @@ uv run pytest -q
 - Shapely coverage-safe SVG export that simplifies shared edges together.
 - Coverage-safe SVG exports persist artifact metadata on the design, including
   tolerance, coverage validity, topology counts, and path.
+- Topology graphs can be persisted as versioned vector artifacts.
+- Shared-boundary topology graphs can be simplified into undoable vector graph
+  artifacts without modifying the raster partition.
+- Persisted graph artifacts can be reconstructed into filled SVG regions from
+  graph linework.
+- Browser endpoints and CLI commands exist for topology persistence,
+  simplification, graph loading, and graph-SVG export.
 - `rectpack` bounding-box pack manifest grouped by veneer.
 - Pack manifest includes each piece's physical contour and SVG path for future
   irregular nesting adapters.
@@ -116,17 +123,19 @@ uv run pytest -q
    estimates. A topology graph now exposes unique vertices, exterior/shared
    edges, and region-edge references, and Shapely coverage validation checks the
    exported physical polygons. Coverage-safe exports persist vector artifact
-   metadata. Advanced smoothing/editing still needs persisted editable vertices
-   and topology-preserving writes back to the design.
+   metadata. Topology graphs can now be persisted, simplified as undoable vector
+   artifacts, and reconstructed into filled SVG regions. Advanced direct
+   geometry editing still needs vertex/edge move operations, topology
+   validation for edited graphs, and a decision about when edited vector
+   geometry becomes the final design source of truth.
 
 2. Real cleanup tools beyond merge.
 
    Merge, targeted split, lock/unlock, physical-area sliver repair, raster
    smoothing, selected-region smoothing, selected-boundary inspection, bounded
-   auto-merge, and undo now exist. Vector simplify, selected-boundary vector
-   smoothing, point editing, and shared-boundary-safe writes are still open.
-   Coverage-safe simplification exists for SVG export, but is not yet a
-   persisted edit on the design.
+   auto-merge, vector-graph simplification, graph SVG reconstruction, and undo
+   now exist. Selected-boundary vector smoothing, point editing, and
+   shared-boundary-safe writes back to the design are still open.
 
 3. Subject/detail logic.
 

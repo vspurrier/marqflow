@@ -207,6 +207,32 @@ class ExportArtifact:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class VectorGraphArtifact:
+    """Metadata for a persisted editable topology graph artifact."""
+
+    kind: str
+    path: str
+    topology_vertex_count: int
+    topology_edge_count: int
+    coverage_valid: bool
+    created_at: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> VectorGraphArtifact:
+        return cls(
+            kind=str(data['kind']),
+            path=str(data['path']),
+            topology_vertex_count=int(data.get('topology_vertex_count', 0)),
+            topology_edge_count=int(data.get('topology_edge_count', 0)),
+            coverage_valid=bool(data.get('coverage_valid', False)),
+            created_at=str(data.get('created_at', '')),
+        )
+
+
 @dataclass(slots=True)
 class MarquetryDesign:
     """The durable product object: a measured, veneer-assigned partition."""
@@ -219,6 +245,7 @@ class MarquetryDesign:
     locked_region_ids: set[int] = field(default_factory=set)
     detail_zones: list[DetailZone] = field(default_factory=list)
     subject_mask_path: str | None = None
+    vector_graphs: list[VectorGraphArtifact] = field(default_factory=list)
     vector_exports: list[ExportArtifact] = field(default_factory=list)
     edit_history: list[EditOperation] = field(default_factory=list)
 
@@ -235,6 +262,7 @@ class MarquetryDesign:
             'locked_region_ids': sorted(self.locked_region_ids),
             'detail_zones': [zone.to_dict() for zone in self.detail_zones],
             'subject_mask_path': self.subject_mask_path,
+            'vector_graphs': [artifact.to_dict() for artifact in self.vector_graphs],
             'vector_exports': [artifact.to_dict() for artifact in self.vector_exports],
             'edit_history': [edit.to_dict() for edit in self.edit_history],
         }
@@ -261,6 +289,9 @@ class MarquetryDesign:
             ),
             vector_exports=[
                 ExportArtifact.from_dict(item) for item in data.get('vector_exports', [])
+            ],
+            vector_graphs=[
+                VectorGraphArtifact.from_dict(item) for item in data.get('vector_graphs', [])
             ],
             edit_history=[EditOperation.from_dict(item) for item in data.get('edit_history', [])],
         )
