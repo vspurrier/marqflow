@@ -23,6 +23,7 @@ class CandidateRequest(BaseModel):
     target_regions: int = 80
     compactness: float = 18.0
     use_detail_zones: bool = False
+    use_subject_mask: bool = True
 
 
 class CandidateGridRequest(BaseModel):
@@ -33,6 +34,7 @@ class CandidateGridRequest(BaseModel):
     min_compactness: float = Field(default=4.0, gt=0)
     max_compactness: float = Field(default=28.0, gt=0)
     use_detail_zones: bool = False
+    use_subject_mask: bool = True
 
 
 class DesignRequest(BaseModel):
@@ -115,6 +117,11 @@ class DetailZoneForRegionsRequest(BaseModel):
 class ApplyDetailZonesRequest(BaseModel):
     max_splits: int = Field(default=10, ge=1, le=200)
     compactness: float = Field(default=10.0, gt=0)
+
+
+class SubjectMaskForRegionsRequest(BaseModel):
+    region_ids: list[int] = Field(min_length=1)
+    role: str
 
 
 class RepairSmallRegionsRequest(BaseModel):
@@ -257,6 +264,7 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
             target_regions=request.target_regions,
             compactness=request.compactness,
             use_detail_zones=request.use_detail_zones,
+            use_subject_mask=request.use_subject_mask,
         )
         return JSONResponse(ws.summary())
 
@@ -278,6 +286,7 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
             min_compactness=request.min_compactness,
             max_compactness=request.max_compactness,
             use_detail_zones=request.use_detail_zones,
+            use_subject_mask=request.use_subject_mask,
         )
         return JSONResponse(ws.summary())
 
@@ -418,6 +427,15 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
         payload = ws.summary()
         payload['applied_detail_split_count'] = applied
         return JSONResponse(payload)
+
+    @app.post('/api/design/subject-mask-for-regions')
+    def set_subject_mask_for_regions(request: SubjectMaskForRegionsRequest) -> JSONResponse:
+        ws = _load_workspace(workspace_path)
+        try:
+            ws.set_subject_mask_for_regions(request.region_ids, request.role)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return JSONResponse(ws.summary())
 
     @app.post('/api/design/repair-small-regions')
     def repair_small_regions(request: RepairSmallRegionsRequest) -> JSONResponse:

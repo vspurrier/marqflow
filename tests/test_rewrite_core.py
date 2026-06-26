@@ -135,6 +135,40 @@ def test_candidate_generation_can_use_detail_zones(tmp_path: Path) -> None:
     assert detailed_zone_count > plain_zone_count
 
 
+def test_subject_mask_guides_candidate_generation_and_undo(tmp_path: Path) -> None:
+    image_path = tmp_path / 'source.png'
+    _fixture_image(image_path)
+    workspace = MarquetryWorkspace.create(image_path, tmp_path / 'workspace', max_edge=64)
+    candidate = workspace.generate_candidate(target_regions=4, compactness=8.0)
+    workspace.create_design(candidate.candidate_id, PhysicalSize(width=8, height=8, unit='in'))
+    workspace._write_design_labels(_four_region_labels())
+    workspace.save()
+
+    workspace.set_subject_mask_for_regions([1], 'subject')
+    workspace.set_subject_mask_for_regions([4], 'background')
+    summary = workspace.subject_mask_summary()
+    assert summary['subject_px'] == 24 * 24
+    assert summary['background_px'] == 24 * 24
+
+    masked = workspace.generate_candidate(
+        target_regions=4,
+        compactness=8.0,
+        use_subject_mask=True,
+    )
+    mask = workspace.subject_mask()
+    masked_labels = workspace.candidate_labels(masked.candidate_id)
+    subject_labels = set(int(value) for value in np.unique(masked_labels[mask == 1]))
+    background_labels = set(int(value) for value in np.unique(masked_labels[mask == 2]))
+    assert subject_labels
+    assert background_labels
+    assert subject_labels.isdisjoint(background_labels)
+
+    workspace.undo()
+    assert workspace.subject_mask_summary()['background_px'] == 0
+    workspace.undo()
+    assert workspace.subject_mask_summary()['subject_px'] == 0
+
+
 def test_size_and_veneer_inventory_edits_are_persisted_and_undoable(tmp_path: Path) -> None:
     image_path = tmp_path / 'source.png'
     _fixture_image(image_path)

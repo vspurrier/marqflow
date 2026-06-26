@@ -54,7 +54,9 @@ interface WorkspaceSummary {
     veneers: Veneer[];
     physical_size: {width: number; height: number; unit: string};
     detail_zones: DetailZone[];
+    subject_mask_path: string | null;
   };
+  subject_mask: {subject_px: number; background_px: number; unknown_px: number};
   regions: Region[];
   merge_suggestions: MergeSuggestion[];
   validation: {valid: boolean; region_count?: number; unassigned_px?: number};

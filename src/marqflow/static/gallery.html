@@ -39,6 +39,7 @@
         <label>Min compactness <input id="min-compactness" type="number" value="4" min="0.1" step="0.1" /></label>
         <label>Max compactness <input id="max-compactness" type="number" value="28" min="0.1" step="0.1" /></label>
         <label><input id="use-detail-zones" type="checkbox" /> Use focus zones</label>
+        <label><input id="use-subject-mask" type="checkbox" checked /> Use subject mask</label>
         <button id="candidate-grid" type="button">Generate candidate grid</button>
       </div>
       <div id="candidates" class="candidates"></div>
@@ -76,6 +77,8 @@
           <button id="split-selected" type="button">Split selected</button>
           <button id="lock-selected" type="button">Lock selected</button>
           <button id="unlock-selected" type="button">Unlock selected</button>
+          <button id="mark-subject" type="button">Mark subject</button>
+          <button id="mark-background" type="button">Mark background</button>
           <label>Focus multiplier <input id="focus-multiplier" type="number" value="3" min="1" step="0.5" /></label>
           <button id="focus-selected" type="button">Make focus zone</button>
           <button id="apply-focus" type="button">Apply focus detail</button>

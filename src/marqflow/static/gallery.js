@@ -31,6 +31,7 @@ const el = /** @type {Record<string, any>} */ ({
   minCompactness: document.getElementById('min-compactness'),
   maxCompactness: document.getElementById('max-compactness'),
   useDetailZones: document.getElementById('use-detail-zones'),
+  useSubjectMask: document.getElementById('use-subject-mask'),
   openImage: document.getElementById('open-image'),
   candidateGrid: document.getElementById('candidate-grid'),
   candidates: document.getElementById('candidates'),
@@ -53,6 +54,8 @@ const el = /** @type {Record<string, any>} */ ({
   splitSelected: document.getElementById('split-selected'),
   lockSelected: document.getElementById('lock-selected'),
   unlockSelected: document.getElementById('unlock-selected'),
+  markSubject: document.getElementById('mark-subject'),
+  markBackground: document.getElementById('mark-background'),
   focusMultiplier: document.getElementById('focus-multiplier'),
   focusSelected: document.getElementById('focus-selected'),
   applyFocus: document.getElementById('apply-focus'),
@@ -147,6 +150,7 @@ function render() {
     {
       source: workspace.source,
       candidates: workspace.candidates,
+      subject_mask: workspace.subject_mask,
       valid_partition: workspace.validation.valid,
       region_count: workspace.validation.region_count,
     },
@@ -635,6 +639,7 @@ async function generateCandidateGrid() {
       min_compactness: Number(el.minCompactness.value || 4),
       max_compactness: Number(el.maxCompactness.value || 28),
       use_detail_zones: Boolean(el.useDetailZones.checked),
+      use_subject_mask: Boolean(el.useSubjectMask.checked),
     }),
   });
   if (!response.ok) {
@@ -797,6 +802,29 @@ async function focusSelected() {
   render();
 }
 
+async function markSubjectMask(role) {
+  if (!selectedRegionIds.size) {
+    setStatus('Select at least one region first.', true);
+    return;
+  }
+  const response = await fetch('/api/design/subject-mask-for-regions', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      region_ids: [...selectedRegionIds],
+      role,
+    }),
+  });
+  if (!response.ok) {
+    setStatus(await response.text(), true);
+    return;
+  }
+  workspace = await response.json();
+  await loadHitmap();
+  setStatus(`Marked ${selectedRegionIds.size} region(s) as ${role}.`);
+  render();
+}
+
 async function applyFocus() {
   const response = await fetch('/api/design/apply-detail-zones', {
     method: 'POST',
@@ -956,6 +984,8 @@ el.mergeSelected.addEventListener('click', mergeSelected);
 el.splitSelected.addEventListener('click', splitSelected);
 el.lockSelected.addEventListener('click', () => lockSelected(true));
 el.unlockSelected.addEventListener('click', () => lockSelected(false));
+el.markSubject.addEventListener('click', () => markSubjectMask('subject'));
+el.markBackground.addEventListener('click', () => markSubjectMask('background'));
 el.focusSelected.addEventListener('click', focusSelected);
 el.applyFocus.addEventListener('click', applyFocus);
 el.repairSmall.addEventListener('click', repairSmall);

@@ -188,6 +188,7 @@ class MarquetryDesign:
     veneer_assignments: dict[int, str] = field(default_factory=dict)
     locked_region_ids: set[int] = field(default_factory=set)
     detail_zones: list[DetailZone] = field(default_factory=list)
+    subject_mask_path: str | None = None
     edit_history: list[EditOperation] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -202,6 +203,7 @@ class MarquetryDesign:
             },
             'locked_region_ids': sorted(self.locked_region_ids),
             'detail_zones': [zone.to_dict() for zone in self.detail_zones],
+            'subject_mask_path': self.subject_mask_path,
             'edit_history': [edit.to_dict() for edit in self.edit_history],
         }
 
@@ -220,6 +222,11 @@ class MarquetryDesign:
             detail_zones=[
                 DetailZone.from_dict(item) for item in data.get('detail_zones', [])
             ],
+            subject_mask_path=(
+                str(data['subject_mask_path'])
+                if data.get('subject_mask_path') is not None
+                else None
+            ),
             edit_history=[EditOperation.from_dict(item) for item in data.get('edit_history', [])],
         )
 

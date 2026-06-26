@@ -75,8 +75,10 @@ Implemented now:
 - lasso selection by freehand stroke
 - persisted rectangular detail zones
 - detail zones created from selected regions
+- subject/background mask painted from selected regions
 - focus-zone-driven local split pass
 - focus-zone-aware candidate generation
+- subject/background-mask-aware candidate generation
 - raster shared-boundary metrics
 - shared-boundary polylines in pixel and physical units
 - selected-boundary summary in the browser
@@ -98,12 +100,13 @@ Implemented now:
 
 ## Next Milestones
 
-1. Add first-class subject/background masking.
+1. Improve subject/background mask editing.
 
    Rectangular focus zones can be created from selected regions, applied to
    split intersecting final regions, and used during candidate generation for
-   denser local segmentation. The workflow still needs a deliberate
-   subject/background mask step before shape generation.
+   denser local segmentation. A pixel-level subject/background mask can now be
+   painted from selected regions and used during candidate generation. The UI
+   still needs mask overlay visualization and freehand/brush mask painting.
 
 2. Build editable shared-boundary vector geometry.
 

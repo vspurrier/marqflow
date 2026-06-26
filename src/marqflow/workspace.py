@@ -41,6 +41,7 @@ from .models import (
 MANIFEST = 'workspace.json'
 SOURCE_IMAGE = 'source.png'
 DESIGN_LABELS = 'design-labels.npy'
+SUBJECT_MASK = 'subject-mask.npy'
 HISTORY_DIR = 'history'
 
 
@@ -151,11 +152,36 @@ class MarquetryWorkspace:
         np.save(self.workspace_dir / path, self.design_labels())
         return str(path)
 
+    def subject_mask(self) -> np.ndarray:
+        """Return the persisted source-stage subject/background mask."""
+
+        if self.design is None or self.design.subject_mask_path is None:
+            return np.zeros(
+                (self.source.working_height, self.source.working_width),
+                dtype=np.uint8,
+            )
+        return np.load(self.workspace_dir / self.design.subject_mask_path)
+
+    def _write_subject_mask(self, mask: np.ndarray) -> None:
+        if self.design is None:
+            raise ValueError('create a design first')
+        np.save(self.workspace_dir / SUBJECT_MASK, mask.astype(np.uint8))
+        self.design.subject_mask_path = SUBJECT_MASK
+
+    def _snapshot_subject_mask(self, op_id: int) -> str | None:
+        if self.design is None or self.design.subject_mask_path is None:
+            return None
+        path = Path(HISTORY_DIR) / f'op-{op_id}-subject-mask.npy'
+        (self.workspace_dir / path).parent.mkdir(parents=True, exist_ok=True)
+        np.save(self.workspace_dir / path, self.subject_mask())
+        return str(path)
+
     def generate_candidate(
         self,
         target_regions: int = 80,
         compactness: float = 18.0,
         use_detail_zones: bool = False,
+        use_subject_mask: bool = True,
     ) -> Candidate:
         """Generate one SLIC candidate partition."""
 
@@ -170,6 +196,12 @@ class MarquetryWorkspace:
         )
         if use_detail_zones and self.design is not None:
             labels = self._apply_detail_zones_to_candidate(
+                labels,
+                target_regions=max(2, int(target_regions)),
+                compactness=float(compactness),
+            )
+        if use_subject_mask and self.design is not None and self.design.subject_mask_path:
+            labels = self._apply_subject_mask_to_candidate(
                 labels,
                 target_regions=max(2, int(target_regions)),
                 compactness=float(compactness),
@@ -203,6 +235,7 @@ class MarquetryWorkspace:
         min_compactness: float = 4.0,
         max_compactness: float = 28.0,
         use_detail_zones: bool = False,
+        use_subject_mask: bool = True,
     ) -> list[Candidate]:
         """Generate a coarse-to-detailed candidate grid without changing the design."""
 
@@ -226,9 +259,65 @@ class MarquetryWorkspace:
                         target_regions=int(round(target_regions)),
                         compactness=float(compactness),
                         use_detail_zones=use_detail_zones,
+                        use_subject_mask=use_subject_mask,
                     )
                 )
         return candidates
+
+    def _apply_subject_mask_to_candidate(
+        self,
+        labels: np.ndarray,
+        target_regions: int,
+        compactness: float,
+    ) -> np.ndarray:
+        """Overlay separate local labels for subject/background mask areas."""
+
+        mask = self.subject_mask()
+        if not np.any(mask):
+            return labels
+        image = self.source_array()
+        height, width = labels.shape
+        refined = labels.copy()
+        next_label = int(refined.max()) + 1
+        image_area = max(1, height * width)
+        for mask_value in (1, 2):
+            ys, xs = np.nonzero(mask == mask_value)
+            if not len(xs):
+                continue
+            x0, x1 = int(xs.min()), int(xs.max()) + 1
+            y0, y1 = int(ys.min()), int(ys.max()) + 1
+            crop_mask = mask[y0:y1, x0:x1] == mask_value
+            crop = image[y0:y1, x0:x1]
+            if crop.shape[0] < 2 or crop.shape[1] < 2:
+                continue
+            local_area = int(np.count_nonzero(crop_mask))
+            local_segments = int(round(target_regions * (local_area / image_area)))
+            if mask_value == 1:
+                local_segments = int(round(local_segments * 1.5))
+            local_segments = max(1, min(local_segments, max(1, local_area // 4)))
+            region = refined[y0:y1, x0:x1]
+            if local_segments < 2:
+                region[crop_mask] = next_label
+                next_label += 1
+                continue
+            local = slic(
+                crop,
+                n_segments=local_segments,
+                compactness=compactness,
+                sigma=0.75,
+                start_label=0,
+                channel_axis=-1,
+            )
+            local_values = sorted(int(value) for value in np.unique(local[crop_mask]))
+            remapped = np.zeros_like(local, dtype=np.int32)
+            for value in local_values:
+                value_mask = crop_mask & (local == value)
+                if not np.any(value_mask):
+                    continue
+                remapped[value_mask] = next_label
+                next_label += 1
+            region[crop_mask] = remapped[crop_mask]
+        return refined
 
     def _apply_detail_zones_to_candidate(
         self,
@@ -345,6 +434,43 @@ class MarquetryWorkspace:
                         str(region_id): veneer_id
                         for region_id, veneer_id in sorted(previous_assignments.items())
                     },
+                },
+            )
+        )
+        self.save()
+
+    def set_subject_mask_for_regions(self, region_ids: list[int], role: str) -> None:
+        """Mark selected design regions as subject or background source mask pixels."""
+
+        if self.design is None:
+            raise ValueError('create a design first')
+        role_value = {'subject': 1, 'background': 2}.get(role)
+        if role_value is None:
+            raise ValueError('role must be subject or background')
+        if not region_ids:
+            raise ValueError('choose at least one region')
+        labels = self.design_labels()
+        existing = {int(value) for value in np.unique(labels) if int(value) > 0}
+        missing = sorted(set(region_ids) - existing)
+        if missing:
+            raise ValueError(f'unknown region ids: {missing}')
+
+        op_id = self._next_op_id()
+        previous_mask_path = self._snapshot_subject_mask(op_id)
+        previous_subject_mask_path = self.design.subject_mask_path
+        mask = self.subject_mask()
+        selected = np.isin(labels, list(region_ids))
+        mask[selected] = role_value
+        self._write_subject_mask(mask)
+        self.design.edit_history.append(
+            EditOperation(
+                op_id=op_id,
+                kind='set_subject_mask',
+                payload={
+                    'region_ids': [int(region_id) for region_id in region_ids],
+                    'role': role,
+                    'previous_mask_path': previous_mask_path,
+                    'previous_subject_mask_path': previous_subject_mask_path,
                 },
             )
         )
@@ -837,6 +963,20 @@ class MarquetryWorkspace:
             self.design.detail_zones = [
                 zone for zone in self.design.detail_zones if zone.zone_id != zone_id
             ]
+        elif edit.kind == 'set_subject_mask':
+            previous_mask_path = edit.payload.get('previous_mask_path')
+            previous_subject_mask_path = edit.payload.get('previous_subject_mask_path')
+            if previous_mask_path is None:
+                (self.workspace_dir / SUBJECT_MASK).unlink(missing_ok=True)
+                self.design.subject_mask_path = None
+            else:
+                previous = np.load(self.workspace_dir / str(previous_mask_path))
+                np.save(self.workspace_dir / SUBJECT_MASK, previous)
+                self.design.subject_mask_path = (
+                    str(previous_subject_mask_path)
+                    if previous_subject_mask_path is not None
+                    else SUBJECT_MASK
+                )
         else:
             raise ValueError(f'cannot undo edit kind: {edit.kind}')
         self.save()
@@ -1210,10 +1350,19 @@ class MarquetryWorkspace:
             'source': self.source.to_dict(),
             'candidates': [candidate.to_dict() for candidate in self.candidates],
             'design': self.design.to_dict() if self.design else None,
+            'subject_mask': self.subject_mask_summary(),
             'regions': self.regions(),
             'merge_suggestions': self.merge_suggestions(),
             'validation': self.validation(),
             'boundaries': self.boundary_summary(),
+        }
+
+    def subject_mask_summary(self) -> dict[str, int]:
+        mask = self.subject_mask()
+        return {
+            'subject_px': int(np.count_nonzero(mask == 1)),
+            'background_px': int(np.count_nonzero(mask == 2)),
+            'unknown_px': int(np.count_nonzero(mask == 0)),
         }
 
     def copy_to(self, output_dir: str | Path) -> None:

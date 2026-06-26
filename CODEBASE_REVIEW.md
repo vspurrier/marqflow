@@ -62,8 +62,12 @@ uv run pytest -q
 - Persisted rectangular detail zones.
 - Detail zones can be created from selected regions.
 - Detail zones can drive bounded local split passes.
+- Pixel-level subject/background mask can be painted from selected regions and
+  undone.
 - Candidate generation can optionally use persisted detail zones for denser
   local source-stage segmentation.
+- Candidate generation can use the subject/background mask to avoid labels that
+  span marked subject/background pixels.
 - Raster shared-boundary metrics with physical edge lengths.
 - Shared-boundary polylines in pixel and physical units for adjacent regions.
 - Browser selected-boundary summary with internal/external edge lengths.
@@ -102,8 +106,10 @@ uv run pytest -q
 3. Subject/detail logic.
 
    Detail zones can drive local splits after a design exists and can optionally
-   refine new candidates with denser local source-stage segmentation. The UI
-   still lacks a first-class subject/background mask workflow.
+   refine new candidates with denser local source-stage segmentation. A
+   first-class pixel-level subject/background mask exists and can guide
+   candidate generation. The UI still lacks freehand mask painting and mask
+   overlay visualization.
 
 4. Browser selection tooling.
 
