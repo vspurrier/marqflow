@@ -114,3 +114,25 @@ interface PackManifest {
   packing_backend: string;
   sheets: PackSheet[];
 }
+
+interface CleanupReport {
+  region_count: number;
+  locked_region_count: number;
+  warning_counts: Record<string, number>;
+  small_or_thin_region_ids: number[];
+  merge_suggestion_count: number;
+  top_merge_suggestions: MergeSuggestion[];
+  boundary_count: number;
+  jagged_boundary_count: number;
+  top_jagged_boundaries: Array<{
+    region_a: number;
+    region_b: number;
+    edge_length_physical: number;
+    vertex_count: number;
+    simplified_vertex_count: number;
+    simplified_vertex_reduction: number;
+  }>;
+  veneer_region_counts: Record<string, number>;
+  subject_mask: {subject_px: number; background_px: number; unknown_px: number};
+  valid_partition: {valid: boolean; region_count?: number; unassigned_px?: number};
+}
