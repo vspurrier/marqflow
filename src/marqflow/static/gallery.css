@@ -169,6 +169,14 @@ pre {
 .veneer-row .wide {
   grid-column: 1 / -1;
 }
+.texture-preview {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  grid-column: 1 / -1;
+  height: 72px;
+  object-fit: cover;
+  width: 100%;
+}
 .pack-summary {
   display: grid;
   gap: 10px;

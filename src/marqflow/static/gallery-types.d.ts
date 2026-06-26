@@ -6,6 +6,7 @@ interface Veneer {
   sheet_height: number;
   sheet_count: number;
   grain_direction: string;
+  texture_url: string;
   notes: string;
 }
 

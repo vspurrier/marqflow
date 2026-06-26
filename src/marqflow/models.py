@@ -65,6 +65,7 @@ class Veneer:
     sheet_height: float = 0.0
     sheet_count: int = 0
     grain_direction: str = ''
+    texture_url: str = ''
     notes: str = ''
 
     def to_dict(self) -> dict[str, Any]:
@@ -82,6 +83,7 @@ class Veneer:
             sheet_height=float(data.get('sheet_height', 0.0) or 0.0),
             sheet_count=max(0, int(data.get('sheet_count', 0) or 0)),
             grain_direction=str(data.get('grain_direction', '')),
+            texture_url=str(data.get('texture_url', '')),
             notes=str(data.get('notes', '')),
         )
 

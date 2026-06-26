@@ -674,11 +674,16 @@ def test_api_size_and_veneer_inventory(tmp_path: Path) -> None:
                 'sheet_width': 4,
                 'sheet_height': 8,
                 'sheet_count': 2,
+                'texture_url': 'https://example.com/maple.jpg',
             }
         ],
     )
     assert veneers_response.status_code == 200
     assert veneers_response.json()['design']['veneers'][0]['sheet_count'] == 2
+    assert (
+        veneers_response.json()['design']['veneers'][0]['texture_url']
+        == 'https://example.com/maple.jpg'
+    )
 
     duplicate_response = client.post(
         '/api/design/veneers',

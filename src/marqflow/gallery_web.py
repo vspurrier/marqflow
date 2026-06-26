@@ -68,6 +68,7 @@ class VeneerModel(BaseModel):
     sheet_height: float = Field(default=0.0, ge=0)
     sheet_count: int = Field(default=0, ge=0)
     grain_direction: str = ''
+    texture_url: str = ''
     notes: str = ''
 
     def to_domain(self) -> Veneer:
@@ -79,6 +80,7 @@ class VeneerModel(BaseModel):
             sheet_height=self.sheet_height,
             sheet_count=self.sheet_count,
             grain_direction=self.grain_direction,
+            texture_url=self.texture_url,
             notes=self.notes,
         )
 

@@ -47,6 +47,7 @@ uv run pytest -q
 - Bulk veneer override as one persisted edit operation.
 - Veneer inventory replacement with sheet dimensions/count fields.
 - Browser veneer palette editor for color, stock, grain, and notes.
+- Veneer palette supports optional texture/photo URLs with browser previews.
 - Connected-region merge as a persisted edit operation.
 - Targeted single-region split as a persisted edit operation.
 - Region lock/unlock as a persisted edit operation.
@@ -124,8 +125,9 @@ uv run pytest -q
 5. Material planning.
 
    Veneer inventory fields, replacement, browser editing, stock-fit summary,
-   purchasing quantity estimates, and material utilization exist. Deeper grain
-   review and texture previews are not implemented.
+   purchasing quantity estimates, material utilization, grain notes, and texture
+   URL previews exist. Deeper grain review and managed texture upload/library
+   workflows are not implemented.
 
 6. Real packing/nesting.
 

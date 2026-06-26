@@ -80,7 +80,7 @@ The browser UI is deliberately minimal in this rewrite:
 - choose an image and cap its working size
 - generate and choose candidate partitions
 - inspect the generated design invariant and physical dimensions
-- edit veneer colors, sheet sizes, sheet counts, grain, and notes
+- edit veneer colors, texture URLs, sheet sizes, sheet counts, grain, and notes
 - click or drag-select final regions
 - lasso-select regions with a freehand stroke
 - zoom and scroll-pan the design canvas

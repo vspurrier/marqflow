@@ -60,6 +60,7 @@ Implemented now:
 - veneer assignments
 - editable veneer inventory with stock fields
 - browser veneer palette editor
+- veneer texture/photo URL previews
 - manual connected-region merge
 - targeted single-region split for local detail
 - region lock/unlock
@@ -131,8 +132,8 @@ Implemented now:
 
    Veneer replacement, stock fields, browser swatch editing, pack stock
    warnings, purchasing quantity estimates, and utilization metrics now exist.
-   The workflow still needs richer grain direction review and texture/photo
-   swatches.
+   Texture/photo URL previews now exist. The workflow still needs richer grain
+   direction review and managed texture upload/library support.
 
 5. Replace bounding-box packing with irregular nesting.
 

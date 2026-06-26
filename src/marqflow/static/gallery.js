@@ -237,7 +237,9 @@ function renderVeneerEditor() {
       <label>Sheet height <input data-field="sheet_height" type="number" min="0" step="0.1" value="${veneer.sheet_height || 0}" /></label>
       <label>Sheet count <input data-field="sheet_count" type="number" min="0" step="1" value="${veneer.sheet_count || 0}" /></label>
       <label>Grain <input data-field="grain_direction" value="${veneer.grain_direction || ''}" /></label>
+      <label class="wide">Texture URL <input data-field="texture_url" value="${veneer.texture_url || ''}" placeholder="https://..." /></label>
       <label class="wide">Notes <input data-field="notes" value="${veneer.notes || ''}" /></label>
+      ${veneer.texture_url ? `<img class="texture-preview" alt="${veneer.name} texture" src="${veneer.texture_url}" />` : ''}
       <button data-remove="true" type="button">Remove</button>
     `;
     row.querySelector('[data-remove="true"]')?.addEventListener('click', () => row.remove());
@@ -256,6 +258,7 @@ function collectVeneers() {
       sheet_height: Number(value('sheet_height') || 0),
       sheet_count: Number(value('sheet_count') || 0),
       grain_direction: value('grain_direction'),
+      texture_url: value('texture_url'),
       notes: value('notes'),
     };
   });
@@ -276,6 +279,7 @@ function addVeneerRow() {
         sheet_height: 0,
         sheet_count: 0,
         grain_direction: '',
+        texture_url: '',
         notes: '',
       },
     ];
