@@ -93,6 +93,7 @@ def test_workspace_creates_valid_design_and_exports(tmp_path: Path) -> None:
     assert manifest['sheets'][0]['material_utilization'] > 0
     assert (tmp_path / 'packed' / 'pack.json').exists()
     assert (tmp_path / 'packed' / 'design.svg').exists()
+    assert (tmp_path / 'packed' / 'design-coverage.svg').exists()
     assert (tmp_path / 'packed' / 'cleanup-report.json').exists()
     report_path = workspace.export_cleanup_report(tmp_path / 'report.json')
     assert report_path.exists()
@@ -110,6 +111,7 @@ def test_browser_pack_output_stays_under_workspace(tmp_path: Path) -> None:
     assert response.status_code == 200
     assert (workspace.workspace_dir / 'exported' / 'pack.json').exists()
     assert (workspace.workspace_dir / 'exported' / 'design.svg').exists()
+    assert (workspace.workspace_dir / 'exported' / 'design-coverage.svg').exists()
 
     escaped = client.post('/api/pack', json={'output_dir': str(tmp_path.parent / 'outside')})
     assert escaped.status_code == 400

@@ -1510,6 +1510,7 @@ class MarquetryWorkspace:
         )
         self.export_cleanup_report(output_path / 'cleanup-report.json')
         self.export_svg(output_path / 'design.svg')
+        self.export_coverage_svg(output_path / 'design-coverage.svg')
         return manifest
 
     def export_cleanup_report(self, output_path: str | Path) -> Path:

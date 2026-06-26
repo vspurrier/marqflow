@@ -112,7 +112,7 @@ The browser UI is deliberately minimal in this rewrite:
 - export Shapely coverage-safe SVG with shared-edge simplification
 - generate a cleanup report with readiness score before final export
 - write the bounding-box pack manifest with `pack.json`, `design.svg`, and
-  `cleanup-report.json`
+  `design-coverage.svg`, and `cleanup-report.json`
 - review placed/unplaced piece counts and stock warnings
 
 The UI should stay thin until the core design model is strong.

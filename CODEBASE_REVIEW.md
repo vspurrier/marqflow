@@ -102,6 +102,7 @@ uv run pytest -q
   simple readiness score.
 - `pack` writes `cleanup-report.json`, and the CLI can write the report without
   packing.
+- `pack` writes both `design.svg` and Shapely coverage-safe `design-coverage.svg`.
 - Thin browser UI over the new API.
 
 ## Still Outstanding
