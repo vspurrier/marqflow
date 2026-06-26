@@ -71,6 +71,11 @@ interface WorkspaceSummary {
       path_count: number;
       paths: number[][][];
       physical_paths: number[][][];
+      vertex_count: number;
+      simplified_vertex_count: number;
+      simplified_vertex_reduction: number;
+      simplified_paths: number[][][];
+      simplified_physical_paths: number[][][];
     }>;
   };
   applied_merge_count?: number;

@@ -85,6 +85,7 @@ Implemented now:
 - subject/background-mask-aware candidate generation
 - raster shared-boundary metrics
 - shared-boundary polylines in pixel and physical units
+- shared-boundary simplification analysis with vertex reduction estimates
 - selected-boundary summary in the browser
 - partition validation
 - physical-unit SVG export with adjustable contour simplification
@@ -116,17 +117,18 @@ Implemented now:
 2. Build editable shared-boundary vector geometry.
 
    Shared-boundary polylines now exist for adjacent regions in pixel and
-   physical units. Independently extracted SVG contours are still not a robust
-   editable planar graph. Advanced smoothing, point editing, and no-gap/no-
-   overlap SVG cleanup should be built on shared vector edges.
+   physical units, including simplified-path analysis. Independently extracted
+   SVG contours are still not a robust editable planar graph. Advanced
+   smoothing, point editing, and no-gap/no-overlap SVG cleanup should be built
+   on shared vector edges.
 
 3. Add cleanup operations on top of shared boundaries.
 
    Current cleanup supports connected merge, targeted split, lock/unlock,
    physical-area sliver repair, raster boundary smoothing, selected-region
    smoothing, selected-boundary inspection, and bounded auto-merge suggestions.
-   Needed operations: simplify shared vector edges, selected-boundary vector
-   smoothing, edit vertices, and write edited shared edges back safely.
+   Needed operations: apply shared vector simplification/smoothing, edit
+   vertices, and write edited shared edges back safely.
 
 4. Deepen veneer inventory logic.
 

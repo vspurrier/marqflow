@@ -14,6 +14,7 @@ from typing import Any
 import numpy as np
 from PIL import Image, ImageOps
 from rectpack import newPacker
+from skimage.measure import approximate_polygon
 from skimage.segmentation import slic
 
 from .geometry import (
@@ -1290,7 +1291,34 @@ class MarquetryWorkspace:
                 for path in paths
             ]
             boundary['path_count'] = len(paths)
+            simplified_paths = [
+                self._simplify_boundary_path(path, tolerance_px=1.25)
+                for path in paths
+            ]
+            vertex_count = sum(len(path) for path in paths)
+            simplified_vertex_count = sum(len(path) for path in simplified_paths)
+            boundary['vertex_count'] = vertex_count
+            boundary['simplified_vertex_count'] = simplified_vertex_count
+            boundary['simplified_vertex_reduction'] = max(
+                0,
+                vertex_count - simplified_vertex_count,
+            )
+            boundary['simplified_paths'] = simplified_paths
+            boundary['simplified_physical_paths'] = [
+                [
+                    [x / max(px_per_unit_x, 1e-9), y / max(px_per_unit_y, 1e-9)]
+                    for x, y in path
+                ]
+                for path in simplified_paths
+            ]
         return {'boundary_count': len(boundaries), 'boundaries': boundaries}
+
+    @staticmethod
+    def _simplify_boundary_path(path: list[list[int]], tolerance_px: float) -> list[list[float]]:
+        if len(path) <= 2:
+            return [[float(x), float(y)] for x, y in path]
+        simplified = approximate_polygon(np.asarray(path, dtype=float), tolerance_px)
+        return [[float(x), float(y)] for x, y in simplified]
 
     def export_svg(self, output_path: str | Path, simplify_tolerance: float = 1.0) -> Path:
         if self.design is None:

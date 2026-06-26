@@ -358,7 +358,10 @@ function renderBoundarySummary(ids) {
     card.innerHTML = `
       <strong>${boundary.region_a} - ${boundary.region_b}</strong>
       <span>${boundary.edge_length_physical.toFixed(3)} physical units</span>
-      <small>${boundary.edge_px} boundary px, ${boundary.path_count || 0} shared path(s)</small>
+      <small>
+        ${boundary.edge_px} boundary px, ${boundary.path_count || 0} shared path(s),
+        ${boundary.vertex_count || 0} -> ${boundary.simplified_vertex_count || 0} vertices
+      </small>
     `;
     el.boundarySummary.appendChild(card);
   }

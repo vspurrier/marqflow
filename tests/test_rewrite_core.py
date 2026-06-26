@@ -300,6 +300,12 @@ def test_bulk_assignment_detail_zones_and_boundaries(tmp_path: Path) -> None:
     )
     assert all(boundary['path_count'] >= 1 for boundary in boundary_summary['boundaries'])
     assert all(boundary['physical_paths'] for boundary in boundary_summary['boundaries'])
+    assert all(boundary['vertex_count'] >= 2 for boundary in boundary_summary['boundaries'])
+    assert all(
+        boundary['simplified_vertex_count'] >= 2
+        for boundary in boundary_summary['boundaries']
+    )
+    assert all(boundary['simplified_paths'] for boundary in boundary_summary['boundaries'])
     reloaded.undo()
     assert reloaded.summary()['design']['detail_zones'] == []
 

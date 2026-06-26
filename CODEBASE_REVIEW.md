@@ -75,6 +75,7 @@ uv run pytest -q
   span marked subject/background pixels.
 - Raster shared-boundary metrics with physical edge lengths.
 - Shared-boundary polylines in pixel and physical units for adjacent regions.
+- Shared-boundary simplification analysis with vertex reduction estimates.
 - Browser selected-boundary summary with internal/external edge lengths.
 - Veneer-grouped SVG export in physical units with adjustable contour
   simplification.
@@ -97,8 +98,9 @@ uv run pytest -q
 1. Advanced vector shared-boundary geometry.
 
    Shared-boundary polylines now exist for adjacent regions in pixel and
-   physical units. Region contours are still independently extracted from
-   raster labels for SVG export. Advanced smoothing/editing still needs a fuller
+   physical units, with simplified-path analysis and vertex reduction
+   estimates. Region contours are still independently extracted from raster
+   labels for SVG export. Advanced smoothing/editing still needs a fuller
    planar graph with editable vertices and topology-preserving writes.
 
 2. Real cleanup tools beyond merge.
@@ -106,7 +108,8 @@ uv run pytest -q
    Merge, targeted split, lock/unlock, physical-area sliver repair, raster
    smoothing, selected-region smoothing, selected-boundary inspection, bounded
    auto-merge, and undo now exist. Vector simplify, selected-boundary vector
-   smoothing, point editing, and shared-boundary-safe writes are still open.
+   smoothing, point editing, and shared-boundary-safe writes are still open;
+   simplification is currently analysis-only.
 
 3. Subject/detail logic.
 
