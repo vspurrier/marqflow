@@ -87,6 +87,9 @@ def test_workspace_creates_valid_design_and_exports(tmp_path: Path) -> None:
     assert manifest['sheets'][0]['material_utilization'] > 0
     assert (tmp_path / 'packed' / 'pack.json').exists()
     assert (tmp_path / 'packed' / 'design.svg').exists()
+    assert (tmp_path / 'packed' / 'cleanup-report.json').exists()
+    report_path = workspace.export_cleanup_report(tmp_path / 'report.json')
+    assert report_path.exists()
 
 
 def test_browser_pack_output_stays_under_workspace(tmp_path: Path) -> None:

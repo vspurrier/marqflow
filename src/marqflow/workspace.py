@@ -1459,8 +1459,20 @@ class MarquetryWorkspace:
             json.dumps(manifest, indent=2, sort_keys=True) + '\n',
             encoding='utf-8',
         )
+        self.export_cleanup_report(output_path / 'cleanup-report.json')
         self.export_svg(output_path / 'design.svg')
         return manifest
+
+    def export_cleanup_report(self, output_path: str | Path) -> Path:
+        """Write the cut-readiness report as JSON."""
+
+        path = Path(output_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(self.cleanup_report(), indent=2, sort_keys=True) + '\n',
+            encoding='utf-8',
+        )
+        return path
 
     def cleanup_report(self) -> dict[str, Any]:
         """Return a single cut-readiness report for the current design."""

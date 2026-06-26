@@ -95,6 +95,8 @@ uv run pytest -q
 - Browser smoke test for SVG preview generation.
 - Cleanup report endpoint/browser action summarizing warnings, merge
   suggestions, jagged boundaries, veneers, mask, and partition validity.
+- `pack` writes `cleanup-report.json`, and the CLI can write the report without
+  packing.
 - Thin browser UI over the new API.
 
 ## Still Outstanding

@@ -103,6 +103,7 @@ Implemented now:
   merge/undo
 - browser smoke test for SVG preview generation
 - cleanup report for cut-readiness review
+- cleanup report artifact in pack exports plus standalone CLI report command
 - minimal browser UI
 
 ## Next Milestones

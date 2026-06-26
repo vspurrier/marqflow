@@ -62,12 +62,25 @@ def pack(
     workspace_dir: Annotated[Path, typer.Argument(..., exists=True, readable=True)],
     output_dir: Annotated[Path, typer.Argument(...)],
 ) -> None:
-    """Write a simple veneer-grouped packing manifest."""
+    """Write veneer-grouped packing and cleanup manifests."""
 
     workspace = MarquetryWorkspace.load(workspace_dir)
     manifest = workspace.pack(output_dir)
     typer.echo(f'sheets: {len(manifest["sheets"])}')
     typer.echo(f'pack: {output_dir / "pack.json"}')
+    typer.echo(f'report: {output_dir / "cleanup-report.json"}')
+
+
+@app.command()
+def report(
+    workspace_dir: Annotated[Path, typer.Argument(..., exists=True, readable=True)],
+    output_json: Annotated[Path, typer.Argument(...)],
+) -> None:
+    """Write the cut-readiness cleanup report without packing."""
+
+    workspace = MarquetryWorkspace.load(workspace_dir)
+    path = workspace.export_cleanup_report(output_json)
+    typer.echo(f'report: {path}')
 
 
 @app.command()

@@ -66,6 +66,12 @@ Write a pack manifest:
 uv run marqflow pack ./workspace ./out
 ```
 
+Write only the cleanup report:
+
+```bash
+uv run marqflow report ./workspace ./out/cleanup-report.json
+```
+
 Run the browser:
 
 ```bash
@@ -98,7 +104,8 @@ The browser UI is deliberately minimal in this rewrite:
 - smooth raster boundary noise while preserving a valid partition
 - export SVG with adjustable contour simplification
 - generate a cleanup report before final export
-- write the bounding-box pack manifest
+- write the bounding-box pack manifest with `pack.json`, `design.svg`, and
+  `cleanup-report.json`
 - review placed/unplaced piece counts and stock warnings
 
 The UI should stay thin until the core design model is strong.
