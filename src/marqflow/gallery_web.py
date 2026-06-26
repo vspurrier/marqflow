@@ -621,6 +621,20 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return JSONResponse(ws.summary())
 
+    @app.post('/api/design/topology/preview-move-vertex')
+    def preview_design_topology_vertex_move(request: MoveVertexRequest) -> JSONResponse:
+        ws = _load_workspace(workspace_path)
+        try:
+            return JSONResponse(
+                ws.preview_vector_vertex_move(
+                    vertex_id=request.vertex_id,
+                    point=request.point,
+                    source_kind=request.source_kind,
+                )
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @app.post('/api/design/topology/promote')
     def promote_design_topology(request: PromoteTopologyRequest) -> JSONResponse:
         ws = _load_workspace(workspace_path)

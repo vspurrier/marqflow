@@ -152,8 +152,8 @@ Implemented now:
    filled SVG, promoted as active output geometry, edited with validated
    single-vertex moves, and dragged with browser canvas handles. Direct dragging
    now snaps to the image grid, clamps to the design bounds, labels hovered
-   vertices, and rejects no-op moves. Next improvement: boundary-level handles
-   and preview/accept flows.
+   vertices, rejects no-op moves, and previews topology validity before saving.
+   Next improvement: boundary-level handles and graphical before/after overlays.
 
 3. Add cleanup operations on top of shared boundaries.
 
@@ -166,7 +166,7 @@ Implemented now:
    moved with topology validation, direct handles can drag vertices, promoted
    graph geometry drives SVG/pack output, and cuttability cleanup combines the
    conservative repair passes. Needed operations: smoother curve cleanup and
-   explicit preview/accept UI for larger graph mutations.
+   explicit graphical preview/accept UI for larger graph mutations.
 
 4. Deepen veneer inventory logic.
 

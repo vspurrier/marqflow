@@ -98,6 +98,8 @@ uv run pytest -q
 - Browser vector-handle mode draws topology edges/vertices on the canvas and
   supports dragging vertices through the topology-safe move endpoint, with
   grid snapping, image-bound clamping, no-op rejection, and hover labels.
+- Vector vertex moves can be previewed/validated before saving; invalid moves
+  return concise coverage-failure reasons in the browser.
 - Browser controls expose vector simplification, selected-boundary vector
   cleanup, graph promotion, graph SVG preview, direct vertex dragging, and
   fallback vertex movement by ID.
@@ -144,9 +146,9 @@ uv run pytest -q
    artifacts, reconstructed into filled SVG regions, edited with validated
    single-vertex moves, dragged directly with browser canvas handles, and
    promoted as active output geometry. Dragging now includes grid snapping,
-   clamping, hover labels, and no-op rejection. The remaining gap is richer
-   interactive editing: before/after previews, boundary-specific handles, and
-   clearer failure feedback when a drag would invalidate topology.
+   clamping, hover labels, no-op rejection, and preview validation before save.
+   The remaining gap is richer interactive editing: graphical before/after
+   overlays and boundary-specific handles.
 
 2. Real cleanup tools beyond merge.
 
@@ -170,8 +172,9 @@ uv run pytest -q
 
    Canvas click/drag selection, lasso selection, selected-boundary summaries,
    zoom, scroll-panning, vector cleanup buttons, and direct vector vertex
-   handles exist. It remains visually basic and needs preview/revert
-   affordances plus clearer invalid-drag explanations.
+   handles exist. Invalid vertex drags now preview coverage failures before
+   saving. It remains visually basic and needs graphical before/after overlays
+   plus explicit revert affordances beyond normal undo.
 
 5. Material planning.
 

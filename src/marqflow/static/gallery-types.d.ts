@@ -142,6 +142,29 @@ interface TopologyEditLayer {
   graph_validation?: Record<string, unknown> | null;
 }
 
+interface VertexMovePreview {
+  valid: boolean;
+  changed: boolean;
+  reason: string;
+  source_kind: string;
+  vertex_id: number;
+  point: [number, number];
+  graph_validation: null | {
+    valid: boolean;
+    polygon_count: number;
+    region_count: number;
+    coverage_valid: boolean;
+    duplicate_region_ids: number[];
+    missing_region_ids: number[];
+    extra_region_ids: number[];
+    union_area: number;
+    expected_area: number;
+    area_delta: number;
+  };
+  topology_vertex_count?: number;
+  topology_edge_count?: number;
+}
+
 interface PackSheet {
   veneer_id: string;
   piece_count: number;

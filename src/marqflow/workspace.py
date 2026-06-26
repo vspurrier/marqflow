@@ -1779,6 +1779,71 @@ class MarquetryWorkspace:
         self.save()
         return payload
 
+    def preview_vector_vertex_move(
+        self,
+        vertex_id: int,
+        point: tuple[float, float],
+        source_kind: str | None = None,
+    ) -> dict[str, Any]:
+        """Validate a vertex move without saving a graph artifact."""
+
+        if self.design is None:
+            raise ValueError('create a design first')
+        source = source_kind or self.design.active_vector_graph_kind or 'raster_topology'
+        source_payload = self.vector_graph_payload(source)
+        labels = self.design_labels()
+        clamped_point = [
+            max(0.0, min(float(point[0]), float(labels.shape[1]))),
+            max(0.0, min(float(point[1]), float(labels.shape[0]))),
+        ]
+        original_vertex = next(
+            (
+                vertex
+                for vertex in source_payload['graph']['vertices']
+                if int(vertex['vertex_id']) == int(vertex_id)
+            ),
+            None,
+        )
+        if original_vertex is None:
+            raise ValueError(f'vertex not found: {vertex_id}')
+        changed = [
+            float(original_vertex['point'][0]),
+            float(original_vertex['point'][1]),
+        ] != clamped_point
+        if not changed:
+            return {
+                'valid': False,
+                'changed': False,
+                'reason': 'vertex did not move',
+                'source_kind': source,
+                'vertex_id': int(vertex_id),
+                'point': clamped_point,
+                'graph_validation': None,
+            }
+        graph = move_topology_vertex(
+            source_payload['graph'],
+            vertex_id=int(vertex_id),
+            point=(clamped_point[0], clamped_point[1]),
+            physical_size=self.design.physical_size,
+            image_size=(labels.shape[1], labels.shape[0]),
+        )
+        validation = validate_topology_graph(
+            graph,
+            labels,
+            self.design.physical_size,
+        )
+        return {
+            'valid': bool(validation['valid']),
+            'changed': True,
+            'reason': '' if validation['valid'] else 'move would break puzzle coverage',
+            'source_kind': source,
+            'vertex_id': int(vertex_id),
+            'point': clamped_point,
+            'graph_validation': validation,
+            'topology_vertex_count': int(graph['vertex_count']),
+            'topology_edge_count': int(graph['edge_count']),
+        }
+
     def promote_vector_graph(self, kind: str) -> None:
         """Make a persisted graph artifact the authoritative export geometry."""
 

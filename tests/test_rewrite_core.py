@@ -445,6 +445,9 @@ def test_topology_safe_vertex_move_is_undoable(tmp_path: Path) -> None:
 
     graph = workspace.persist_topology_graph()['graph']
     center = next(vertex for vertex in graph['vertices'] if vertex['point'] == [24, 24])
+    preview = workspace.preview_vector_vertex_move(center['vertex_id'], (25, 24))
+    assert preview['valid'] is True
+    assert preview['changed'] is True
     moved = workspace.move_vector_vertex(center['vertex_id'], (25, 24))
 
     assert moved['graph_validation']['valid'] is True
@@ -460,6 +463,10 @@ def test_topology_safe_vertex_move_is_undoable(tmp_path: Path) -> None:
         assert 'did not move' in str(exc)
     else:
         raise AssertionError('no-op vertex move should fail')
+
+    no_op_preview = workspace.preview_vector_vertex_move(center['vertex_id'], (24, 24))
+    assert no_op_preview['valid'] is False
+    assert no_op_preview['reason'] == 'vertex did not move'
 
 
 def test_vector_vertex_move_is_clamped_to_design_bounds(tmp_path: Path) -> None:
@@ -741,6 +748,22 @@ def test_api_vertical_slice(tmp_path: Path) -> None:
         simplify_selected_response.json()['design']['active_vector_graph_kind']
         == 'edited_topology'
     )
+    edit_layer = client.get('/api/design/topology/edit-layer').json()
+    vertex = next(
+        item
+        for item in edit_layer['vertices']
+        if 0 < item['point'][0] < payload['source']['working_width']
+        and 0 < item['point'][1] < payload['source']['working_height']
+    )
+    preview_move_response = client.post(
+        '/api/design/topology/preview-move-vertex',
+        json={
+            'vertex_id': vertex['vertex_id'],
+            'point': [vertex['point'][0] + 1, vertex['point'][1]],
+        },
+    )
+    assert preview_move_response.status_code == 200
+    assert 'valid' in preview_move_response.json()
     graph_svg_response = client.get('/api/design-graph.svg?kind=simplified_topology')
     assert graph_svg_response.status_code == 200
     assert 'data-graph-reconstructed="true"' in graph_svg_response.text

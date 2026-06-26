@@ -84,6 +84,7 @@ const el = /** @type {Record<string, any>} */ ({
   vertexId: document.getElementById('vertex-id'),
   vertexX: document.getElementById('vertex-x'),
   vertexY: document.getElementById('vertex-y'),
+  previewVertexMove: document.getElementById('preview-vertex-move'),
   moveVertex: document.getElementById('move-vertex'),
   clearSelection: document.getElementById('clear-selection'),
   designCanvas: document.getElementById('design-canvas'),
@@ -1194,6 +1195,8 @@ async function moveVectorVertex() {
     x: Number(el.vertexX.value || 0),
     y: Number(el.vertexY.value || 0),
   });
+  const preview = await previewVectorVertexMove(false);
+  if (!preview?.valid) return;
   const response = await fetch('/api/design/topology/move-vertex', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
@@ -1213,6 +1216,62 @@ async function moveVectorVertex() {
   await loadTopologyEditLayer();
   setStatus(`Moved vector vertex ${vertexId} to ${point.x}, ${point.y}.`);
   render();
+}
+
+function vectorMoveInvalidReason(preview) {
+  if (!preview) return 'unknown validation failure';
+  const validation = preview.graph_validation;
+  if (!validation) return preview.reason || 'invalid move';
+  const parts = [];
+  if (validation.missing_region_ids?.length) {
+    parts.push(`missing region(s) ${validation.missing_region_ids.join(', ')}`);
+  }
+  if (validation.duplicate_region_ids?.length) {
+    parts.push(`duplicate region(s) ${validation.duplicate_region_ids.join(', ')}`);
+  }
+  if (validation.extra_region_ids?.length) {
+    parts.push(`extra region(s) ${validation.extra_region_ids.join(', ')}`);
+  }
+  if (validation.area_delta > 0.01) {
+    parts.push(`area delta ${validation.area_delta.toFixed(3)}`);
+  }
+  return parts.join('; ') || preview.reason || 'move would break puzzle coverage';
+}
+
+async function previewVectorVertexMove(showValidStatus = true) {
+  const vertexId = Number(el.vertexId.value || 0);
+  if (!vertexId) {
+    setStatus('Enter a vector vertex ID to preview.', true);
+    return null;
+  }
+  const point = snappedCanvasPoint({
+    x: Number(el.vertexX.value || 0),
+    y: Number(el.vertexY.value || 0),
+  });
+  const response = await fetch('/api/design/topology/preview-move-vertex', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      vertex_id: vertexId,
+      point: [point.x, point.y],
+      source_kind: workspace?.design?.active_vector_graph_kind || null,
+      target_kind: 'edited_topology',
+    }),
+  });
+  if (!response.ok) {
+    setStatus(await response.text(), true);
+    return null;
+  }
+  const preview = /** @type {VertexMovePreview} */ (await response.json());
+  el.packOutput.textContent = JSON.stringify(preview, null, 2);
+  if (!preview.valid) {
+    setStatus(`Invalid vector move: ${vectorMoveInvalidReason(preview)}.`, true);
+    return preview;
+  }
+  if (showValidStatus) {
+    setStatus(`Preview valid for vertex ${vertexId} at ${point.x}, ${point.y}.`);
+  }
+  return preview;
 }
 
 async function applySuggestions() {
@@ -1334,6 +1393,9 @@ el.applySuggestions.addEventListener('click', applySuggestions);
 el.vectorSimplifyAll.addEventListener('click', simplifyVectorGraphAll);
 el.vectorSimplifySelected.addEventListener('click', simplifyVectorGraphSelected);
 el.vectorPromote.addEventListener('click', promoteVectorGraph);
+el.previewVertexMove.addEventListener('click', () => {
+  void previewVectorVertexMove(true);
+});
 el.moveVertex.addEventListener('click', moveVectorVertex);
 el.canvasZoom.addEventListener('input', () => setCanvasZoom(el.canvasZoom.value));
 el.zoomIn.addEventListener('click', () => setCanvasZoom(canvasZoom + 25));
