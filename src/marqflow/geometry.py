@@ -108,6 +108,74 @@ def shared_boundaries(labels: np.ndarray) -> list[dict[str, Any]]:
     ]
 
 
+Point = tuple[int, int]
+Segment = tuple[Point, Point]
+
+
+def _chain_segments(segments: list[Segment]) -> list[list[Point]]:
+    """Chain axis-aligned unit boundary segments into shared polylines."""
+
+    unused = set(range(len(segments)))
+    by_point: dict[Point, set[int]] = defaultdict(set)
+    for index, segment in enumerate(segments):
+        by_point[segment[0]].add(index)
+        by_point[segment[1]].add(index)
+
+    paths: list[list[Point]] = []
+    while unused:
+        index = unused.pop()
+        start, end = segments[index]
+        path = [start, end]
+        for prepend in (False, True):
+            while True:
+                endpoint = path[0] if prepend else path[-1]
+                candidates = by_point[endpoint] & unused
+                if not candidates:
+                    break
+                next_index = candidates.pop()
+                unused.remove(next_index)
+                segment_start, segment_end = segments[next_index]
+                next_point = segment_end if segment_start == endpoint else segment_start
+                if prepend:
+                    path.insert(0, next_point)
+                else:
+                    path.append(next_point)
+        paths.append(path)
+    return paths
+
+
+def shared_boundary_paths(labels: np.ndarray) -> list[dict[str, Any]]:
+    """Return shared boundary geometry as grid-line polylines per adjacent pair."""
+
+    segments_by_pair: dict[tuple[int, int], list[Segment]] = defaultdict(list)
+    right = labels[:, 1:] != labels[:, :-1]
+    for y, x in zip(*np.nonzero(right), strict=False):
+        pair = tuple(sorted((int(labels[y, x]), int(labels[y, x + 1]))))
+        if pair[0] <= 0 or pair[1] <= 0:
+            continue
+        boundary_x = int(x + 1)
+        segments_by_pair[pair].append(((boundary_x, int(y)), (boundary_x, int(y + 1))))
+    down = labels[1:, :] != labels[:-1, :]
+    for y, x in zip(*np.nonzero(down), strict=False):
+        pair = tuple(sorted((int(labels[y, x]), int(labels[y + 1, x]))))
+        if pair[0] <= 0 or pair[1] <= 0:
+            continue
+        boundary_y = int(y + 1)
+        segments_by_pair[pair].append(((int(x), boundary_y), (int(x + 1), boundary_y)))
+
+    return [
+        {
+            'region_a': region_a,
+            'region_b': region_b,
+            'paths': [
+                [[x, y] for x, y in path]
+                for path in _chain_segments(segments)
+            ],
+        }
+        for (region_a, region_b), segments in sorted(segments_by_pair.items())
+    ]
+
+
 def contour_for_mask(mask: np.ndarray, tolerance: float = 1.0) -> tuple[tuple[float, float], ...]:
     """Extract one closed contour for a mask."""
 

@@ -65,6 +65,7 @@ uv run pytest -q
 - Candidate generation can optionally use persisted detail zones for denser
   local source-stage segmentation.
 - Raster shared-boundary metrics with physical edge lengths.
+- Shared-boundary polylines in pixel and physical units for adjacent regions.
 - Browser selected-boundary summary with internal/external edge lengths.
 - Veneer-grouped SVG export in physical units with adjustable contour
   simplification.
@@ -84,19 +85,19 @@ uv run pytest -q
 
 ## Still Outstanding
 
-1. True vector shared-boundary geometry.
+1. Advanced vector shared-boundary geometry.
 
-   Raster boundary metrics now exist, but contours are still independently
-   extracted from raster labels. The core invariant is enforced at the raster
-   level, but vector smoothing/editing still needs a planar graph or
-   shared-boundary model before advanced cleanup.
+   Shared-boundary polylines now exist for adjacent regions in pixel and
+   physical units. Region contours are still independently extracted from
+   raster labels for SVG export. Advanced smoothing/editing still needs a fuller
+   planar graph with editable vertices and topology-preserving writes.
 
 2. Real cleanup tools beyond merge.
 
    Merge, targeted split, lock/unlock, physical-area sliver repair, raster
    smoothing, selected-region smoothing, selected-boundary inspection, bounded
    auto-merge, and undo now exist. Vector simplify, selected-boundary vector
-   smoothing, point editing, and shared-boundary-safe cleanup are still open.
+   smoothing, point editing, and shared-boundary-safe writes are still open.
 
 3. Subject/detail logic.
 

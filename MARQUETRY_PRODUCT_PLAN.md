@@ -78,6 +78,7 @@ Implemented now:
 - focus-zone-driven local split pass
 - focus-zone-aware candidate generation
 - raster shared-boundary metrics
+- shared-boundary polylines in pixel and physical units
 - selected-boundary summary in the browser
 - partition validation
 - physical-unit SVG export with adjustable contour simplification
@@ -104,11 +105,12 @@ Implemented now:
    denser local segmentation. The workflow still needs a deliberate
    subject/background mask step before shape generation.
 
-2. Replace raster boundary metrics with shared-boundary vector geometry.
+2. Build editable shared-boundary vector geometry.
 
-   Raster boundary metrics now exist. Independently extracted vector contours
-   are still not a robust planar graph. Advanced smoothing, point editing, and
-   no-gap/no-overlap SVG cleanup should be built on shared vector edges.
+   Shared-boundary polylines now exist for adjacent regions in pixel and
+   physical units. Independently extracted SVG contours are still not a robust
+   editable planar graph. Advanced smoothing, point editing, and no-gap/no-
+   overlap SVG cleanup should be built on shared vector edges.
 
 3. Add cleanup operations on top of shared boundaries.
 
@@ -116,7 +118,7 @@ Implemented now:
    physical-area sliver repair, raster boundary smoothing, selected-region
    smoothing, selected-boundary inspection, and bounded auto-merge suggestions.
    Needed operations: simplify shared vector edges, selected-boundary vector
-   smoothing, and edit vertices.
+   smoothing, edit vertices, and write edited shared edges back safely.
 
 4. Deepen veneer inventory logic.
 

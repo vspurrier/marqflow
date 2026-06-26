@@ -65,6 +65,9 @@ interface WorkspaceSummary {
       region_b: number;
       edge_px: number;
       edge_length_physical: number;
+      path_count: number;
+      paths: number[][][];
+      physical_paths: number[][][];
     }>;
   };
   applied_merge_count?: number;

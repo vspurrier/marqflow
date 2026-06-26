@@ -226,11 +226,14 @@ def test_bulk_assignment_detail_zones_and_boundaries(tmp_path: Path) -> None:
     }
     reloaded = MarquetryWorkspace.load(tmp_path / 'workspace')
     assert reloaded.summary()['design']['detail_zones'][0]['name'] == 'eyes'
-    assert reloaded.boundary_summary()['boundary_count'] == 4
+    boundary_summary = reloaded.boundary_summary()
+    assert boundary_summary['boundary_count'] == 4
     assert all(
         boundary['edge_length_physical'] > 0
-        for boundary in reloaded.boundary_summary()['boundaries']
+        for boundary in boundary_summary['boundaries']
     )
+    assert all(boundary['path_count'] >= 1 for boundary in boundary_summary['boundaries'])
+    assert all(boundary['physical_paths'] for boundary in boundary_summary['boundaries'])
     reloaded.undo()
     assert reloaded.summary()['design']['detail_zones'] == []
 

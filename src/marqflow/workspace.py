@@ -25,6 +25,7 @@ from .geometry import (
     preview_image,
     region_neighbors,
     shared_boundaries,
+    shared_boundary_paths,
 )
 from .models import (
     Candidate,
@@ -1056,8 +1057,22 @@ class MarquetryWorkspace:
             (labels.shape[1], labels.shape[0])
         )
         avg_px_per_unit = (px_per_unit_x + px_per_unit_y) / 2
+        vector_paths = {
+            (item['region_a'], item['region_b']): item['paths']
+            for item in shared_boundary_paths(labels)
+        }
         for boundary in boundaries:
             boundary['edge_length_physical'] = boundary['edge_px'] / max(avg_px_per_unit, 1e-9)
+            paths = vector_paths.get((boundary['region_a'], boundary['region_b']), [])
+            boundary['paths'] = paths
+            boundary['physical_paths'] = [
+                [
+                    [x / max(px_per_unit_x, 1e-9), y / max(px_per_unit_y, 1e-9)]
+                    for x, y in path
+                ]
+                for path in paths
+            ]
+            boundary['path_count'] = len(paths)
         return {'boundary_count': len(boundaries), 'boundaries': boundaries}
 
     def export_svg(self, output_path: str | Path, simplify_tolerance: float = 1.0) -> Path:
