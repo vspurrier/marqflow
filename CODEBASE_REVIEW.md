@@ -68,6 +68,7 @@ uv run pytest -q
   simplification.
 - `rectpack` bounding-box pack manifest grouped by veneer.
 - Browser pack summary with placed/unplaced counts and stock warnings.
+- Browser smoke test for creating a workspace from an uploaded image.
 - Thin browser UI over the new API.
 
 ## Still Outstanding
@@ -95,8 +96,8 @@ uv run pytest -q
 4. Browser selection tooling.
 
    Canvas click/drag selection, lasso selection, selected-boundary summaries,
-   zoom, and scroll-panning exist. It remains visually basic and lacks browser
-   regression tests and selected-boundary editing.
+   zoom, and scroll-panning exist. It remains visually basic and lacks
+   selected-boundary editing.
 
 5. Material planning.
 
@@ -116,8 +117,9 @@ uv run pytest -q
 
 8. Browser tests.
 
-   Current tests are API/core level. Add browser tests after the new UI
-   stabilizes.
+   A Playwright smoke test covers image upload and workspace creation. Add
+   browser tests for candidate-grid selection, veneer assignment, merge, undo,
+   SVG preview, pack export, zoom, and lasso selection.
 
 ## Engineering Direction
 

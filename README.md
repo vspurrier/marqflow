@@ -108,3 +108,6 @@ npm run typecheck
 uv run ruff check src tests
 uv run pytest -q
 ```
+
+The browser smoke test uses Playwright. If Chromium is not installed locally,
+the test skips instead of failing the suite.
