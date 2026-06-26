@@ -1611,6 +1611,9 @@ class MarquetryWorkspace:
             ],
             'veneer_region_counts': dict(sorted(veneer_counts.items())),
             'subject_mask': self.subject_mask_summary(),
+            'vector_exports': [
+                artifact.to_dict() for artifact in self.design.vector_exports
+            ],
             'topology': {
                 'vertex_count': topology['vertex_count'],
                 'edge_count': topology['edge_count'],

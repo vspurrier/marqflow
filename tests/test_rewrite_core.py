@@ -85,6 +85,7 @@ def test_workspace_creates_valid_design_and_exports(tmp_path: Path) -> None:
     assert artifact['kind'] == 'coverage_svg'
     assert artifact['coverage_valid'] is True
     assert artifact['topology_edge_count'] > 0
+    assert reloaded_after_coverage.cleanup_report()['vector_exports'][0]['coverage_valid'] is True
 
     manifest = workspace.pack(tmp_path / 'packed')
     assert manifest['packing_backend'] == 'rectpack-bounding-box'
@@ -342,6 +343,7 @@ def test_bulk_assignment_detail_zones_and_boundaries(tmp_path: Path) -> None:
     assert report['boundary_count'] == 4
     assert report['topology']['edge_count'] == 8
     assert report['coverage']['valid'] is True
+    assert report['vector_exports'] == []
     assert 'valid_partition' in report
     reloaded.undo()
     assert reloaded.summary()['design']['detail_zones'] == []

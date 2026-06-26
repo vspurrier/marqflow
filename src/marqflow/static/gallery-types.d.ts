@@ -147,6 +147,7 @@ interface CleanupReport {
   }>;
   veneer_region_counts: Record<string, number>;
   subject_mask: {subject_px: number; background_px: number; unknown_px: number};
+  vector_exports: ExportArtifact[];
   topology: {vertex_count: number; edge_count: number};
   coverage: {
     valid: boolean;
