@@ -9,6 +9,8 @@ from typing import Any
 
 import numpy as np
 from PIL import Image
+from shapely import coverage_invalid_edges, coverage_is_valid
+from shapely.geometry import Polygon
 from skimage.measure import approximate_polygon, find_contours
 from skimage.measure import label as connected_components
 
@@ -147,7 +149,28 @@ def _chain_segments(segments: list[Segment]) -> list[list[Point]]:
 def shared_boundary_paths(labels: np.ndarray) -> list[dict[str, Any]]:
     """Return shared boundary geometry as grid-line polylines per adjacent pair."""
 
+    segments_by_pair = boundary_segments(labels, include_exterior=False)
+    return [
+        {
+            'region_a': region_a,
+            'region_b': region_b,
+            'paths': [
+                [[x, y] for x, y in path]
+                for path in _chain_segments(segments)
+            ],
+        }
+        for (region_a, region_b), segments in sorted(segments_by_pair.items())
+    ]
+
+
+def boundary_segments(
+    labels: np.ndarray,
+    include_exterior: bool = True,
+) -> dict[tuple[int, int], list[Segment]]:
+    """Return unit grid-line boundary segments grouped by adjacent region pair."""
+
     segments_by_pair: dict[tuple[int, int], list[Segment]] = defaultdict(list)
+    height, width = labels.shape
     right = labels[:, 1:] != labels[:, :-1]
     for y, x in zip(*np.nonzero(right), strict=False):
         pair = tuple(sorted((int(labels[y, x]), int(labels[y, x + 1]))))
@@ -162,18 +185,137 @@ def shared_boundary_paths(labels: np.ndarray) -> list[dict[str, Any]]:
             continue
         boundary_y = int(y + 1)
         segments_by_pair[pair].append(((int(x), boundary_y), (int(x + 1), boundary_y)))
+    if include_exterior:
+        for x in range(width):
+            top = int(labels[0, x])
+            bottom = int(labels[height - 1, x])
+            if top > 0:
+                segments_by_pair[(0, top)].append(((x, 0), (x + 1, 0)))
+            if bottom > 0:
+                segments_by_pair[(0, bottom)].append(((x, height), (x + 1, height)))
+        for y in range(height):
+            left = int(labels[y, 0])
+            right_label = int(labels[y, width - 1])
+            if left > 0:
+                segments_by_pair[(0, left)].append(((0, y), (0, y + 1)))
+            if right_label > 0:
+                segments_by_pair[(0, right_label)].append(((width, y), (width, y + 1)))
+    return segments_by_pair
 
-    return [
-        {
-            'region_a': region_a,
-            'region_b': region_b,
-            'paths': [
-                [[x, y] for x, y in path]
-                for path in _chain_segments(segments)
-            ],
+
+def boundary_graph(labels: np.ndarray, physical_size: PhysicalSize) -> dict[str, Any]:
+    """Build a topology graph from shared and exterior boundary grid lines."""
+
+    px_per_unit_x, px_per_unit_y = physical_size.pixels_per_unit(
+        (labels.shape[1], labels.shape[0])
+    )
+    vertex_ids: dict[Point, int] = {}
+    vertices = []
+    edges = []
+    region_edge_ids: dict[int, list[int]] = defaultdict(list)
+
+    def vertex_id(point: Point) -> int:
+        if point not in vertex_ids:
+            next_id = len(vertex_ids) + 1
+            vertex_ids[point] = next_id
+            x, y = point
+            vertices.append(
+                {
+                    'vertex_id': next_id,
+                    'point': [x, y],
+                    'physical_point': [
+                        x / max(px_per_unit_x, 1e-9),
+                        y / max(px_per_unit_y, 1e-9),
+                    ],
+                }
+            )
+        return vertex_ids[point]
+
+    for (region_a, region_b), segments in sorted(boundary_segments(labels).items()):
+        for path in _chain_segments(segments):
+            physical_path = [
+                [
+                    x / max(px_per_unit_x, 1e-9),
+                    y / max(px_per_unit_y, 1e-9),
+                ]
+                for x, y in path
+            ]
+            edge_id = len(edges) + 1
+            edge = {
+                'edge_id': edge_id,
+                'region_a': region_a,
+                'region_b': region_b,
+                'exterior': region_a == 0 or region_b == 0,
+                'vertex_ids': [vertex_id(point) for point in path],
+                'path': [[x, y] for x, y in path],
+                'physical_path': physical_path,
+                'length_px': max(0, len(path) - 1),
+                'length_physical': sum(
+                    math.dist(physical_path[index - 1], physical_path[index])
+                    for index in range(1, len(physical_path))
+                ),
+            }
+            edges.append(edge)
+            if region_a > 0:
+                region_edge_ids[region_a].append(edge_id)
+            if region_b > 0:
+                region_edge_ids[region_b].append(edge_id)
+
+    region_ids = sorted(int(value) for value in np.unique(labels) if int(value) > 0)
+    return {
+        'vertex_count': len(vertices),
+        'edge_count': len(edges),
+        'vertices': vertices,
+        'edges': edges,
+        'regions': [
+            {'region_id': region_id, 'edge_ids': region_edge_ids.get(region_id, [])}
+            for region_id in region_ids
+        ],
+    }
+
+
+def coverage_summary(
+    regions: list[Region],
+    physical_size: PhysicalSize,
+    image_size: tuple[int, int],
+) -> dict[str, Any]:
+    """Validate independently exported region polygons as a Shapely coverage."""
+
+    px_per_unit_x, px_per_unit_y = physical_size.pixels_per_unit(image_size)
+    polygons = []
+    skipped_region_ids = []
+    for region in regions:
+        points = [
+            (x / max(px_per_unit_x, 1e-9), y / max(px_per_unit_y, 1e-9))
+            for x, y in region.contour
+        ]
+        polygon = Polygon(points)
+        if polygon.is_empty or not polygon.is_valid or polygon.area <= 0:
+            skipped_region_ids.append(region.region_id)
+            continue
+        polygons.append(polygon)
+    if not polygons:
+        return {
+            'valid': False,
+            'polygon_count': 0,
+            'skipped_region_ids': skipped_region_ids,
+            'invalid_edge_count': 0,
+            'invalid_edge_length': 0.0,
         }
-        for (region_a, region_b), segments in sorted(segments_by_pair.items())
+    valid = bool(coverage_is_valid(polygons))
+    invalid_edges = coverage_invalid_edges(polygons)
+    invalid_edge_lengths = [
+        float(edge.length)
+        for edge in invalid_edges
+        if not edge.is_empty
     ]
+    return {
+        'valid': valid and not skipped_region_ids,
+        'polygon_count': len(polygons),
+        'skipped_region_ids': skipped_region_ids,
+        'invalid_edge_count': len(invalid_edge_lengths),
+        'invalid_edge_length': sum(invalid_edge_lengths),
+    }
 
 
 def contour_for_mask(mask: np.ndarray, tolerance: float = 1.0) -> tuple[tuple[float, float], ...]:

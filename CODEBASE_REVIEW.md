@@ -76,6 +76,9 @@ uv run pytest -q
 - Raster shared-boundary metrics with physical edge lengths.
 - Shared-boundary polylines in pixel and physical units for adjacent regions.
 - Shared-boundary simplification analysis with vertex reduction estimates.
+- Topology graph endpoint derived from raster boundaries with unique vertices,
+  exterior edges, shared edges, and region-edge references.
+- Shapely coverage validation for exported physical region polygons.
 - Browser selected-boundary summary with internal/external edge lengths.
 - Veneer-grouped SVG export in physical units with adjustable contour
   simplification.
@@ -106,9 +109,10 @@ uv run pytest -q
 
    Shared-boundary polylines now exist for adjacent regions in pixel and
    physical units, with simplified-path analysis and vertex reduction
-   estimates. Region contours are still independently extracted from raster
-   labels for SVG export. Advanced smoothing/editing still needs a fuller
-   planar graph with editable vertices and topology-preserving writes.
+   estimates. A topology graph now exposes unique vertices, exterior/shared
+   edges, and region-edge references, and Shapely coverage validation checks the
+   exported physical polygons. Advanced smoothing/editing still needs persisted
+   editable vertices and topology-preserving writes back to the design.
 
 2. Real cleanup tools beyond merge.
 

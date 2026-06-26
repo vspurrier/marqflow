@@ -311,11 +311,24 @@ def test_bulk_assignment_detail_zones_and_boundaries(tmp_path: Path) -> None:
         for boundary in boundary_summary['boundaries']
     )
     assert all(boundary['simplified_paths'] for boundary in boundary_summary['boundaries'])
+    topology = reloaded.topology_graph()
+    assert topology['edge_count'] == 8
+    assert topology['vertex_count'] > 0
+    assert len([edge for edge in topology['edges'] if edge['exterior']]) == 4
+    assert len([edge for edge in topology['edges'] if not edge['exterior']]) == 4
+    assert {region['region_id'] for region in topology['regions']} == {1, 2, 3, 4}
+    assert all(region['edge_ids'] for region in topology['regions'])
+    coverage = reloaded.coverage_summary()
+    assert coverage['valid'] is True
+    assert coverage['polygon_count'] == 4
+    assert coverage['invalid_edge_count'] == 0
     report = reloaded.cleanup_report()
     assert report['region_count'] == 4
     assert 0 <= report['readiness_score'] <= 100
     assert report['readiness'] in {'ready', 'needs-review', 'rough'}
     assert report['boundary_count'] == 4
+    assert report['topology']['edge_count'] == 8
+    assert report['coverage']['valid'] is True
     assert 'valid_partition' in report
     reloaded.undo()
     assert reloaded.summary()['design']['detail_zones'] == []
@@ -612,6 +625,10 @@ def test_api_merge_undo_and_hitmap(tmp_path: Path) -> None:
     boundaries_response = client.get('/api/design/boundaries')
     assert boundaries_response.status_code == 200
     assert boundaries_response.json()['boundary_count'] == 4
+
+    topology_response = client.get('/api/design/topology')
+    assert topology_response.status_code == 200
+    assert topology_response.json()['edge_count'] == 8
 
     report_response = client.get('/api/cleanup-report')
     assert report_response.status_code == 200

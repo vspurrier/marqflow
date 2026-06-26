@@ -498,6 +498,14 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
         ws = _load_workspace(workspace_path)
         return JSONResponse(ws.boundary_summary())
 
+    @app.get('/api/design/topology')
+    def design_topology() -> JSONResponse:
+        ws = _load_workspace(workspace_path)
+        try:
+            return JSONResponse(ws.topology_graph())
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @app.post('/api/design/veneers')
     def replace_veneers(veneers: list[VeneerModel]) -> JSONResponse:
         ws = _load_workspace(workspace_path)

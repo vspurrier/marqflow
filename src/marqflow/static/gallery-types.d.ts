@@ -136,5 +136,13 @@ interface CleanupReport {
   }>;
   veneer_region_counts: Record<string, number>;
   subject_mask: {subject_px: number; background_px: number; unknown_px: number};
+  topology: {vertex_count: number; edge_count: number};
+  coverage: {
+    valid: boolean;
+    polygon_count: number;
+    skipped_region_ids: number[];
+    invalid_edge_count: number;
+    invalid_edge_length: number;
+  };
   valid_partition: {valid: boolean; region_count?: number; unassigned_px?: number};
 }

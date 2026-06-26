@@ -18,7 +18,9 @@ from skimage.measure import approximate_polygon
 from skimage.segmentation import slic
 
 from .geometry import (
+    boundary_graph,
     build_regions,
+    coverage_summary,
     design_to_svg,
     merge_labels,
     normalize_labels,
@@ -1321,6 +1323,28 @@ class MarquetryWorkspace:
         simplified = approximate_polygon(np.asarray(path, dtype=float), tolerance_px)
         return [[float(x), float(y)] for x, y in simplified]
 
+    def topology_graph(self) -> dict[str, Any]:
+        """Return the current topology graph derived from raster boundaries."""
+
+        if self.design is None:
+            raise ValueError('create a design first')
+        return boundary_graph(self.design_labels(), self.design.physical_size)
+
+    def coverage_summary(self) -> dict[str, Any]:
+        """Return Shapely coverage validation for exported physical region polygons."""
+
+        if self.design is None:
+            raise ValueError('create a design first')
+        return coverage_summary(
+            build_regions(
+                self.source_array(),
+                self.design_labels(),
+                self.design,
+            ),
+            self.design.physical_size,
+            (self.source.working_width, self.source.working_height),
+        )
+
     def export_svg(self, output_path: str | Path, simplify_tolerance: float = 1.0) -> Path:
         if self.design is None:
             raise ValueError('create a design first')
@@ -1501,6 +1525,7 @@ class MarquetryWorkspace:
         veneer_counts: dict[str, int] = {}
         for region in regions:
             veneer_counts[region['veneer_id']] = veneer_counts.get(region['veneer_id'], 0) + 1
+        topology = self.topology_graph()
         score = 100
         score -= min(30, len(merge_suggestions) * 5)
         score -= min(30, len(jagged_boundaries) * 2)
@@ -1534,6 +1559,11 @@ class MarquetryWorkspace:
             ],
             'veneer_region_counts': dict(sorted(veneer_counts.items())),
             'subject_mask': self.subject_mask_summary(),
+            'topology': {
+                'vertex_count': topology['vertex_count'],
+                'edge_count': topology['edge_count'],
+            },
+            'coverage': self.coverage_summary(),
             'valid_partition': self.validation(),
         }
 

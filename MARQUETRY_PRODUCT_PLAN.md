@@ -86,6 +86,9 @@ Implemented now:
 - raster shared-boundary metrics
 - shared-boundary polylines in pixel and physical units
 - shared-boundary simplification analysis with vertex reduction estimates
+- topology graph endpoint with vertices, exterior/shared edges, and region-edge
+  references
+- Shapely coverage validation for exported physical polygons
 - selected-boundary summary in the browser
 - partition validation
 - physical-unit SVG export with adjustable contour simplification
@@ -120,10 +123,10 @@ Implemented now:
 2. Build editable shared-boundary vector geometry.
 
    Shared-boundary polylines now exist for adjacent regions in pixel and
-   physical units, including simplified-path analysis. Independently extracted
-   SVG contours are still not a robust editable planar graph. Advanced
-   smoothing, point editing, and no-gap/no-overlap SVG cleanup should be built
-   on shared vector edges.
+   physical units, including simplified-path analysis. A topology graph and
+   Shapely coverage validation now provide the foundation for correctness.
+   Advanced smoothing, point editing, and no-gap/no-overlap SVG cleanup should
+   be built on persisted shared vector edges.
 
 3. Add cleanup operations on top of shared boundaries.
 
