@@ -93,6 +93,19 @@ pre {
   color: var(--muted);
   margin: 0;
 }
+.boundary-summary {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+.boundary-card {
+  background: rgba(36, 24, 17, 0.05);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+}
 .regions,
 .candidates {
   display: grid;

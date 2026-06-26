@@ -61,6 +61,7 @@ uv run pytest -q
 - Detail zones can be created from selected regions.
 - Detail zones can drive bounded local split passes.
 - Raster shared-boundary metrics with physical edge lengths.
+- Browser selected-boundary summary with internal/external edge lengths.
 - Veneer-grouped SVG export in physical units with adjustable contour
   simplification.
 - `rectpack` bounding-box pack manifest grouped by veneer.
@@ -79,9 +80,9 @@ uv run pytest -q
 2. Real cleanup tools beyond merge.
 
    Merge, targeted split, lock/unlock, physical-area sliver repair, raster
-   smoothing, selected-region smoothing, bounded auto-merge, and undo now exist.
-   Vector simplify, selected-boundary vector smoothing, point editing, and
-   shared-boundary-safe cleanup are still open.
+   smoothing, selected-region smoothing, selected-boundary inspection, bounded
+   auto-merge, and undo now exist. Vector simplify, selected-boundary vector
+   smoothing, point editing, and shared-boundary-safe cleanup are still open.
 
 3. Subject/detail logic.
 
@@ -91,9 +92,9 @@ uv run pytest -q
 
 4. Browser selection tooling.
 
-   Canvas click/drag selection exists. It remains visually basic and lacks
-   browser regression tests, zoom/pan, lasso selection, and selected-boundary
-   editing.
+   Canvas click/drag selection and selected-boundary summaries exist. It
+   remains visually basic and lacks browser regression tests, zoom/pan, lasso
+   selection, and selected-boundary editing.
 
 5. Material planning.
 

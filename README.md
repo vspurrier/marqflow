@@ -80,6 +80,7 @@ The browser UI is deliberately minimal in this rewrite:
 - inspect the generated design invariant and physical dimensions
 - edit veneer colors, sheet sizes, sheet counts, grain, and notes
 - click or drag-select final regions
+- inspect selected internal/external boundary lengths
 - assign veneers to selected final regions
 - merge selected connected regions
 - split one selected region

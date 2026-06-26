@@ -60,6 +60,7 @@ const el = /** @type {Record<string, any>} */ ({
   clearSelection: document.getElementById('clear-selection'),
   designCanvas: document.getElementById('design-canvas'),
   selectionStatus: document.getElementById('selection-status'),
+  boundarySummary: document.getElementById('boundary-summary'),
   undo: document.getElementById('undo'),
   svgSimplify: document.getElementById('svg-simplify'),
   viewSvg: document.getElementById('view-svg'),
@@ -291,6 +292,55 @@ function updateSelectionStatus() {
   el.selectionStatus.textContent = ids.length
     ? `Selected ${ids.length} region(s): ${ids.join(', ')}`
     : 'No selected regions.';
+  renderBoundarySummary(ids);
+}
+
+function renderBoundarySummary(ids) {
+  el.boundarySummary.innerHTML = '';
+  if (!ids.length || !workspace?.boundaries?.boundaries?.length) {
+    el.boundarySummary.textContent = ids.length ? 'No selected boundaries.' : '';
+    return;
+  }
+  const selected = new Set(ids);
+  const touching = workspace.boundaries.boundaries.filter(
+    (boundary) => selected.has(boundary.region_a) || selected.has(boundary.region_b),
+  );
+  const internal = touching.filter(
+    (boundary) => selected.has(boundary.region_a) && selected.has(boundary.region_b),
+  );
+  const external = touching.filter(
+    (boundary) => !(selected.has(boundary.region_a) && selected.has(boundary.region_b)),
+  );
+  const internalLength = internal.reduce(
+    (total, boundary) => total + boundary.edge_length_physical,
+    0,
+  );
+  const externalLength = external.reduce(
+    (total, boundary) => total + boundary.edge_length_physical,
+    0,
+  );
+  const summary = document.createElement('article');
+  summary.className = 'boundary-card';
+  summary.innerHTML = `
+    <strong>Selected boundaries</strong>
+    <span>${internal.length} internal, ${external.length} external</span>
+    <small>${internalLength.toFixed(2)} internal + ${externalLength.toFixed(2)} external length</small>
+  `;
+  el.boundarySummary.appendChild(summary);
+
+  for (const boundary of touching
+    .slice()
+    .sort((a, b) => b.edge_length_physical - a.edge_length_physical)
+    .slice(0, 5)) {
+    const card = document.createElement('article');
+    card.className = 'boundary-card';
+    card.innerHTML = `
+      <strong>${boundary.region_a} - ${boundary.region_b}</strong>
+      <span>${boundary.edge_length_physical.toFixed(3)} physical units</span>
+      <small>${boundary.edge_px} boundary px</small>
+    `;
+    el.boundarySummary.appendChild(card);
+  }
 }
 
 function regionColor(regionId) {

@@ -75,6 +75,7 @@ Implemented now:
 - detail zones created from selected regions
 - focus-zone-driven local split pass
 - raster shared-boundary metrics
+- selected-boundary summary in the browser
 - partition validation
 - physical-unit SVG export with adjustable contour simplification
 - `rectpack` bounding-box pack manifest by veneer
@@ -100,8 +101,9 @@ Implemented now:
 
    Current cleanup supports connected merge, targeted split, lock/unlock,
    physical-area sliver repair, raster boundary smoothing, selected-region
-   smoothing, and bounded auto-merge suggestions. Needed operations: simplify
-   shared vector edges, selected-boundary vector smoothing, and edit vertices.
+   smoothing, selected-boundary inspection, and bounded auto-merge suggestions.
+   Needed operations: simplify shared vector edges, selected-boundary vector
+   smoothing, and edit vertices.
 
 4. Deepen veneer inventory logic.
 
