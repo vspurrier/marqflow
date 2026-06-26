@@ -88,11 +88,13 @@ def test_workspace_creates_valid_design_and_exports(tmp_path: Path) -> None:
     assert reloaded_after_coverage.cleanup_report()['vector_exports'][0]['coverage_valid'] is True
 
     manifest = workspace.pack(tmp_path / 'packed')
-    assert manifest['packing_backend'] == 'rectpack-bounding-box'
+    assert manifest['packing_backend'] == 'shapely-polygon-shelf'
     assert manifest['sheets']
     assert 'placement' in manifest['sheets'][0]['pieces'][0]
     assert manifest['sheets'][0]['pieces'][0]['physical_contour']
     assert manifest['sheets'][0]['pieces'][0]['physical_svg_path'].startswith('M ')
+    assert manifest['sheets'][0]['pieces'][0]['placed_physical_contour']
+    assert manifest['sheets'][0]['pieces'][0]['placed_physical_svg_path'].startswith('M ')
     assert manifest['sheets'][0]['recommended_sheet_count'] >= 1
     assert manifest['sheets'][0]['total_piece_area'] > 0
     assert manifest['sheets'][0]['total_bounding_box_area'] > 0
@@ -432,6 +434,24 @@ def test_promoted_vector_graph_drives_export_and_pack(tmp_path: Path) -> None:
     workspace.undo()
     assert workspace.summary()['design']['active_vector_graph_kind'] is None
     assert not (workspace.workspace_dir / 'vector' / 'edited_topology.json').exists()
+
+
+def test_boundary_specific_vector_simplification_is_undoable(tmp_path: Path) -> None:
+    image_path = tmp_path / 'source.png'
+    _fixture_image(image_path)
+    workspace = MarquetryWorkspace.create(image_path, tmp_path / 'workspace', max_edge=64)
+    candidate = workspace.generate_candidate(target_regions=4, compactness=8.0)
+    workspace.create_design(candidate.candidate_id, PhysicalSize(width=8, height=8, unit='in'))
+    workspace._write_design_labels(_four_region_labels())
+    workspace.save()
+
+    edited = workspace.simplify_vector_boundary(1, 2, tolerance=2.0)
+
+    assert edited['source'] == 'single_topology_boundary'
+    assert edited['graph_validation']['valid'] is True
+    assert workspace.summary()['design']['active_vector_graph_kind'] == 'edited_topology'
+    workspace.undo()
+    assert workspace.summary()['design']['active_vector_graph_kind'] is None
 
 
 def test_topology_safe_vertex_move_is_undoable(tmp_path: Path) -> None:
@@ -860,6 +880,15 @@ def test_api_merge_undo_and_hitmap(tmp_path: Path) -> None:
     boundaries_response = client.get('/api/design/boundaries')
     assert boundaries_response.status_code == 200
     assert boundaries_response.json()['boundary_count'] == 4
+    simplify_boundary_response = client.post(
+        '/api/design/topology/simplify-boundary',
+        json={'region_a': 1, 'region_b': 2, 'tolerance': 2.0},
+    )
+    assert simplify_boundary_response.status_code == 200
+    assert (
+        simplify_boundary_response.json()['design']['active_vector_graph_kind']
+        == 'edited_topology'
+    )
 
     topology_response = client.get('/api/design/topology')
     assert topology_response.status_code == 200

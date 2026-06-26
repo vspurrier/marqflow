@@ -99,6 +99,10 @@ Implemented now:
 - direct browser canvas handles for dragging topology vertices
 - snapping, image-bound clamping, hover labels, and no-op rejection for direct
   vertex dragging
+- graphical before/after preview overlays for vector vertex drags with explicit
+  accept/cancel controls before saving
+- direct selected-boundary simplification actions from the browser boundary
+  summary
 - SVG reconstruction from persisted graph linework
 - API and CLI access for graph persistence, simplification, loading, and
   reconstructed graph SVG export
@@ -112,8 +116,9 @@ Implemented now:
 - physical-unit SVG export with adjustable contour simplification
 - Shapely coverage-safe SVG export with shared-edge simplification
 - persisted coverage-safe vector export metadata
-- `rectpack` bounding-box pack manifest by veneer
-- physical contour and SVG path data in each pack manifest piece
+- Shapely polygon-aware shelf pack manifest by veneer
+- physical contour, SVG path, placement, transformed placed contour, and
+  transformed placed SVG path data in each pack manifest piece
 - browser stock-fit summary for pack results
 - recommended sheet counts, stock shortfall, area totals, and material
   utilization by veneer
@@ -152,8 +157,11 @@ Implemented now:
    filled SVG, promoted as active output geometry, edited with validated
    single-vertex moves, and dragged with browser canvas handles. Direct dragging
    now snaps to the image grid, clamps to the design bounds, labels hovered
-   vertices, rejects no-op moves, and previews topology validity before saving.
-   Next improvement: boundary-level handles and graphical before/after overlays.
+   vertices, rejects no-op moves, previews topology validity, renders a
+   before/after overlay, and requires explicit accept/cancel before saving.
+   Individual shared boundaries can also be simplified directly from the browser
+   boundary summary. Next improvement: edge-level handles, curve/spline editing,
+   and graphical previews for batch simplification.
 
 3. Add cleanup operations on top of shared boundaries.
 
@@ -175,11 +183,13 @@ Implemented now:
    Texture/photo URL previews now exist. The workflow still needs richer grain
    direction review and managed texture upload/library support.
 
-5. Replace bounding-box packing with irregular nesting.
+5. Improve polygon nesting quality.
 
-   Current packing uses `rectpack` against physical bounding boxes, but the
-   manifest now includes actual physical contours and SVG path data per piece.
-   The next adapter should pack those validated physical paths by veneer.
+   Current packing uses a Shapely-backed polygon shelf adapter. It places actual
+   physical contours by veneer, collision-checks polygons, and emits transformed
+   tracing contours. The next adapter should improve optimization quality with
+   rotation options, grain-aware orientation constraints, concavity-aware
+   placement, and lower-waste search heuristics.
 
 6. Convert browser JS to TypeScript modules once the API stabilizes.
 

@@ -164,6 +164,14 @@ class SimplifySelectedTopologyRequest(BaseModel):
     target_kind: str = 'edited_topology'
 
 
+class SimplifyBoundaryTopologyRequest(BaseModel):
+    region_a: int
+    region_b: int
+    tolerance: float = Field(default=1.25, ge=0.0, le=50.0)
+    source_kind: str | None = None
+    target_kind: str = 'edited_topology'
+
+
 class MoveVertexRequest(BaseModel):
     vertex_id: int
     point: tuple[float, float]
@@ -599,6 +607,23 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
         try:
             ws.simplify_vector_graph_for_regions(
                 region_ids=request.region_ids,
+                tolerance=request.tolerance,
+                source_kind=request.source_kind,
+                target_kind=request.target_kind,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return JSONResponse(ws.summary())
+
+    @app.post('/api/design/topology/simplify-boundary')
+    def simplify_boundary_design_topology(
+        request: SimplifyBoundaryTopologyRequest,
+    ) -> JSONResponse:
+        ws = _load_workspace(workspace_path)
+        try:
+            ws.simplify_vector_boundary(
+                region_a=request.region_a,
+                region_b=request.region_b,
                 tolerance=request.tolerance,
                 source_kind=request.source_kind,
                 target_kind=request.target_kind,

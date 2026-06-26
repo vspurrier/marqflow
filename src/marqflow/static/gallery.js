@@ -19,6 +19,8 @@ let lassoPoints = [];
 let activeVertexDrag = null;
 /** @type {TopologyVertex | null} */
 let hoveredVertex = null;
+/** @type {{vertexId: number, sourcePoint: {x: number, y: number}, point: {x: number, y: number}, sourceKind: string | null} | null} */
+let pendingVertexMove = null;
 let canvasZoom = 100;
 
 const el = /** @type {Record<string, any>} */ ({
@@ -85,6 +87,8 @@ const el = /** @type {Record<string, any>} */ ({
   vertexX: document.getElementById('vertex-x'),
   vertexY: document.getElementById('vertex-y'),
   previewVertexMove: document.getElementById('preview-vertex-move'),
+  acceptVertexPreview: document.getElementById('accept-vertex-preview'),
+  cancelVertexPreview: document.getElementById('cancel-vertex-preview'),
   moveVertex: document.getElementById('move-vertex'),
   clearSelection: document.getElementById('clear-selection'),
   designCanvas: document.getElementById('design-canvas'),
@@ -413,7 +417,11 @@ function renderBoundarySummary(ids) {
         ${boundary.edge_px} boundary px, ${boundary.path_count || 0} shared path(s),
         ${boundary.vertex_count || 0} -> ${boundary.simplified_vertex_count || 0} vertices
       </small>
+      <button type="button">Simplify this boundary</button>
     `;
+    card.querySelector('button')?.addEventListener('click', () => {
+      void simplifyVectorBoundary(boundary.region_a, boundary.region_b);
+    });
     el.boundarySummary.appendChild(card);
   }
 }
@@ -597,6 +605,48 @@ function drawDesign() {
       for (const point of edge.path.slice(1)) {
         ctx.lineTo(point[0], point[1]);
       }
+      ctx.stroke();
+    }
+    if (pendingVertexMove) {
+      const vertexById = new Map(
+        topologyEditLayer.vertices.map((vertex) => [
+          vertex.vertex_id,
+          {x: vertex.point[0], y: vertex.point[1]},
+        ]),
+      );
+      vertexById.set(pendingVertexMove.vertexId, pendingVertexMove.point);
+      ctx.strokeStyle = 'rgba(225, 126, 72, 0.95)';
+      ctx.lineWidth = Math.max(1.5, width / 160);
+      ctx.setLineDash([5, 3]);
+      for (const edge of topologyEditLayer.edges || []) {
+        if (!(edge.vertex_ids || []).includes(pendingVertexMove.vertexId)) continue;
+        const points = (edge.vertex_ids || [])
+          .map((vertexId) => vertexById.get(vertexId))
+          .filter(Boolean);
+        if (points.length < 2) continue;
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        for (const point of points.slice(1)) {
+          ctx.lineTo(point.x, point.y);
+        }
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+      ctx.strokeStyle = '#e17e48';
+      ctx.fillStyle = '#f7c873';
+      ctx.beginPath();
+      ctx.moveTo(pendingVertexMove.sourcePoint.x, pendingVertexMove.sourcePoint.y);
+      ctx.lineTo(pendingVertexMove.point.x, pendingVertexMove.point.y);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(
+        pendingVertexMove.point.x,
+        pendingVertexMove.point.y,
+        Math.max(4, width / 140),
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
       ctx.stroke();
     }
     for (const vertex of topologyEditLayer.vertices) {
@@ -1167,6 +1217,31 @@ async function simplifyVectorGraphSelected() {
   render();
 }
 
+async function simplifyVectorBoundary(regionA, regionB) {
+  const tolerance = Number(el.vectorTolerance.value || 1.25);
+  const response = await fetch('/api/design/topology/simplify-boundary', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      region_a: regionA,
+      region_b: regionB,
+      tolerance,
+      source_kind: workspace?.design?.active_vector_graph_kind || null,
+      target_kind: 'edited_topology',
+    }),
+  });
+  if (!response.ok) {
+    setStatus(await response.text(), true);
+    return;
+  }
+  workspace = await response.json();
+  pendingVertexMove = null;
+  await loadHitmap();
+  await loadTopologyEditLayer();
+  setStatus(`Simplified boundary ${regionA}-${regionB} at tolerance ${tolerance}.`);
+  render();
+}
+
 async function promoteVectorGraph() {
   const kind = String(el.vectorKind.value || 'edited_topology').trim();
   const response = await fetch('/api/design/topology/promote', {
@@ -1186,24 +1261,26 @@ async function promoteVectorGraph() {
 }
 
 async function moveVectorVertex() {
-  const vertexId = Number(el.vertexId.value || 0);
+  const vertexId = pendingVertexMove?.vertexId || Number(el.vertexId.value || 0);
   if (!vertexId) {
     setStatus('Enter a vector vertex ID to move.', true);
     return;
   }
-  const point = snappedCanvasPoint({
+  const point = pendingVertexMove?.point || snappedCanvasPoint({
     x: Number(el.vertexX.value || 0),
     y: Number(el.vertexY.value || 0),
   });
-  const preview = await previewVectorVertexMove(false);
-  if (!preview?.valid) return;
+  if (!pendingVertexMove) {
+    const preview = await previewVectorVertexMove(false);
+    if (!preview?.valid) return;
+  }
   const response = await fetch('/api/design/topology/move-vertex', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
       vertex_id: vertexId,
       point: [point.x, point.y],
-      source_kind: workspace?.design?.active_vector_graph_kind || null,
+      source_kind: pendingVertexMove?.sourceKind || workspace?.design?.active_vector_graph_kind || null,
       target_kind: 'edited_topology',
     }),
   });
@@ -1212,6 +1289,7 @@ async function moveVectorVertex() {
     return;
   }
   workspace = await response.json();
+  pendingVertexMove = null;
   await loadHitmap();
   await loadTopologyEditLayer();
   setStatus(`Moved vector vertex ${vertexId} to ${point.x}, ${point.y}.`);
@@ -1265,13 +1343,31 @@ async function previewVectorVertexMove(showValidStatus = true) {
   const preview = /** @type {VertexMovePreview} */ (await response.json());
   el.packOutput.textContent = JSON.stringify(preview, null, 2);
   if (!preview.valid) {
+    pendingVertexMove = null;
+    drawDesign();
     setStatus(`Invalid vector move: ${vectorMoveInvalidReason(preview)}.`, true);
     return preview;
   }
+  const vertex = topologyEditLayer?.vertices?.find((item) => item.vertex_id === vertexId);
+  pendingVertexMove = {
+    vertexId,
+    sourcePoint: vertex
+      ? {x: Number(vertex.point[0]), y: Number(vertex.point[1])}
+      : {x: point.x, y: point.y},
+    point,
+    sourceKind: preview.source_kind || workspace?.design?.active_vector_graph_kind || null,
+  };
+  drawDesign();
   if (showValidStatus) {
-    setStatus(`Preview valid for vertex ${vertexId} at ${point.x}, ${point.y}.`);
+    setStatus(`Preview valid for vertex ${vertexId} at ${point.x}, ${point.y}. Accept preview to save.`);
   }
   return preview;
+}
+
+function cancelVertexPreview() {
+  pendingVertexMove = null;
+  setStatus('Canceled vector move preview.');
+  drawDesign();
 }
 
 async function applySuggestions() {
@@ -1396,6 +1492,8 @@ el.vectorPromote.addEventListener('click', promoteVectorGraph);
 el.previewVertexMove.addEventListener('click', () => {
   void previewVectorVertexMove(true);
 });
+el.acceptVertexPreview.addEventListener('click', moveVectorVertex);
+el.cancelVertexPreview.addEventListener('click', cancelVertexPreview);
 el.moveVertex.addEventListener('click', moveVectorVertex);
 el.canvasZoom.addEventListener('input', () => setCanvasZoom(el.canvasZoom.value));
 el.zoomIn.addEventListener('click', () => setCanvasZoom(canvasZoom + 25));
@@ -1465,7 +1563,7 @@ el.designCanvas.addEventListener('pointerup', (event) => {
     dragStart = null;
     dragCurrent = null;
     if (didMove) {
-      void moveVectorVertex();
+      void previewVectorVertexMove(true);
     } else {
       setStatus(`Selected vertex ${vertexId}.`);
       drawDesign();

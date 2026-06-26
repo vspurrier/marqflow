@@ -159,6 +159,8 @@ def test_browser_can_create_workspace_from_image(tmp_path: Path) -> None:
             assert page.locator('#workspace-list option').count() >= 1
             page.select_option('#selection-mode', 'vector-edit')
             _drag_first_vector_handle(page)
+            _wait_for_status(page, 'Preview valid')
+            page.click('#accept-vertex-preview')
             _wait_for_status(page, 'Moved vector vertex')
             page.click('#undo')
             _wait_for_status(page, 'Undid last edit.')

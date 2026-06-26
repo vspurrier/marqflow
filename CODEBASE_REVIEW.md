@@ -100,6 +100,10 @@ uv run pytest -q
   grid snapping, image-bound clamping, no-op rejection, and hover labels.
 - Vector vertex moves can be previewed/validated before saving; invalid moves
   return concise coverage-failure reasons in the browser.
+- Browser vector drags now create a graphical before/after preview overlay with
+  explicit accept/cancel controls before committing the topology edit.
+- Individual shared boundaries can be simplified directly from the selected
+  boundary summary without selecting all touching regions.
 - Browser controls expose vector simplification, selected-boundary vector
   cleanup, graph promotion, graph SVG preview, direct vertex dragging, and
   fallback vertex movement by ID.
@@ -111,9 +115,9 @@ uv run pytest -q
 - Browser endpoints and CLI commands exist for topology persistence,
   simplification, graph loading, graph promotion, graph-SVG export, and vertex
   movement.
-- `rectpack` bounding-box pack manifest grouped by veneer.
-- Pack manifest includes each piece's physical contour and SVG path for future
-  irregular nesting adapters.
+- Shapely polygon-aware shelf pack manifest grouped by veneer.
+- Pack manifest includes each piece's physical contour, SVG path, placement,
+  transformed placed contour, and transformed placed SVG path.
 - Browser pack summary with placed/unplaced counts and stock warnings.
 - Pack manifest includes recommended sheet counts, stock shortfall, area totals,
   and bounding-box material utilization by veneer.
@@ -147,8 +151,11 @@ uv run pytest -q
    single-vertex moves, dragged directly with browser canvas handles, and
    promoted as active output geometry. Dragging now includes grid snapping,
    clamping, hover labels, no-op rejection, and preview validation before save.
-   The remaining gap is richer interactive editing: graphical before/after
-   overlays and boundary-specific handles.
+   Browser vertex dragging now previews the proposed linework graphically and
+   requires accept/cancel before save. Individual shared-boundary simplification
+   is available from boundary cards. The remaining gap is richer handle tooling:
+   edge handles, curve/spline editing, multi-vertex selection, and clearer
+   before/after previews for batch simplification operations.
 
 2. Real cleanup tools beyond merge.
 
@@ -172,9 +179,10 @@ uv run pytest -q
 
    Canvas click/drag selection, lasso selection, selected-boundary summaries,
    zoom, scroll-panning, vector cleanup buttons, and direct vector vertex
-   handles exist. Invalid vertex drags now preview coverage failures before
-   saving. It remains visually basic and needs graphical before/after overlays
-   plus explicit revert affordances beyond normal undo.
+   handles exist. Invalid vertex drags preview coverage failures before saving.
+   Valid drags now render a before/after overlay and require explicit accept or
+   cancel. It remains visually basic and needs richer edge/curve handles plus
+   preview UI for batch edits beyond normal undo.
 
 5. Material planning.
 
@@ -185,10 +193,12 @@ uv run pytest -q
 
 6. Real packing/nesting.
 
-   Packing now uses `rectpack` on physical bounding boxes and includes true
-   physical contours/SVG paths in the manifest. This is useful for rough stock
-   planning and adapter development, but is not irregular nesting of true cut
-   paths.
+   Packing now uses a Shapely-backed polygon shelf adapter. It places true
+   physical contours, collision-checks placed polygons, and emits transformed
+   tracing contours. This is a real contour-aware baseline, but it is not yet an
+   optimized irregular nester: it does not rotate pieces, search alternate
+   orientations, exploit concavities, or minimize waste beyond simple shelf
+   placement.
 
 7. TypeScript migration.
 

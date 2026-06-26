@@ -14,7 +14,7 @@ from typing import Any
 
 import numpy as np
 from PIL import Image, ImageOps
-from rectpack import newPacker
+from shapely.geometry import Polygon
 from skimage.measure import approximate_polygon
 from skimage.segmentation import slic
 
@@ -36,7 +36,6 @@ from .geometry import (
     shared_boundary_paths,
     simplify_topology_edges,
     simplify_topology_graph,
-    svg_path,
     validate_topology_graph,
 )
 from .models import (
@@ -1705,6 +1704,81 @@ class MarquetryWorkspace:
         self.save()
         return payload
 
+    def simplify_vector_boundary(
+        self,
+        region_a: int,
+        region_b: int,
+        tolerance: float = 1.25,
+        source_kind: str | None = None,
+        target_kind: str = 'edited_topology',
+    ) -> dict[str, Any]:
+        """Simplify only the graph edge(s) shared by one boundary pair."""
+
+        if self.design is None:
+            raise ValueError('create a design first')
+        pair = tuple(sorted((int(region_a), int(region_b))))
+        if pair[0] == pair[1]:
+            raise ValueError('boundary needs two distinct regions')
+        if pair[0] <= 0:
+            raise ValueError('exterior boundary editing is not implemented yet')
+        missing = set(pair) - self._current_region_ids()
+        if missing:
+            raise ValueError(f'unknown region ids: {sorted(missing)}')
+        source = source_kind or self.design.active_vector_graph_kind or 'raster_topology'
+        source_payload = self.vector_graph_payload(source)
+        edge_ids = {
+            int(edge['edge_id'])
+            for edge in source_payload['graph']['edges']
+            if tuple(sorted((int(edge['region_a']), int(edge['region_b'])))) == pair
+        }
+        if not edge_ids:
+            raise ValueError(f'boundary {pair[0]}-{pair[1]} has no vector edges')
+        labels = self.design_labels()
+        graph = simplify_topology_edges(
+            source_payload['graph'],
+            edge_ids=edge_ids,
+            tolerance=max(0.0, float(tolerance)),
+            physical_size=self.design.physical_size,
+            image_size=(labels.shape[1], labels.shape[0]),
+        )
+        op_id = self._next_op_id()
+        previous_payload_path, previous_artifact = self._snapshot_vector_artifact(
+            target_kind,
+            op_id,
+        )
+        previous_active_kind = self.design.active_vector_graph_kind
+        payload = {
+            'schema_version': 1,
+            'kind': target_kind,
+            'source': 'single_topology_boundary',
+            'source_kind': source,
+            'region_a': pair[0],
+            'region_b': pair[1],
+            'edge_ids': sorted(edge_ids),
+            'tolerance': max(0.0, float(tolerance)),
+            'physical_size': self.design.physical_size.to_dict(),
+            'graph': graph,
+        }
+        self._write_vector_graph_payload(payload, target_kind)
+        self.design.active_vector_graph_kind = target_kind
+        self.design.edit_history.append(
+            EditOperation(
+                op_id=op_id,
+                kind='edit_vector_graph',
+                payload={
+                    'operation': 'simplify_boundary',
+                    'source_kind': source,
+                    'target_kind': target_kind,
+                    'target_path': str(Path(VECTOR_DIR) / f'{target_kind}.json'),
+                    'previous_payload_path': previous_payload_path,
+                    'previous_artifact': previous_artifact,
+                    'previous_active_vector_graph_kind': previous_active_kind,
+                },
+            )
+        )
+        self.save()
+        return payload
+
     def move_vector_vertex(
         self,
         vertex_id: int,
@@ -2033,8 +2107,75 @@ class MarquetryWorkspace:
         self.save()
         return path
 
+    @staticmethod
+    def _physical_path_from_contour(contour: list[list[float]]) -> str:
+        if not contour:
+            return ''
+        commands = [f'M {contour[0][0]:.4f} {contour[0][1]:.4f}']
+        commands.extend(f'L {point[0]:.4f} {point[1]:.4f}' for point in contour[1:])
+        commands.append('Z')
+        return ' '.join(commands)
+
+    def _piece_physical_geometry(
+        self,
+        piece: dict[str, Any],
+        px_per_unit_x: float,
+        px_per_unit_y: float,
+    ) -> dict[str, Any]:
+        if 'bbox_physical' in piece:
+            bbox = [float(value) for value in piece['bbox_physical']]
+            contour = [
+                [float(point[0]), float(point[1])]
+                for point in piece.get('physical_contour', [])
+            ]
+        else:
+            x0, y0, x1, y1 = piece['bbox']
+            bbox = [
+                float(x0) / max(px_per_unit_x, 1e-9),
+                float(y0) / max(px_per_unit_y, 1e-9),
+                float(x1) / max(px_per_unit_x, 1e-9),
+                float(y1) / max(px_per_unit_y, 1e-9),
+            ]
+            contour = [
+                [
+                    float(point[0]) / max(px_per_unit_x, 1e-9),
+                    float(point[1]) / max(px_per_unit_y, 1e-9),
+                ]
+                for point in piece['contour']
+            ]
+        if len(contour) < 3:
+            x0, y0, x1, y1 = bbox
+            contour = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]
+        polygon = Polygon(contour)
+        if not polygon.is_valid:
+            polygon = polygon.buffer(0)
+        if polygon.is_empty:
+            x0, y0, x1, y1 = bbox
+            polygon = Polygon([[x0, y0], [x1, y0], [x1, y1], [x0, y1]])
+        bounds = [float(value) for value in polygon.bounds]
+        return {
+            'bbox': bounds,
+            'contour': contour,
+            'polygon': polygon,
+            'width': max(1e-6, bounds[2] - bounds[0]),
+            'height': max(1e-6, bounds[3] - bounds[1]),
+            'area': float(polygon.area),
+        }
+
+    @staticmethod
+    def _placed_contour(
+        contour: list[list[float]],
+        bbox: list[float],
+        x: float,
+        y: float,
+    ) -> list[list[float]]:
+        return [
+            [float(point[0]) - bbox[0] + x, float(point[1]) - bbox[1] + y]
+            for point in contour
+        ]
+
     def pack(self, output_dir: str | Path) -> dict[str, Any]:
-        """Write a traceable physical packing manifest grouped by veneer."""
+        """Write a traceable polygon-aware physical packing manifest by veneer."""
 
         if self.design is None:
             raise ValueError('create a design first')
@@ -2078,46 +2219,81 @@ class MarquetryWorkspace:
             sheet_width = veneer.sheet_width or self.design.physical_size.width
             sheet_height = veneer.sheet_height or self.design.physical_size.height
             available_count = veneer.sheet_count or max(1, len(pieces))
-            packer = newPacker(rotation=True)
-            scale = 1000
             px_per_unit_x, px_per_unit_y = self.design.physical_size.pixels_per_unit(
                 (self.source.working_width, self.source.working_height)
             )
+            enriched_pieces = []
             bbox_area_total = 0.0
             piece_area_total = 0.0
             for piece in pieces:
-                if 'bbox_physical' in piece:
-                    x0, y0, x1, y1 = piece['bbox_physical']
-                    width_units = max(1e-6, float(x1) - float(x0))
-                    height_units = max(1e-6, float(y1) - float(y0))
-                else:
-                    x0, y0, x1, y1 = piece['bbox']
-                    width_px = max(1, x1 - x0)
-                    height_px = max(1, y1 - y0)
-                    width_units = width_px / max(px_per_unit_x, 1e-9)
-                    height_units = height_px / max(px_per_unit_y, 1e-9)
-                bbox_area_total += width_units * height_units
-                piece_area_total += float(piece['area_physical'])
-                packer.add_rect(
-                    max(1, int(round(width_units * scale))),
-                    max(1, int(round(height_units * scale))),
-                    piece['region_id'],
-                )
-            packer.add_bin(
-                max(1, int(round(sheet_width * scale))),
-                max(1, int(round(sheet_height * scale))),
-                count=available_count,
-            )
-            packer.pack()
-            placements_by_region = {}
-            for bin_index, x, y, width, height, region_id in packer.rect_list():
-                placements_by_region[int(region_id)] = {
-                    'sheet_index': int(bin_index),
-                    'x': x / scale,
-                    'y': y / scale,
-                    'width': width / scale,
-                    'height': height / scale,
-                }
+                physical = self._piece_physical_geometry(piece, px_per_unit_x, px_per_unit_y)
+                bbox_area_total += physical['width'] * physical['height']
+                piece_area_total += float(piece.get('area_physical') or physical['area'])
+                enriched_pieces.append({**piece, '_physical': physical})
+
+            sheet_states = [
+                {'cursor_x': 0.0, 'cursor_y': 0.0, 'row_height': 0.0, 'polygons': []}
+                for _ in range(max(available_count, len(enriched_pieces), 1))
+            ]
+            placements_by_region: dict[int, dict[str, Any]] = {}
+
+            def can_place(
+                sheet_state: dict[str, Any],
+                polygon: Polygon,
+            ) -> bool:
+                for existing in sheet_state['polygons']:
+                    if polygon.intersection(existing).area > 1e-9:
+                        return False
+                return True
+
+            for piece in sorted(
+                enriched_pieces,
+                key=lambda item: (
+                    -float(item['_physical']['height']),
+                    -float(item['_physical']['width']),
+                    int(item['region_id']),
+                ),
+            ):
+                physical = piece['_physical']
+                if physical['width'] > sheet_width or physical['height'] > sheet_height:
+                    continue
+                placed = False
+                for sheet_index, state in enumerate(sheet_states):
+                    if placed:
+                        break
+                    x = float(state['cursor_x'])
+                    y = float(state['cursor_y'])
+                    row_height = float(state['row_height'])
+                    for _attempt in range(2):
+                        if x + physical['width'] > sheet_width + 1e-9:
+                            x = 0.0
+                            y += row_height
+                            row_height = 0.0
+                        if y + physical['height'] > sheet_height + 1e-9:
+                            break
+                        placed_contour = self._placed_contour(
+                            physical['contour'],
+                            physical['bbox'],
+                            x,
+                            y,
+                        )
+                        polygon = Polygon(placed_contour)
+                        if polygon.is_valid and can_place(state, polygon):
+                            placements_by_region[int(piece['region_id'])] = {
+                                'sheet_index': sheet_index,
+                                'x': x,
+                                'y': y,
+                                'width': physical['width'],
+                                'height': physical['height'],
+                                'rotation': 0,
+                            }
+                            state['polygons'].append(polygon)
+                            state['cursor_x'] = x + physical['width']
+                            state['cursor_y'] = y
+                            state['row_height'] = max(row_height, physical['height'])
+                            placed = True
+                            break
+                        x += max(physical['width'], 1e-6)
             placed_count = len(placements_by_region)
             sheet_count_used = (
                 max(
@@ -2135,28 +2311,40 @@ class MarquetryWorkspace:
             material_utilization = (
                 bbox_area_total / material_area_used if material_area_used else 0.0
             )
-            packed_pieces = [
-                {
-                    **piece,
-                    'physical_contour': piece.get('physical_contour')
-                    or [
-                        [
-                            point[0] / max(px_per_unit_x, 1e-9),
-                            point[1] / max(px_per_unit_y, 1e-9),
-                        ]
-                        for point in piece['contour']
-                    ],
-                    'physical_svg_path': piece.get('physical_svg_path')
-                    or svg_path(
-                        tuple((float(point[0]), float(point[1])) for point in piece['contour']),
-                        px_per_unit_x,
-                        px_per_unit_y,
-                    ),
-                    'placement': placements_by_region.get(piece['region_id']),
-                    'packed': piece['region_id'] in placements_by_region,
+            packed_pieces = []
+            for piece in enriched_pieces:
+                physical = piece['_physical']
+                placement = placements_by_region.get(int(piece['region_id']))
+                placed_contour = (
+                    self._placed_contour(
+                        physical['contour'],
+                        physical['bbox'],
+                        placement['x'],
+                        placement['y'],
+                    )
+                    if placement
+                    else None
+                )
+                serialized_piece = {
+                    key: value for key, value in piece.items() if key != '_physical'
                 }
-                for piece in pieces
-            ]
+                serialized_piece.update(
+                    {
+                        'bbox_physical': physical['bbox'],
+                        'physical_contour': physical['contour'],
+                        'physical_svg_path': piece.get('physical_svg_path')
+                        or self._physical_path_from_contour(physical['contour']),
+                        'placement': placement,
+                        'placed_physical_contour': placed_contour,
+                        'placed_physical_svg_path': (
+                            self._physical_path_from_contour(placed_contour)
+                            if placed_contour
+                            else None
+                        ),
+                        'packed': placement is not None,
+                    }
+                )
+                packed_pieces.append(serialized_piece)
             sheets.append(
                 {
                     'veneer_id': veneer.veneer_id,
@@ -2175,11 +2363,12 @@ class MarquetryWorkspace:
                     'total_bounding_box_area': bbox_area_total,
                     'material_utilization': material_utilization,
                     'over_stock_capacity': placed_count < len(pieces),
+                    'packing_strategy': 'polygon-shelf-no-rotation',
                     'pieces': packed_pieces,
                 }
             )
         manifest = {
-            'packing_backend': 'rectpack-bounding-box',
+            'packing_backend': 'shapely-polygon-shelf',
             'source_geometry': (
                 self.design.active_vector_graph_kind
                 if self.design and self.design.active_vector_graph_kind

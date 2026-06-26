@@ -165,6 +165,25 @@ interface VertexMovePreview {
   topology_edge_count?: number;
 }
 
+interface PackPiece {
+  region_id: number;
+  veneer_id: string;
+  bbox_physical: [number, number, number, number];
+  physical_contour: number[][];
+  physical_svg_path: string;
+  placed_physical_contour: number[][] | null;
+  placed_physical_svg_path: string | null;
+  placement: null | {
+    sheet_index: number;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    rotation: number;
+  };
+  packed: boolean;
+}
+
 interface PackSheet {
   veneer_id: string;
   piece_count: number;
@@ -182,6 +201,8 @@ interface PackSheet {
   total_bounding_box_area: number;
   material_utilization: number;
   over_stock_capacity: boolean;
+  packing_strategy: string;
+  pieces: PackPiece[];
 }
 
 interface PackManifest {
