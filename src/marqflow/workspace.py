@@ -24,16 +24,20 @@ from .geometry import (
     coverage_simplified_svg,
     coverage_summary,
     design_to_svg,
+    graph_region_polygons,
     graph_to_svg,
     merge_labels,
+    move_topology_vertex,
     normalize_labels,
     partition_validation,
     preview_image,
     region_neighbors,
     shared_boundaries,
     shared_boundary_paths,
+    simplify_topology_edges,
     simplify_topology_graph,
     svg_path,
+    validate_topology_graph,
 )
 from .models import (
     Candidate,
@@ -151,6 +155,7 @@ class MarquetryWorkspace:
         if self.design is None:
             raise ValueError('create a design first')
         np.save(self.workspace_dir / self.design.labels_path, labels)
+        self.design.active_vector_graph_kind = None
 
     def _next_op_id(self) -> int:
         if self.design is None:
@@ -1065,11 +1070,12 @@ class MarquetryWorkspace:
                     if previous_subject_mask_path is not None
                     else SUBJECT_MASK
                 )
-        elif edit.kind == 'simplify_vector_graph':
+        elif edit.kind in {'simplify_vector_graph', 'edit_vector_graph'}:
             target_kind = str(edit.payload['target_kind'])
             target_path = self.workspace_dir / str(edit.payload['target_path'])
             previous_payload_path = edit.payload.get('previous_payload_path')
             previous_artifact = edit.payload.get('previous_artifact')
+            previous_active_kind = edit.payload.get('previous_active_vector_graph_kind')
             self.design.vector_graphs = [
                 artifact
                 for artifact in self.design.vector_graphs
@@ -1082,6 +1088,15 @@ class MarquetryWorkspace:
                 )
             else:
                 target_path.unlink(missing_ok=True)
+            if 'previous_active_vector_graph_kind' in edit.payload:
+                self.design.active_vector_graph_kind = (
+                    str(previous_active_kind) if previous_active_kind is not None else None
+                )
+        elif edit.kind == 'promote_vector_graph':
+            previous_active_kind = edit.payload.get('previous_active_vector_graph_kind')
+            self.design.active_vector_graph_kind = (
+                str(previous_active_kind) if previous_active_kind is not None else None
+            )
         else:
             raise ValueError(f'cannot undo edit kind: {edit.kind}')
         self.save()
@@ -1417,6 +1432,56 @@ class MarquetryWorkspace:
             return self.persist_topology_graph(kind=kind)
         raise ValueError(f'vector graph not found: {kind}')
 
+    def active_vector_graph_payload(self) -> dict[str, Any] | None:
+        """Return the promoted vector geometry, if the design has one."""
+
+        if self.design is None or self.design.active_vector_graph_kind is None:
+            return None
+        return self.vector_graph_payload(self.design.active_vector_graph_kind)
+
+    def _write_vector_graph_payload(
+        self,
+        payload: dict[str, Any],
+        kind: str,
+    ) -> None:
+        if self.design is None:
+            raise ValueError('create a design first')
+        validation = validate_topology_graph(
+            payload['graph'],
+            self.design_labels(),
+            self.design.physical_size,
+        )
+        if not validation['valid']:
+            raise ValueError(f'vector graph is not a valid puzzle: {validation}')
+        payload['graph_validation'] = validation
+        path = Path(VECTOR_DIR) / f'{kind}.json'
+        _atomic_json(self.workspace_dir / path, payload)
+        self._record_vector_graph_artifact(
+            kind=kind,
+            path=path,
+            graph=payload['graph'],
+            coverage_valid=bool(validation['valid']),
+        )
+
+    def _snapshot_vector_artifact(
+        self,
+        kind: str,
+        op_id: int,
+    ) -> tuple[str | None, dict[str, Any] | None]:
+        if self.design is None:
+            raise ValueError('create a design first')
+        for artifact in self.design.vector_graphs:
+            if artifact.kind != kind:
+                continue
+            existing = self.workspace_dir / artifact.path
+            if not existing.exists():
+                return None, artifact.to_dict()
+            snapshot_path = Path(HISTORY_DIR) / f'op-{op_id}-{kind}.json'
+            (self.workspace_dir / snapshot_path).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(existing, self.workspace_dir / snapshot_path)
+            return str(snapshot_path), artifact.to_dict()
+        return None, None
+
     def simplify_vector_graph(
         self,
         tolerance: float = 1.25,
@@ -1437,23 +1502,11 @@ class MarquetryWorkspace:
         )
         coverage = self.coverage_summary()
         path = Path(VECTOR_DIR) / f'{target_kind}.json'
-        previous_payload_path = None
-        previous_artifact = None
-        if self.design is not None:
-            for artifact in self.design.vector_graphs:
-                if artifact.kind == target_kind:
-                    previous_artifact = artifact.to_dict()
-                    existing = self.workspace_dir / artifact.path
-                    if existing.exists():
-                        op_id = self._next_op_id()
-                        previous_payload_path = Path(HISTORY_DIR) / f'op-{op_id}-{target_kind}.json'
-                        (self.workspace_dir / previous_payload_path).parent.mkdir(
-                            parents=True,
-                            exist_ok=True,
-                        )
-                        shutil.copyfile(existing, self.workspace_dir / previous_payload_path)
-                    break
         op_id = self._next_op_id()
+        previous_payload_path, previous_artifact = self._snapshot_vector_artifact(
+            target_kind,
+            op_id,
+        )
         payload = {
             'schema_version': 1,
             'kind': target_kind,
@@ -1464,13 +1517,7 @@ class MarquetryWorkspace:
             'coverage': coverage,
             'graph': graph,
         }
-        _atomic_json(self.workspace_dir / path, payload)
-        self._record_vector_graph_artifact(
-            kind=target_kind,
-            path=path,
-            graph=graph,
-            coverage_valid=bool(coverage['valid']),
-        )
+        self._write_vector_graph_payload(payload, target_kind)
         self.design.edit_history.append(
             EditOperation(
                 op_id=op_id,
@@ -1491,6 +1538,162 @@ class MarquetryWorkspace:
         )
         self.save()
         return payload
+
+    def simplify_vector_graph_for_regions(
+        self,
+        region_ids: list[int] | set[int],
+        tolerance: float = 1.25,
+        source_kind: str | None = None,
+        target_kind: str = 'edited_topology',
+    ) -> dict[str, Any]:
+        """Simplify graph edges touching selected regions as an undoable vector edit."""
+
+        if self.design is None:
+            raise ValueError('create a design first')
+        selected_region_ids = {int(region_id) for region_id in region_ids}
+        if not selected_region_ids:
+            raise ValueError('choose at least one region')
+        missing = sorted(selected_region_ids - self._current_region_ids())
+        if missing:
+            raise ValueError(f'unknown region ids: {missing}')
+        source = source_kind or self.design.active_vector_graph_kind or 'raster_topology'
+        source_payload = self.vector_graph_payload(source)
+        edge_ids = {
+            int(edge['edge_id'])
+            for edge in source_payload['graph']['edges']
+            if int(edge['region_a']) in selected_region_ids
+            or int(edge['region_b']) in selected_region_ids
+        }
+        if not edge_ids:
+            raise ValueError('selected regions have no vector edges')
+        labels = self.design_labels()
+        graph = simplify_topology_edges(
+            source_payload['graph'],
+            edge_ids=edge_ids,
+            tolerance=max(0.0, float(tolerance)),
+            physical_size=self.design.physical_size,
+            image_size=(labels.shape[1], labels.shape[0]),
+        )
+        op_id = self._next_op_id()
+        previous_payload_path, previous_artifact = self._snapshot_vector_artifact(
+            target_kind,
+            op_id,
+        )
+        previous_active_kind = self.design.active_vector_graph_kind
+        payload = {
+            'schema_version': 1,
+            'kind': target_kind,
+            'source': 'selected_topology_edges',
+            'source_kind': source,
+            'region_ids': sorted(selected_region_ids),
+            'edge_ids': sorted(edge_ids),
+            'tolerance': max(0.0, float(tolerance)),
+            'physical_size': self.design.physical_size.to_dict(),
+            'graph': graph,
+        }
+        self._write_vector_graph_payload(payload, target_kind)
+        self.design.active_vector_graph_kind = target_kind
+        self.design.edit_history.append(
+            EditOperation(
+                op_id=op_id,
+                kind='edit_vector_graph',
+                payload={
+                    'operation': 'simplify_region_edges',
+                    'source_kind': source,
+                    'target_kind': target_kind,
+                    'target_path': str(Path(VECTOR_DIR) / f'{target_kind}.json'),
+                    'previous_payload_path': previous_payload_path,
+                    'previous_artifact': previous_artifact,
+                    'previous_active_vector_graph_kind': previous_active_kind,
+                },
+            )
+        )
+        self.save()
+        return payload
+
+    def move_vector_vertex(
+        self,
+        vertex_id: int,
+        point: tuple[float, float],
+        source_kind: str | None = None,
+        target_kind: str = 'edited_topology',
+    ) -> dict[str, Any]:
+        """Move one graph vertex and promote the edited graph if it remains valid."""
+
+        if self.design is None:
+            raise ValueError('create a design first')
+        source = source_kind or self.design.active_vector_graph_kind or 'raster_topology'
+        source_payload = self.vector_graph_payload(source)
+        labels = self.design_labels()
+        graph = move_topology_vertex(
+            source_payload['graph'],
+            vertex_id=int(vertex_id),
+            point=point,
+            physical_size=self.design.physical_size,
+            image_size=(labels.shape[1], labels.shape[0]),
+        )
+        op_id = self._next_op_id()
+        previous_payload_path, previous_artifact = self._snapshot_vector_artifact(
+            target_kind,
+            op_id,
+        )
+        previous_active_kind = self.design.active_vector_graph_kind
+        payload = {
+            'schema_version': 1,
+            'kind': target_kind,
+            'source': 'move_topology_vertex',
+            'source_kind': source,
+            'vertex_id': int(vertex_id),
+            'point': [float(point[0]), float(point[1])],
+            'physical_size': self.design.physical_size.to_dict(),
+            'graph': graph,
+        }
+        self._write_vector_graph_payload(payload, target_kind)
+        self.design.active_vector_graph_kind = target_kind
+        self.design.edit_history.append(
+            EditOperation(
+                op_id=op_id,
+                kind='edit_vector_graph',
+                payload={
+                    'operation': 'move_vertex',
+                    'source_kind': source,
+                    'target_kind': target_kind,
+                    'target_path': str(Path(VECTOR_DIR) / f'{target_kind}.json'),
+                    'previous_payload_path': previous_payload_path,
+                    'previous_artifact': previous_artifact,
+                    'previous_active_vector_graph_kind': previous_active_kind,
+                },
+            )
+        )
+        self.save()
+        return payload
+
+    def promote_vector_graph(self, kind: str) -> None:
+        """Make a persisted graph artifact the authoritative export geometry."""
+
+        if self.design is None:
+            raise ValueError('create a design first')
+        payload = self.vector_graph_payload(kind)
+        validation = validate_topology_graph(
+            payload['graph'],
+            self.design_labels(),
+            self.design.physical_size,
+        )
+        if not validation['valid']:
+            raise ValueError(f'vector graph is not a valid puzzle: {validation}')
+        previous_active_kind = self.design.active_vector_graph_kind
+        self.design.active_vector_graph_kind = kind
+        self.design.edit_history.append(
+            EditOperation(
+                op_id=self._next_op_id(),
+                kind='promote_vector_graph',
+                payload={
+                    'kind': kind,
+                    'previous_active_vector_graph_kind': previous_active_kind,
+                },
+            )
+        )
+        self.save()
 
     def export_vector_graph_svg(
         self,
@@ -1542,16 +1745,30 @@ class MarquetryWorkspace:
             raise ValueError(f'invalid partition: {validation}')
         path = Path(output_path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        svg = design_to_svg(
-            build_regions(
-                self.source_array(),
+        active_graph = self.active_vector_graph_payload()
+        if active_graph is not None:
+            svg = graph_to_svg(
+                active_graph['graph'],
                 self.design_labels(),
-                self.design,
-                simplify_tolerance=max(0.0, float(simplify_tolerance)),
-            ),
-            self.design.physical_size,
-            (self.source.working_width, self.source.working_height),
-        )
+                build_regions(
+                    self.source_array(),
+                    self.design_labels(),
+                    self.design,
+                    simplify_tolerance=0.0,
+                ),
+                self.design.physical_size,
+            )
+        else:
+            svg = design_to_svg(
+                build_regions(
+                    self.source_array(),
+                    self.design_labels(),
+                    self.design,
+                    simplify_tolerance=max(0.0, float(simplify_tolerance)),
+                ),
+                self.design.physical_size,
+                (self.source.working_width, self.source.working_height),
+            )
         path.write_text(svg, encoding='utf-8')
         return path
 
@@ -1610,9 +1827,35 @@ class MarquetryWorkspace:
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
         regions = build_regions(self.source_array(), self.design_labels(), self.design)
+        active_graph = self.active_vector_graph_payload()
+        graph_pieces = None
+        if active_graph is not None:
+            graph_pieces_by_id = {
+                int(piece['region_id']): piece
+                for piece in graph_region_polygons(
+                    active_graph['graph'],
+                    self.design_labels(),
+                    self.design.physical_size,
+                )
+            }
+            graph_pieces = []
+            for region in regions:
+                piece = graph_pieces_by_id.get(region.region_id)
+                if piece is None:
+                    continue
+                graph_pieces.append(
+                    {
+                        **region.to_dict(),
+                        'area_physical': piece['area_physical'],
+                        'bbox_physical': piece['bounds'],
+                        'physical_contour': piece['physical_contour'],
+                        'physical_svg_path': piece['physical_svg_path'],
+                        'source_geometry': self.design.active_vector_graph_kind,
+                    }
+                )
         by_veneer: dict[str, list[dict[str, Any]]] = {}
-        for region in regions:
-            by_veneer.setdefault(region.veneer_id, []).append(region.to_dict())
+        for region in graph_pieces or [region.to_dict() for region in regions]:
+            by_veneer.setdefault(region['veneer_id'], []).append(region)
         sheets = []
         for veneer in self.design.veneers:
             pieces = by_veneer.get(veneer.veneer_id, [])
@@ -1629,11 +1872,16 @@ class MarquetryWorkspace:
             bbox_area_total = 0.0
             piece_area_total = 0.0
             for piece in pieces:
-                x0, y0, x1, y1 = piece['bbox']
-                width_px = max(1, x1 - x0)
-                height_px = max(1, y1 - y0)
-                width_units = width_px / max(px_per_unit_x, 1e-9)
-                height_units = height_px / max(px_per_unit_y, 1e-9)
+                if 'bbox_physical' in piece:
+                    x0, y0, x1, y1 = piece['bbox_physical']
+                    width_units = max(1e-6, float(x1) - float(x0))
+                    height_units = max(1e-6, float(y1) - float(y0))
+                else:
+                    x0, y0, x1, y1 = piece['bbox']
+                    width_px = max(1, x1 - x0)
+                    height_px = max(1, y1 - y0)
+                    width_units = width_px / max(px_per_unit_x, 1e-9)
+                    height_units = height_px / max(px_per_unit_y, 1e-9)
                 bbox_area_total += width_units * height_units
                 piece_area_total += float(piece['area_physical'])
                 packer.add_rect(
@@ -1676,14 +1924,16 @@ class MarquetryWorkspace:
             packed_pieces = [
                 {
                     **piece,
-                    'physical_contour': [
+                    'physical_contour': piece.get('physical_contour')
+                    or [
                         [
                             point[0] / max(px_per_unit_x, 1e-9),
                             point[1] / max(px_per_unit_y, 1e-9),
                         ]
                         for point in piece['contour']
                     ],
-                    'physical_svg_path': svg_path(
+                    'physical_svg_path': piece.get('physical_svg_path')
+                    or svg_path(
                         tuple((float(point[0]), float(point[1])) for point in piece['contour']),
                         px_per_unit_x,
                         px_per_unit_y,
@@ -1714,7 +1964,15 @@ class MarquetryWorkspace:
                     'pieces': packed_pieces,
                 }
             )
-        manifest = {'packing_backend': 'rectpack-bounding-box', 'sheets': sheets}
+        manifest = {
+            'packing_backend': 'rectpack-bounding-box',
+            'source_geometry': (
+                self.design.active_vector_graph_kind
+                if self.design and self.design.active_vector_graph_kind
+                else 'raster_labels'
+            ),
+            'sheets': sheets,
+        }
         (output_path / 'pack.json').write_text(
             json.dumps(manifest, indent=2, sort_keys=True) + '\n',
             encoding='utf-8',

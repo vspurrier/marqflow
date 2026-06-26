@@ -91,9 +91,14 @@ Implemented now:
   references
 - persisted topology graph artifacts
 - undoable topology graph simplification artifacts
+- active vector graph promotion as output geometry
+- topology-safe selected-boundary vector simplification
+- topology-safe single-vertex movement
 - SVG reconstruction from persisted graph linework
 - API and CLI access for graph persistence, simplification, loading, and
   reconstructed graph SVG export
+- browser controls for vector cleanup, graph promotion, graph preview, and
+  vertex movement by ID
 - Shapely coverage validation for exported physical polygons
 - selected-boundary summary in the browser
 - partition validation
@@ -135,9 +140,10 @@ Implemented now:
    physical units, including simplified-path analysis. A topology graph and
    Shapely coverage validation now provide the foundation for correctness, and
    coverage-safe exports persist artifact metadata. Topology graphs can now be
-   persisted, simplified into undoable vector artifacts, and reconstructed into
-   filled SVG. Advanced point editing and no-gap/no-overlap graph mutation
-   should be built on these persisted shared vector edges.
+   persisted, simplified into undoable vector artifacts, reconstructed into
+   filled SVG, promoted as active output geometry, and edited with validated
+   single-vertex moves. Next improvement: replace numeric vertex movement with
+   direct canvas handles, snapping, and preview/accept flows.
 
 3. Add cleanup operations on top of shared boundaries.
 
@@ -145,10 +151,11 @@ Implemented now:
    physical-area sliver repair, raster boundary smoothing, selected-region
    smoothing, selected-boundary inspection, and bounded auto-merge suggestions.
    Coverage-safe shared-edge simplification exists for SVG export, and shared
-   graph simplification now persists as an undoable vector artifact. Needed
-   operations: selected-boundary vector smoothing, edit vertices, validate
-   arbitrary edited graph mutations, and write edited shared edges back safely
-   when the user promotes a vector artifact to the final design.
+   graph simplification now persists as an undoable vector artifact. Selected
+   regions can drive vector-edge simplification, individual vertices can be
+   moved with topology validation, and promoted graph geometry drives SVG/pack
+   output. Needed operations: visual handles, snapping constraints, smoother
+   curve cleanup, and explicit preview/accept UI for larger graph mutations.
 
 4. Deepen veneer inventory logic.
 

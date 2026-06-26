@@ -148,6 +148,24 @@ class SimplifyTopologyRequest(BaseModel):
     target_kind: str = 'simplified_topology'
 
 
+class SimplifySelectedTopologyRequest(BaseModel):
+    region_ids: list[int] = Field(min_length=1)
+    tolerance: float = Field(default=1.25, ge=0.0, le=50.0)
+    source_kind: str | None = None
+    target_kind: str = 'edited_topology'
+
+
+class MoveVertexRequest(BaseModel):
+    vertex_id: int
+    point: tuple[float, float]
+    source_kind: str | None = None
+    target_kind: str = 'edited_topology'
+
+
+class PromoteTopologyRequest(BaseModel):
+    kind: str = 'edited_topology'
+
+
 class PackRequest(BaseModel):
     output_dir: str = './exported'
 
@@ -533,6 +551,45 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post('/api/design/topology/simplify-selected')
+    def simplify_selected_design_topology(
+        request: SimplifySelectedTopologyRequest,
+    ) -> JSONResponse:
+        ws = _load_workspace(workspace_path)
+        try:
+            ws.simplify_vector_graph_for_regions(
+                region_ids=request.region_ids,
+                tolerance=request.tolerance,
+                source_kind=request.source_kind,
+                target_kind=request.target_kind,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return JSONResponse(ws.summary())
+
+    @app.post('/api/design/topology/move-vertex')
+    def move_design_topology_vertex(request: MoveVertexRequest) -> JSONResponse:
+        ws = _load_workspace(workspace_path)
+        try:
+            ws.move_vector_vertex(
+                vertex_id=request.vertex_id,
+                point=request.point,
+                source_kind=request.source_kind,
+                target_kind=request.target_kind,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return JSONResponse(ws.summary())
+
+    @app.post('/api/design/topology/promote')
+    def promote_design_topology(request: PromoteTopologyRequest) -> JSONResponse:
+        ws = _load_workspace(workspace_path)
+        try:
+            ws.promote_vector_graph(request.kind)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return JSONResponse(ws.summary())
 
     @app.get('/api/design/topology/{kind}')
     def persisted_design_topology(kind: str) -> JSONResponse:

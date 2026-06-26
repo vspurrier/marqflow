@@ -389,6 +389,51 @@ def test_vector_graph_artifacts_simplify_reconstruct_and_undo(tmp_path: Path) ->
     assert workspace.summary()['validation']['region_count'] == 4
 
 
+def test_promoted_vector_graph_drives_export_and_pack(tmp_path: Path) -> None:
+    image_path = tmp_path / 'source.png'
+    _fixture_image(image_path)
+    workspace = MarquetryWorkspace.create(image_path, tmp_path / 'workspace', max_edge=64)
+    candidate = workspace.generate_candidate(target_regions=4, compactness=8.0)
+    workspace.create_design(candidate.candidate_id, PhysicalSize(width=8, height=8, unit='in'))
+    workspace._write_design_labels(_four_region_labels())
+    workspace.save()
+
+    edited = workspace.simplify_vector_graph_for_regions([1, 2], tolerance=2.0)
+    assert edited['kind'] == 'edited_topology'
+    assert workspace.summary()['design']['active_vector_graph_kind'] == 'edited_topology'
+
+    svg_path = workspace.export_svg(tmp_path / 'active.svg')
+    assert 'data-graph-reconstructed="true"' in svg_path.read_text(encoding='utf-8')
+    manifest = workspace.pack(tmp_path / 'packed-vector')
+    assert manifest['source_geometry'] == 'edited_topology'
+    assert manifest['sheets'][0]['pieces'][0]['source_geometry'] == 'edited_topology'
+
+    workspace.undo()
+    assert workspace.summary()['design']['active_vector_graph_kind'] is None
+    assert not (workspace.workspace_dir / 'vector' / 'edited_topology.json').exists()
+
+
+def test_topology_safe_vertex_move_is_undoable(tmp_path: Path) -> None:
+    image_path = tmp_path / 'source.png'
+    _fixture_image(image_path)
+    workspace = MarquetryWorkspace.create(image_path, tmp_path / 'workspace', max_edge=64)
+    candidate = workspace.generate_candidate(target_regions=4, compactness=8.0)
+    workspace.create_design(candidate.candidate_id, PhysicalSize(width=8, height=8, unit='in'))
+    workspace._write_design_labels(_four_region_labels())
+    workspace.save()
+
+    graph = workspace.persist_topology_graph()['graph']
+    center = next(vertex for vertex in graph['vertices'] if vertex['point'] == [24, 24])
+    moved = workspace.move_vector_vertex(center['vertex_id'], (25, 24))
+
+    assert moved['graph_validation']['valid'] is True
+    assert workspace.summary()['design']['active_vector_graph_kind'] == 'edited_topology'
+    edited_graph = workspace.vector_graph_payload('edited_topology')['graph']
+    assert any(vertex['point'] == [25.0, 24.0] for vertex in edited_graph['vertices'])
+    workspace.undo()
+    assert workspace.summary()['design']['active_vector_graph_kind'] is None
+
+
 def test_split_and_lock_are_undoable(tmp_path: Path) -> None:
     image_path = tmp_path / 'source.png'
     _fixture_image(image_path)
@@ -601,6 +646,24 @@ def test_api_vertical_slice(tmp_path: Path) -> None:
     )
     assert simplify_topology_response.status_code == 200
     assert simplify_topology_response.json()['kind'] == 'simplified_topology'
+    promote_topology_response = client.post(
+        '/api/design/topology/promote',
+        json={'kind': 'simplified_topology'},
+    )
+    assert promote_topology_response.status_code == 200
+    assert (
+        promote_topology_response.json()['design']['active_vector_graph_kind']
+        == 'simplified_topology'
+    )
+    simplify_selected_response = client.post(
+        '/api/design/topology/simplify-selected',
+        json={'region_ids': [region_id], 'tolerance': 2.0},
+    )
+    assert simplify_selected_response.status_code == 200
+    assert (
+        simplify_selected_response.json()['design']['active_vector_graph_kind']
+        == 'edited_topology'
+    )
     graph_svg_response = client.get('/api/design-graph.svg?kind=simplified_topology')
     assert graph_svg_response.status_code == 200
     assert 'data-graph-reconstructed="true"' in graph_svg_response.text

@@ -245,6 +245,7 @@ class MarquetryDesign:
     locked_region_ids: set[int] = field(default_factory=set)
     detail_zones: list[DetailZone] = field(default_factory=list)
     subject_mask_path: str | None = None
+    active_vector_graph_kind: str | None = None
     vector_graphs: list[VectorGraphArtifact] = field(default_factory=list)
     vector_exports: list[ExportArtifact] = field(default_factory=list)
     edit_history: list[EditOperation] = field(default_factory=list)
@@ -262,6 +263,7 @@ class MarquetryDesign:
             'locked_region_ids': sorted(self.locked_region_ids),
             'detail_zones': [zone.to_dict() for zone in self.detail_zones],
             'subject_mask_path': self.subject_mask_path,
+            'active_vector_graph_kind': self.active_vector_graph_kind,
             'vector_graphs': [artifact.to_dict() for artifact in self.vector_graphs],
             'vector_exports': [artifact.to_dict() for artifact in self.vector_exports],
             'edit_history': [edit.to_dict() for edit in self.edit_history],
@@ -285,6 +287,11 @@ class MarquetryDesign:
             subject_mask_path=(
                 str(data['subject_mask_path'])
                 if data.get('subject_mask_path') is not None
+                else None
+            ),
+            active_vector_graph_kind=(
+                str(data['active_vector_graph_kind'])
+                if data.get('active_vector_graph_kind') is not None
                 else None
             ),
             vector_exports=[

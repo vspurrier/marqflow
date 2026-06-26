@@ -65,6 +65,16 @@ const el = /** @type {Record<string, any>} */ ({
   smoothPasses: document.getElementById('smooth-passes'),
   smoothBoundaries: document.getElementById('smooth-boundaries'),
   applySuggestions: document.getElementById('apply-suggestions'),
+  vectorTolerance: document.getElementById('vector-tolerance'),
+  vectorSimplifyAll: document.getElementById('vector-simplify-all'),
+  vectorSimplifySelected: document.getElementById('vector-simplify-selected'),
+  vectorKind: document.getElementById('vector-kind'),
+  vectorPromote: document.getElementById('vector-promote'),
+  viewGraphSvg: document.getElementById('view-graph-svg'),
+  vertexId: document.getElementById('vertex-id'),
+  vertexX: document.getElementById('vertex-x'),
+  vertexY: document.getElementById('vertex-y'),
+  moveVertex: document.getElementById('move-vertex'),
   clearSelection: document.getElementById('clear-selection'),
   designCanvas: document.getElementById('design-canvas'),
   canvasZoom: document.getElementById('canvas-zoom'),
@@ -158,6 +168,8 @@ function render() {
       subject_mask: workspace.subject_mask,
       valid_partition: workspace.validation.valid,
       region_count: workspace.validation.region_count,
+      active_vector_graph: workspace.design?.active_vector_graph_kind || null,
+      vector_graphs: workspace.design?.vector_graphs || [],
     },
     null,
     2,
@@ -949,6 +961,103 @@ async function smoothBoundaries() {
   render();
 }
 
+async function simplifyVectorGraphAll() {
+  const tolerance = Number(el.vectorTolerance.value || 1.25);
+  const response = await fetch('/api/design/topology/simplify', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      tolerance,
+      source_kind: workspace?.design?.active_vector_graph_kind || 'raster_topology',
+      target_kind: 'simplified_topology',
+    }),
+  });
+  if (!response.ok) {
+    setStatus(await response.text(), true);
+    return;
+  }
+  const promoteResponse = await fetch('/api/design/topology/promote', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({kind: 'simplified_topology'}),
+  });
+  if (!promoteResponse.ok) {
+    setStatus(await promoteResponse.text(), true);
+    return;
+  }
+  await refresh();
+  setStatus(`Simplified and promoted graph at tolerance ${tolerance}.`);
+}
+
+async function simplifyVectorGraphSelected() {
+  if (!selectedRegionIds.size) {
+    setStatus('Select at least one region before simplifying selected boundaries.', true);
+    return;
+  }
+  const tolerance = Number(el.vectorTolerance.value || 1.25);
+  const response = await fetch('/api/design/topology/simplify-selected', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      region_ids: [...selectedRegionIds],
+      tolerance,
+      source_kind: workspace?.design?.active_vector_graph_kind || null,
+      target_kind: 'edited_topology',
+    }),
+  });
+  if (!response.ok) {
+    setStatus(await response.text(), true);
+    return;
+  }
+  workspace = await response.json();
+  await loadHitmap();
+  setStatus(`Simplified selected vector boundaries at tolerance ${tolerance}.`);
+  render();
+}
+
+async function promoteVectorGraph() {
+  const kind = String(el.vectorKind.value || 'edited_topology').trim();
+  const response = await fetch('/api/design/topology/promote', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({kind}),
+  });
+  if (!response.ok) {
+    setStatus(await response.text(), true);
+    return;
+  }
+  workspace = await response.json();
+  await loadHitmap();
+  setStatus(`Promoted ${kind} as output geometry.`);
+  render();
+}
+
+async function moveVectorVertex() {
+  const vertexId = Number(el.vertexId.value || 0);
+  if (!vertexId) {
+    setStatus('Enter a vector vertex ID to move.', true);
+    return;
+  }
+  const response = await fetch('/api/design/topology/move-vertex', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      vertex_id: vertexId,
+      point: [Number(el.vertexX.value || 0), Number(el.vertexY.value || 0)],
+      source_kind: workspace?.design?.active_vector_graph_kind || null,
+      target_kind: 'edited_topology',
+    }),
+  });
+  if (!response.ok) {
+    setStatus(await response.text(), true);
+    return;
+  }
+  workspace = await response.json();
+  await loadHitmap();
+  setStatus(`Moved vector vertex ${vertexId}.`);
+  render();
+}
+
 async function applySuggestions() {
   const response = await fetch('/api/design/apply-merge-suggestions', {
     method: 'POST',
@@ -1062,6 +1171,10 @@ el.applyFocus.addEventListener('click', applyFocus);
 el.repairSmall.addEventListener('click', repairSmall);
 el.smoothBoundaries.addEventListener('click', smoothBoundaries);
 el.applySuggestions.addEventListener('click', applySuggestions);
+el.vectorSimplifyAll.addEventListener('click', simplifyVectorGraphAll);
+el.vectorSimplifySelected.addEventListener('click', simplifyVectorGraphSelected);
+el.vectorPromote.addEventListener('click', promoteVectorGraph);
+el.moveVertex.addEventListener('click', moveVectorVertex);
 el.canvasZoom.addEventListener('input', () => setCanvasZoom(el.canvasZoom.value));
 el.zoomIn.addEventListener('click', () => setCanvasZoom(canvasZoom + 25));
 el.zoomOut.addEventListener('click', () => setCanvasZoom(canvasZoom - 25));
@@ -1136,6 +1249,10 @@ el.viewSvg.addEventListener('click', () => {
 el.viewCoverageSvg.addEventListener('click', () => {
   const tolerance = encodeURIComponent(String(el.svgSimplify.value || 1));
   window.open(`/api/design-coverage.svg?tolerance=${tolerance}`, '_blank');
+});
+el.viewGraphSvg.addEventListener('click', () => {
+  const kind = encodeURIComponent(String(el.vectorKind.value || 'edited_topology'));
+  window.open(`/api/design-graph.svg?kind=${kind}`, '_blank');
 });
 el.cleanupReport.addEventListener('click', cleanupReport);
 el.pack.addEventListener('click', pack);

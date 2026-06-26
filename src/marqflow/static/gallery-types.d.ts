@@ -36,6 +36,15 @@ interface ExportArtifact {
   created_at: string;
 }
 
+interface VectorGraphArtifact {
+  kind: string;
+  path: string;
+  topology_vertex_count: number;
+  topology_edge_count: number;
+  coverage_valid: boolean;
+  created_at: string;
+}
+
 interface MergeSuggestion {
   region_id: number;
   target_region_id: number;
@@ -66,6 +75,8 @@ interface WorkspaceSummary {
     physical_size: {width: number; height: number; unit: string};
     detail_zones: DetailZone[];
     subject_mask_path: string | null;
+    active_vector_graph_kind: string | null;
+    vector_graphs: VectorGraphArtifact[];
     vector_exports: ExportArtifact[];
   };
   subject_mask: {subject_px: number; background_px: number; unknown_px: number};
@@ -123,6 +134,7 @@ interface PackSheet {
 
 interface PackManifest {
   packing_backend: string;
+  source_geometry: string;
   sheets: PackSheet[];
 }
 

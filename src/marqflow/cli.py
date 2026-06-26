@@ -102,6 +102,41 @@ def export_graph(
 
 
 @app.command()
+def promote_graph(
+    workspace_dir: Annotated[Path, typer.Argument(..., exists=True, readable=True)],
+    kind: str = typer.Option('edited_topology', help='Vector graph artifact to promote.'),
+) -> None:
+    """Use a vector graph artifact as the authoritative export geometry."""
+
+    workspace = MarquetryWorkspace.load(workspace_dir)
+    workspace.promote_vector_graph(kind)
+    typer.echo(f'active graph: {kind}')
+
+
+@app.command()
+def move_vertex(
+    workspace_dir: Annotated[Path, typer.Argument(..., exists=True, readable=True)],
+    vertex_id: int = typer.Argument(..., help='Topology vertex ID to move.'),
+    x: float = typer.Argument(..., help='New x coordinate in working-image pixels.'),
+    y: float = typer.Argument(..., help='New y coordinate in working-image pixels.'),
+    source_kind: str | None = typer.Option(None, help='Source graph artifact.'),
+    target_kind: str = typer.Option('edited_topology', help='Target graph artifact.'),
+) -> None:
+    """Move one vector vertex if the resulting puzzle remains valid."""
+
+    workspace = MarquetryWorkspace.load(workspace_dir)
+    payload = workspace.move_vector_vertex(
+        vertex_id=vertex_id,
+        point=(x, y),
+        source_kind=source_kind,
+        target_kind=target_kind,
+    )
+    validation = payload['graph_validation']
+    typer.echo(f'graph: {target_kind}')
+    typer.echo(f'valid: {validation["valid"]}')
+
+
+@app.command()
 def pack(
     workspace_dir: Annotated[Path, typer.Argument(..., exists=True, readable=True)],
     output_dir: Annotated[Path, typer.Argument(...)],

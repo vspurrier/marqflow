@@ -92,6 +92,18 @@
           <button id="undo" type="button">Undo last edit</button>
         </div>
         <div class="controls">
+          <label>Vector tolerance <input id="vector-tolerance" type="number" value="1.25" min="0" max="50" step="0.25" /></label>
+          <button id="vector-simplify-all" type="button">Simplify graph</button>
+          <button id="vector-simplify-selected" type="button">Simplify selected boundaries</button>
+          <label>Graph kind <input id="vector-kind" type="text" value="edited_topology" /></label>
+          <button id="vector-promote" type="button">Promote graph</button>
+          <button id="view-graph-svg" type="button">Open graph SVG</button>
+          <label>Vertex ID <input id="vertex-id" type="number" min="1" step="1" /></label>
+          <label>Vertex x <input id="vertex-x" type="number" step="0.1" /></label>
+          <label>Vertex y <input id="vertex-y" type="number" step="0.1" /></label>
+          <button id="move-vertex" type="button">Move vertex</button>
+        </div>
+        <div class="controls">
           <label>Selection mode
             <select id="selection-mode">
               <option value="box">Box/click</option>

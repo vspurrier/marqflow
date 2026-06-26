@@ -90,8 +90,16 @@ uv run pytest -q
   artifacts without modifying the raster partition.
 - Persisted graph artifacts can be reconstructed into filled SVG regions from
   graph linework.
+- A persisted vector graph can be promoted as the active output geometry.
+- Promoted vector geometry drives SVG export and pack-manifest physical
+  contours/bounds.
+- Topology-safe vector edit operations exist for selected-boundary
+  simplification and single-vertex movement, with graph validation before save.
+- Browser controls expose vector simplification, selected-boundary vector
+  cleanup, graph promotion, graph SVG preview, and vertex movement by ID.
 - Browser endpoints and CLI commands exist for topology persistence,
-  simplification, graph loading, and graph-SVG export.
+  simplification, graph loading, graph promotion, graph-SVG export, and vertex
+  movement.
 - `rectpack` bounding-box pack manifest grouped by veneer.
 - Pack manifest includes each piece's physical contour and SVG path for future
   irregular nesting adapters.
@@ -124,18 +132,20 @@ uv run pytest -q
    edges, and region-edge references, and Shapely coverage validation checks the
    exported physical polygons. Coverage-safe exports persist vector artifact
    metadata. Topology graphs can now be persisted, simplified as undoable vector
-   artifacts, and reconstructed into filled SVG regions. Advanced direct
-   geometry editing still needs vertex/edge move operations, topology
-   validation for edited graphs, and a decision about when edited vector
-   geometry becomes the final design source of truth.
+   artifacts, reconstructed into filled SVG regions, edited with validated
+   single-vertex moves, and promoted as active output geometry. The remaining
+   gap is richer interactive editing: direct canvas handles, boundary-level
+   previews, snapping constraints, and a clearer UI for inspecting vertex IDs.
 
 2. Real cleanup tools beyond merge.
 
    Merge, targeted split, lock/unlock, physical-area sliver repair, raster
    smoothing, selected-region smoothing, selected-boundary inspection, bounded
-   auto-merge, vector-graph simplification, graph SVG reconstruction, and undo
-   now exist. Selected-boundary vector smoothing, point editing, and
-   shared-boundary-safe writes back to the design are still open.
+   auto-merge, vector-graph simplification, selected-boundary vector
+   simplification, graph SVG reconstruction, graph promotion, vertex movement,
+   and undo now exist. Remaining cleanup depth: true curve/spline smoothing,
+   constrained snapping, batch vertex simplification previews, and more usable
+   visual editing affordances.
 
 3. Subject/detail logic.
 
@@ -148,8 +158,9 @@ uv run pytest -q
 4. Browser selection tooling.
 
    Canvas click/drag selection, lasso selection, selected-boundary summaries,
-   zoom, and scroll-panning exist. It remains visually basic and lacks
-   selected-boundary editing.
+   zoom, scroll-panning, and vector cleanup buttons exist. It remains visually
+   basic: vertex movement currently uses numeric vertex IDs rather than direct
+   draggable handles on the canvas.
 
 5. Material planning.
 

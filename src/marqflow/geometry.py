@@ -9,7 +9,7 @@ from typing import Any
 
 import numpy as np
 from PIL import Image
-from shapely import coverage_invalid_edges, coverage_is_valid, coverage_simplify
+from shapely import coverage_invalid_edges, coverage_is_valid, coverage_simplify, unary_union
 from shapely.geometry import LineString, Polygon
 from shapely.ops import polygonize
 from skimage.measure import approximate_polygon, find_contours
@@ -403,7 +403,6 @@ def simplify_topology_graph(
     """Return a copy of a topology graph with simplified edge paths."""
 
     simplified = json_safe_graph(graph)
-    px_per_unit_x, px_per_unit_y = physical_size.pixels_per_unit(image_size)
     vertices_by_id = {vertex['vertex_id']: vertex for vertex in simplified['vertices']}
     for edge in simplified['edges']:
         path = edge['path']
@@ -418,6 +417,42 @@ def simplify_topology_graph(
         path[0] = [float(start_vertex['point'][0]), float(start_vertex['point'][1])]
         path[-1] = [float(end_vertex['point'][0]), float(end_vertex['point'][1])]
         edge['path'] = path
+    return reindex_topology_graph(simplified, physical_size, image_size)
+
+
+def reindex_topology_graph(
+    graph: dict[str, Any],
+    physical_size: PhysicalSize,
+    image_size: tuple[int, int],
+) -> dict[str, Any]:
+    """Rebuild vertex IDs and physical edge metadata from edge paths."""
+
+    px_per_unit_x, px_per_unit_y = physical_size.pixels_per_unit(image_size)
+    cleaned = json_safe_graph(graph)
+    vertex_ids: dict[tuple[float, float], int] = {}
+    vertices = []
+
+    def vertex_id(point: list[float]) -> int:
+        key = (round(float(point[0]), 6), round(float(point[1]), 6))
+        if key not in vertex_ids:
+            next_id = len(vertex_ids) + 1
+            vertex_ids[key] = next_id
+            vertices.append(
+                {
+                    'vertex_id': next_id,
+                    'point': [key[0], key[1]],
+                    'physical_point': [
+                        key[0] / max(px_per_unit_x, 1e-9),
+                        key[1] / max(px_per_unit_y, 1e-9),
+                    ],
+                }
+            )
+        return vertex_ids[key]
+
+    for edge in cleaned['edges']:
+        path = [[float(x), float(y)] for x, y in edge['path']]
+        edge['path'] = path
+        edge['vertex_ids'] = [vertex_id(point) for point in path]
         edge['length_px'] = sum(
             math.dist(path[index - 1], path[index]) for index in range(1, len(path))
         )
@@ -433,7 +468,163 @@ def simplify_topology_graph(
             math.dist(physical_path[index - 1], physical_path[index])
             for index in range(1, len(physical_path))
         )
-    return simplified
+    cleaned['vertices'] = vertices
+    cleaned['vertex_count'] = len(vertices)
+    cleaned['edge_count'] = len(cleaned['edges'])
+    return cleaned
+
+
+def _graph_polygons(
+    graph: dict[str, Any],
+    labels: np.ndarray,
+    physical_size: PhysicalSize,
+) -> list[tuple[int, Polygon]]:
+    px_per_unit_x, px_per_unit_y = physical_size.pixels_per_unit(
+        (labels.shape[1], labels.shape[0])
+    )
+    lines = []
+    for edge in graph['edges']:
+        path = edge['path']
+        if len(path) < 2:
+            continue
+        lines.append(
+            LineString(
+                [
+                    (
+                        float(x) / max(px_per_unit_x, 1e-9),
+                        float(y) / max(px_per_unit_y, 1e-9),
+                    )
+                    for x, y in path
+                ]
+            )
+        )
+
+    polygons: list[tuple[int, Polygon]] = []
+    for polygon in polygonize(lines):
+        if polygon.is_empty or not polygon.is_valid or polygon.area <= 0:
+            continue
+        sample = polygon.representative_point()
+        x = max(0, min(labels.shape[1] - 1, int(sample.x * px_per_unit_x)))
+        y = max(0, min(labels.shape[0] - 1, int(sample.y * px_per_unit_y)))
+        region_id = int(labels[y, x])
+        if region_id > 0:
+            polygons.append((region_id, polygon))
+    return polygons
+
+
+def graph_region_polygons(
+    graph: dict[str, Any],
+    labels: np.ndarray,
+    physical_size: PhysicalSize,
+) -> list[dict[str, Any]]:
+    """Return filled region polygons reconstructed from graph linework."""
+
+    return [
+        {
+            'region_id': region_id,
+            'area_physical': float(polygon.area),
+            'bounds': [float(value) for value in polygon.bounds],
+            'physical_contour': [
+                [float(x), float(y)] for x, y in polygon.exterior.coords
+            ],
+            'physical_svg_path': _physical_path(
+                [(float(x), float(y)) for x, y in polygon.exterior.coords]
+            ),
+        }
+        for region_id, polygon in _graph_polygons(graph, labels, physical_size)
+    ]
+
+
+def validate_topology_graph(
+    graph: dict[str, Any],
+    labels: np.ndarray,
+    physical_size: PhysicalSize,
+    area_tolerance: float = 0.01,
+) -> dict[str, Any]:
+    """Validate that graph linework reconstructs one non-overlapping full puzzle."""
+
+    polygons = _graph_polygons(graph, labels, physical_size)
+    region_ids = [int(value) for value in np.unique(labels) if int(value) > 0]
+    polygon_region_ids = [region_id for region_id, _polygon in polygons]
+    duplicate_region_ids = sorted(
+        region_id
+        for region_id in set(polygon_region_ids)
+        if polygon_region_ids.count(region_id) > 1
+    )
+    missing_region_ids = sorted(set(region_ids) - set(polygon_region_ids))
+    extra_region_ids = sorted(set(polygon_region_ids) - set(region_ids))
+    shapely_polygons = [polygon for _region_id, polygon in polygons]
+    coverage_valid = bool(shapely_polygons) and bool(coverage_is_valid(shapely_polygons))
+    union = unary_union(shapely_polygons) if shapely_polygons else Polygon()
+    expected_area = physical_size.width * physical_size.height
+    area_delta = abs(float(union.area) - expected_area)
+    valid = (
+        coverage_valid
+        and not duplicate_region_ids
+        and not missing_region_ids
+        and not extra_region_ids
+        and area_delta <= max(area_tolerance, expected_area * 0.01)
+    )
+    return {
+        'valid': valid,
+        'polygon_count': len(polygons),
+        'region_count': len(region_ids),
+        'coverage_valid': coverage_valid,
+        'duplicate_region_ids': duplicate_region_ids,
+        'missing_region_ids': missing_region_ids,
+        'extra_region_ids': extra_region_ids,
+        'union_area': float(union.area),
+        'expected_area': expected_area,
+        'area_delta': area_delta,
+    }
+
+
+def move_topology_vertex(
+    graph: dict[str, Any],
+    vertex_id: int,
+    point: tuple[float, float],
+    physical_size: PhysicalSize,
+    image_size: tuple[int, int],
+) -> dict[str, Any]:
+    """Move one graph vertex everywhere it appears and rebuild graph metadata."""
+
+    moved = json_safe_graph(graph)
+    vertex_id = int(vertex_id)
+    next_point = [float(point[0]), float(point[1])]
+    touched = False
+    for edge in moved['edges']:
+        for index, edge_vertex_id in enumerate(edge['vertex_ids']):
+            if int(edge_vertex_id) == vertex_id:
+                edge['path'][index] = next_point
+                touched = True
+    if not touched:
+        raise ValueError(f'vertex not found: {vertex_id}')
+    return reindex_topology_graph(moved, physical_size, image_size)
+
+
+def simplify_topology_edges(
+    graph: dict[str, Any],
+    edge_ids: set[int],
+    tolerance: float,
+    physical_size: PhysicalSize,
+    image_size: tuple[int, int],
+) -> dict[str, Any]:
+    """Simplify selected graph edges while keeping all other edge paths unchanged."""
+
+    edited = json_safe_graph(graph)
+    selected = {int(edge_id) for edge_id in edge_ids}
+    for edge in edited['edges']:
+        if int(edge['edge_id']) not in selected:
+            continue
+        path = edge['path']
+        if len(path) <= 2 or tolerance <= 0:
+            continue
+        simplified_path = approximate_polygon(np.asarray(path, dtype=float), tolerance)
+        path = [[float(x), float(y)] for x, y in simplified_path]
+        path[0] = edge['path'][0]
+        path[-1] = edge['path'][-1]
+        edge['path'] = path
+    return reindex_topology_graph(edited, physical_size, image_size)
 
 
 def json_safe_graph(graph: dict[str, Any]) -> dict[str, Any]:
