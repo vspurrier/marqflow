@@ -22,6 +22,7 @@ const el = /** @type {Record<string, any>} */ ({
   openWorkspace: document.getElementById('open-workspace'),
   deleteWorkspace: document.getElementById('delete-workspace'),
   imageInput: document.getElementById('image-input'),
+  maxEdge: document.getElementById('max-edge'),
   targetRegions: document.getElementById('target-regions'),
   compactness: document.getElementById('compactness'),
   gridRows: document.getElementById('grid-rows'),
@@ -578,6 +579,7 @@ async function openImage() {
   }
   const form = new FormData();
   form.append('image', el.imageInput.files[0]);
+  form.append('max_edge', el.maxEdge.value || '768');
   form.append('target_regions', el.targetRegions.value || '80');
   form.append('compactness', el.compactness.value || '18');
   if (el.workspaceName.value) form.append('workspace_name', el.workspaceName.value);

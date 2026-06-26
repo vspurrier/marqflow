@@ -239,6 +239,7 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
         image: Annotated[UploadFile, File()],
         target_regions: Annotated[int, Form()] = 80,
         compactness: Annotated[float, Form()] = 18.0,
+        max_edge: Annotated[int, Form()] = 768,
         workspace_name: Annotated[str | None, Form()] = None,
     ) -> JSONResponse:
         nonlocal workspace_path
@@ -253,7 +254,11 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
                 workspace_name or Path(image.filename or upload_path.stem).stem
             )
             workspace_path = workspace_root / name
-            ws = MarquetryWorkspace.create(upload_path, workspace_path)
+            ws = MarquetryWorkspace.create(
+                upload_path,
+                workspace_path,
+                max_edge=max(64, min(int(max_edge), 2048)),
+            )
             candidate = ws.generate_candidate(
                 target_regions=target_regions,
                 compactness=compactness,

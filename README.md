@@ -19,21 +19,22 @@ The final design is a puzzle:
 The rewrite currently supports:
 
 1. Load and normalize a source image.
-2. Generate one SLIC candidate partition or a candidate search grid.
-3. Seed a durable `MarquetryDesign` from that candidate.
-4. Set final physical dimensions.
-5. Auto-assign veneers from a default palette.
-6. Manually override veneers for one or many selected regions.
-7. Click or drag-select final regions from a canvas hitmap.
-8. Merge connected selected regions.
-9. Split one selected region for local detail.
-10. Lock/unlock selected regions before cleanup passes.
-11. Create focus zones from selected regions.
-12. Mark selected regions as subject or background.
-13. Apply focus zones as local split passes.
-14. Validate the partition invariant.
-15. Export a veneer-grouped SVG in physical units.
-16. Write a `rectpack` bounding-box packing manifest.
+2. Cap the working image size for responsive iteration.
+3. Generate one SLIC candidate partition or a candidate search grid.
+4. Seed a durable `MarquetryDesign` from that candidate.
+5. Set final physical dimensions.
+6. Auto-assign veneers from a default palette.
+7. Manually override veneers for one or many selected regions.
+8. Click or drag-select final regions from a canvas hitmap.
+9. Merge connected selected regions.
+10. Split one selected region for local detail.
+11. Lock/unlock selected regions before cleanup passes.
+12. Create focus zones from selected regions.
+13. Mark selected regions as subject or background.
+14. Apply focus zones as local split passes.
+15. Validate the partition invariant.
+16. Export a veneer-grouped SVG in physical units.
+17. Write a `rectpack` bounding-box packing manifest.
 
 This is intentionally smaller than the prototype. The goal is a clean core
 that can grow without repeating the previous tech debt.
@@ -76,7 +77,7 @@ uv run marqflow serve ./workspace
 The browser UI is deliberately minimal in this rewrite:
 
 - name, list, open, and delete workspaces
-- choose an image
+- choose an image and cap its working size
 - generate and choose candidate partitions
 - inspect the generated design invariant and physical dimensions
 - edit veneer colors, sheet sizes, sheet counts, grain, and notes

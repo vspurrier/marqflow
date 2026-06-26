@@ -34,6 +34,7 @@ uv run pytest -q
 ## Implemented
 
 - Image normalization with EXIF orientation and bounded working size.
+- Browser upload exposes the working-size cap for performance control.
 - Workspace naming, listing, opening, and deletion through the browser API.
 - One SLIC-based candidate generator.
 - Candidate-grid generation that stays separate from final design state.

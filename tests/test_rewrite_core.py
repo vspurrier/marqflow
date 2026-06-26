@@ -39,6 +39,13 @@ def _textured_focus_image(path: Path) -> None:
     Image.fromarray(image, mode='RGB').save(path)
 
 
+def _large_fixture_image(path: Path) -> None:
+    image = np.zeros((160, 120, 3), dtype=np.uint8)
+    image[:, :60] = [225, 205, 165]
+    image[:, 60:] = [45, 38, 30]
+    Image.fromarray(image, mode='RGB').save(path)
+
+
 def test_workspace_creates_valid_design_and_exports(tmp_path: Path) -> None:
     image_path = tmp_path / 'source.png'
     _fixture_image(image_path)
@@ -95,6 +102,22 @@ def test_browser_pack_output_stays_under_workspace(tmp_path: Path) -> None:
 
     escaped = client.post('/api/pack', json={'output_dir': str(tmp_path.parent / 'outside')})
     assert escaped.status_code == 400
+
+
+def test_browser_image_upload_honors_working_size_cap(tmp_path: Path) -> None:
+    image_path = tmp_path / 'large.png'
+    _large_fixture_image(image_path)
+    client = TestClient(create_app(tmp_path / 'workspace'))
+
+    response = client.post(
+        '/api/workspace/open-image',
+        files={'image': ('large.png', image_path.read_bytes(), 'image/png')},
+        data={'target_regions': '4', 'compactness': '8', 'max_edge': '64'},
+    )
+
+    assert response.status_code == 200
+    source = response.json()['source']
+    assert max(source['working_width'], source['working_height']) == 64
 
 
 def test_candidate_grid_is_source_stage_only(tmp_path: Path) -> None:
