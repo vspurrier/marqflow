@@ -29,6 +29,16 @@ def _four_region_labels() -> np.ndarray:
     return labels
 
 
+def _textured_focus_image(path: Path) -> None:
+    image = np.full((48, 48, 3), [180, 150, 110], dtype=np.uint8)
+    yy, xx = np.indices((24, 24))
+    texture = ((xx * 9 + yy * 7) % 120).astype(np.uint8)
+    image[:24, :24, 0] = 80 + texture
+    image[:24, :24, 1] = 70 + (texture // 2)
+    image[:24, :24, 2] = 50 + (texture // 3)
+    Image.fromarray(image, mode='RGB').save(path)
+
+
 def test_workspace_creates_valid_design_and_exports(tmp_path: Path) -> None:
     image_path = tmp_path / 'source.png'
     _fixture_image(image_path)
@@ -96,6 +106,29 @@ def test_candidate_grid_is_source_stage_only(tmp_path: Path) -> None:
     assert len(candidates) == 6
     assert workspace.design.source_candidate_id == original_design_source
     assert len(workspace.candidates) == 7
+
+
+def test_candidate_generation_can_use_detail_zones(tmp_path: Path) -> None:
+    image_path = tmp_path / 'source.png'
+    _textured_focus_image(image_path)
+    workspace = MarquetryWorkspace.create(image_path, tmp_path / 'workspace', max_edge=64)
+    seed = workspace.generate_candidate(target_regions=4, compactness=8.0)
+    workspace.create_design(seed.candidate_id, PhysicalSize(width=8, height=8, unit='in'))
+    workspace.add_detail_zone('eye detail', (0, 0, 24, 24), detail_multiplier=8)
+
+    plain = workspace.generate_candidate(target_regions=4, compactness=8.0)
+    detailed = workspace.generate_candidate(
+        target_regions=4,
+        compactness=8.0,
+        use_detail_zones=True,
+    )
+
+    plain_labels = workspace.candidate_labels(plain.candidate_id)
+    detailed_labels = workspace.candidate_labels(detailed.candidate_id)
+    plain_zone_count = len(np.unique(plain_labels[:24, :24]))
+    detailed_zone_count = len(np.unique(detailed_labels[:24, :24]))
+    assert detailed.region_count > plain.region_count
+    assert detailed_zone_count > plain_zone_count
 
 
 def test_size_and_veneer_inventory_edits_are_persisted_and_undoable(tmp_path: Path) -> None:

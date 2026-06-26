@@ -76,6 +76,7 @@ Implemented now:
 - persisted rectangular detail zones
 - detail zones created from selected regions
 - focus-zone-driven local split pass
+- focus-zone-aware candidate generation
 - raster shared-boundary metrics
 - selected-boundary summary in the browser
 - partition validation
@@ -94,12 +95,12 @@ Implemented now:
 
 ## Next Milestones
 
-1. Use subject/detail zones during candidate generation.
+1. Add first-class subject/background masking.
 
-   Rectangular focus zones can be created from selected regions and applied to
-   split intersecting final regions. The SLIC candidate generator is still
-   global; future candidate generation should use focus zones before the final
-   design is seeded.
+   Rectangular focus zones can be created from selected regions, applied to
+   split intersecting final regions, and used during candidate generation for
+   denser local segmentation. The workflow still needs a deliberate
+   subject/background mask step before shape generation.
 
 2. Replace raster boundary metrics with shared-boundary vector geometry.
 

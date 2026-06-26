@@ -153,6 +153,7 @@ class MarquetryWorkspace:
         self,
         target_regions: int = 80,
         compactness: float = 18.0,
+        use_detail_zones: bool = False,
     ) -> Candidate:
         """Generate one SLIC candidate partition."""
 
@@ -165,6 +166,12 @@ class MarquetryWorkspace:
             start_label=1,
             channel_axis=-1,
         )
+        if use_detail_zones and self.design is not None:
+            labels = self._apply_detail_zones_to_candidate(
+                labels,
+                target_regions=max(2, int(target_regions)),
+                compactness=float(compactness),
+            )
         labels = normalize_labels(labels)
         candidate_id = f'candidate-{len(self.candidates) + 1}'
         candidate_dir = self.workspace_dir / 'candidates' / candidate_id
@@ -193,6 +200,7 @@ class MarquetryWorkspace:
         max_regions: int = 140,
         min_compactness: float = 4.0,
         max_compactness: float = 28.0,
+        use_detail_zones: bool = False,
     ) -> list[Candidate]:
         """Generate a coarse-to-detailed candidate grid without changing the design."""
 
@@ -215,9 +223,56 @@ class MarquetryWorkspace:
                     self.generate_candidate(
                         target_regions=int(round(target_regions)),
                         compactness=float(compactness),
+                        use_detail_zones=use_detail_zones,
                     )
                 )
         return candidates
+
+    def _apply_detail_zones_to_candidate(
+        self,
+        labels: np.ndarray,
+        target_regions: int,
+        compactness: float,
+    ) -> np.ndarray:
+        """Overlay denser local SLIC labels in persisted detail zones."""
+
+        if self.design is None or not self.design.detail_zones:
+            return labels
+        image = self.source_array()
+        height, width = labels.shape
+        refined = labels.copy()
+        next_label = int(refined.max()) + 1
+        image_area = max(1, height * width)
+        for zone in self.design.detail_zones:
+            x0, y0, x1, y1 = zone.bbox
+            x0 = max(0, min(width - 1, int(x0)))
+            y0 = max(0, min(height - 1, int(y0)))
+            x1 = max(x0 + 1, min(width, int(x1)))
+            y1 = max(y0 + 1, min(height, int(y1)))
+            crop = image[y0:y1, x0:x1]
+            if crop.shape[0] < 2 or crop.shape[1] < 2:
+                continue
+            zone_area = crop.shape[0] * crop.shape[1]
+            local_segments = int(
+                round(target_regions * (zone_area / image_area) * zone.detail_multiplier)
+            )
+            local_segments = max(2, min(local_segments, max(2, zone_area // 4)))
+            local = slic(
+                crop,
+                n_segments=local_segments,
+                compactness=compactness,
+                sigma=0.75,
+                start_label=0,
+                channel_axis=-1,
+            )
+            local = normalize_labels(local)
+            local_values = sorted(int(value) for value in np.unique(local) if int(value) > 0)
+            remapped = np.zeros_like(local, dtype=np.int32)
+            for value in local_values:
+                remapped[local == value] = next_label
+                next_label += 1
+            refined[y0:y1, x0:x1] = remapped
+        return refined
 
     def create_design(
         self,

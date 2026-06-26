@@ -22,6 +22,7 @@ STATIC_DIR = Path(__file__).with_name('static')
 class CandidateRequest(BaseModel):
     target_regions: int = 80
     compactness: float = 18.0
+    use_detail_zones: bool = False
 
 
 class CandidateGridRequest(BaseModel):
@@ -31,6 +32,7 @@ class CandidateGridRequest(BaseModel):
     max_regions: int = Field(default=140, ge=2)
     min_compactness: float = Field(default=4.0, gt=0)
     max_compactness: float = Field(default=28.0, gt=0)
+    use_detail_zones: bool = False
 
 
 class DesignRequest(BaseModel):
@@ -254,6 +256,7 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
         ws.generate_candidate(
             target_regions=request.target_regions,
             compactness=request.compactness,
+            use_detail_zones=request.use_detail_zones,
         )
         return JSONResponse(ws.summary())
 
@@ -274,6 +277,7 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
             max_regions=request.max_regions,
             min_compactness=request.min_compactness,
             max_compactness=request.max_compactness,
+            use_detail_zones=request.use_detail_zones,
         )
         return JSONResponse(ws.summary())
 

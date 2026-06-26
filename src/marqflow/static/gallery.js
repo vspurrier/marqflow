@@ -30,6 +30,7 @@ const el = /** @type {Record<string, any>} */ ({
   maxRegions: document.getElementById('max-regions'),
   minCompactness: document.getElementById('min-compactness'),
   maxCompactness: document.getElementById('max-compactness'),
+  useDetailZones: document.getElementById('use-detail-zones'),
   openImage: document.getElementById('open-image'),
   candidateGrid: document.getElementById('candidate-grid'),
   candidates: document.getElementById('candidates'),
@@ -633,6 +634,7 @@ async function generateCandidateGrid() {
       max_regions: Number(el.maxRegions.value || 140),
       min_compactness: Number(el.minCompactness.value || 4),
       max_compactness: Number(el.maxCompactness.value || 28),
+      use_detail_zones: Boolean(el.useDetailZones.checked),
     }),
   });
   if (!response.ok) {

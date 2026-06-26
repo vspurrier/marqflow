@@ -62,6 +62,8 @@ uv run pytest -q
 - Persisted rectangular detail zones.
 - Detail zones can be created from selected regions.
 - Detail zones can drive bounded local split passes.
+- Candidate generation can optionally use persisted detail zones for denser
+  local source-stage segmentation.
 - Raster shared-boundary metrics with physical edge lengths.
 - Browser selected-boundary summary with internal/external edge lengths.
 - Veneer-grouped SVG export in physical units with adjustable contour
@@ -96,9 +98,9 @@ uv run pytest -q
 
 3. Subject/detail logic.
 
-   Detail zones can drive local splits after a design exists. Candidate
-   generation does not yet use focus zones to allocate more regions before
-   seeding the final design.
+   Detail zones can drive local splits after a design exists and can optionally
+   refine new candidates with denser local source-stage segmentation. The UI
+   still lacks a first-class subject/background mask workflow.
 
 4. Browser selection tooling.
 
