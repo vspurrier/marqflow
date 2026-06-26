@@ -80,6 +80,7 @@ The browser UI is deliberately minimal in this rewrite:
 - inspect the generated design invariant and physical dimensions
 - edit veneer colors, sheet sizes, sheet counts, grain, and notes
 - click or drag-select final regions
+- lasso-select regions with a freehand stroke
 - zoom and scroll-pan the design canvas
 - inspect selected internal/external boundary lengths
 - assign veneers to selected final regions

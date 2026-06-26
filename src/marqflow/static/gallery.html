@@ -87,6 +87,12 @@
           <button id="undo" type="button">Undo last edit</button>
         </div>
         <div class="controls">
+          <label>Selection mode
+            <select id="selection-mode">
+              <option value="box">Box/click</option>
+              <option value="lasso">Lasso</option>
+            </select>
+          </label>
           <button id="zoom-out" type="button">Zoom out</button>
           <label>Zoom <input id="canvas-zoom" type="range" min="25" max="400" step="25" value="100" /></label>
           <output id="zoom-label">100%</output>

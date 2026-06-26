@@ -58,6 +58,7 @@ uv run pytest -q
 - Selected-region raster smoothing from the browser canvas selection.
 - Final label hitmap API and canvas click/drag selection.
 - Canvas zoom controls with scroll-based panning.
+- Freehand lasso selection by sampled stroke.
 - Persisted rectangular detail zones.
 - Detail zones can be created from selected regions.
 - Detail zones can drive bounded local split passes.
@@ -93,9 +94,9 @@ uv run pytest -q
 
 4. Browser selection tooling.
 
-   Canvas click/drag selection, selected-boundary summaries, zoom, and
-   scroll-panning exist. It remains visually basic and lacks browser regression
-   tests, lasso selection, and selected-boundary editing.
+   Canvas click/drag selection, lasso selection, selected-boundary summaries,
+   zoom, and scroll-panning exist. It remains visually basic and lacks browser
+   regression tests and selected-boundary editing.
 
 5. Material planning.
 

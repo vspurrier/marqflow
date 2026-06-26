@@ -11,6 +11,8 @@ let sourceImage = new Image();
 let dragStart = null;
 /** @type {{x: number, y: number} | null} */
 let dragCurrent = null;
+/** @type {Array<{x: number, y: number}>} */
+let lassoPoints = [];
 let canvasZoom = 100;
 
 const el = /** @type {Record<string, any>} */ ({
@@ -61,6 +63,7 @@ const el = /** @type {Record<string, any>} */ ({
   clearSelection: document.getElementById('clear-selection'),
   designCanvas: document.getElementById('design-canvas'),
   canvasZoom: document.getElementById('canvas-zoom'),
+  selectionMode: document.getElementById('selection-mode'),
   zoomLabel: document.getElementById('zoom-label'),
   zoomIn: document.getElementById('zoom-in'),
   zoomOut: document.getElementById('zoom-out'),
@@ -387,6 +390,30 @@ function selectRect(start, end, additive) {
   drawDesign();
 }
 
+function selectLasso(points, additive) {
+  if (!hitmap || points.length < 2) return;
+  if (!additive) selectedRegionIds.clear();
+  for (let index = 1; index < points.length; index += 1) {
+    const start = points[index - 1];
+    const end = points[index];
+    const steps = Math.max(Math.abs(end.x - start.x), Math.abs(end.y - start.y), 1);
+    for (let step = 0; step <= steps; step += 1) {
+      const point = {
+        x: Math.round(start.x + ((end.x - start.x) * step) / steps),
+        y: Math.round(start.y + ((end.y - start.y) * step) / steps),
+      };
+      const regionId = labelAt(point);
+      if (regionId > 0) selectedRegionIds.add(regionId);
+    }
+  }
+  updateSelectionStatus();
+  drawDesign();
+}
+
+function selectionMode() {
+  return el.selectionMode.value || 'box';
+}
+
 function drawDesign() {
   const canvas = /** @type {HTMLCanvasElement} */ (el.designCanvas);
   const ctx = canvas.getContext('2d');
@@ -428,6 +455,16 @@ function drawDesign() {
       dragCurrent.y - dragStart.y,
     );
     ctx.setLineDash([]);
+  }
+  if (lassoPoints.length > 1) {
+    ctx.strokeStyle = '#f4f0dc';
+    ctx.lineWidth = Math.max(1, width / 220);
+    ctx.beginPath();
+    ctx.moveTo(lassoPoints[0].x, lassoPoints[0].y);
+    for (const point of lassoPoints.slice(1)) {
+      ctx.lineTo(point.x, point.y);
+    }
+    ctx.stroke();
   }
 }
 
@@ -928,16 +965,29 @@ el.clearSelection.addEventListener('click', () => {
 el.designCanvas.addEventListener('pointerdown', (event) => {
   dragStart = canvasPoint(event);
   dragCurrent = dragStart;
+  lassoPoints = selectionMode() === 'lasso' && dragStart ? [dragStart] : [];
   el.designCanvas.setPointerCapture(event.pointerId);
 });
 el.designCanvas.addEventListener('pointermove', (event) => {
   if (!dragStart) return;
   dragCurrent = canvasPoint(event);
+  if (selectionMode() === 'lasso' && dragCurrent) {
+    lassoPoints.push(dragCurrent);
+  }
   drawDesign();
 });
 el.designCanvas.addEventListener('pointerup', (event) => {
   if (!dragStart) return;
   const end = canvasPoint(event);
+  if (selectionMode() === 'lasso') {
+    lassoPoints.push(end);
+    selectLasso(lassoPoints, event.shiftKey);
+    dragStart = null;
+    dragCurrent = null;
+    lassoPoints = [];
+    drawDesign();
+    return;
+  }
   const distance = Math.hypot(end.x - dragStart.x, end.y - dragStart.y);
   if (distance < 4) {
     const regionId = labelAt(end);
