@@ -11,6 +11,7 @@ let sourceImage = new Image();
 let dragStart = null;
 /** @type {{x: number, y: number} | null} */
 let dragCurrent = null;
+let canvasZoom = 100;
 
 const el = /** @type {Record<string, any>} */ ({
   workspaceName: document.getElementById('workspace-name'),
@@ -59,6 +60,11 @@ const el = /** @type {Record<string, any>} */ ({
   applySuggestions: document.getElementById('apply-suggestions'),
   clearSelection: document.getElementById('clear-selection'),
   designCanvas: document.getElementById('design-canvas'),
+  canvasZoom: document.getElementById('canvas-zoom'),
+  zoomLabel: document.getElementById('zoom-label'),
+  zoomIn: document.getElementById('zoom-in'),
+  zoomOut: document.getElementById('zoom-out'),
+  zoomFit: document.getElementById('zoom-fit'),
   selectionStatus: document.getElementById('selection-status'),
   boundarySummary: document.getElementById('boundary-summary'),
   undo: document.getElementById('undo'),
@@ -389,6 +395,7 @@ function drawDesign() {
   const height = hitmap?.height || 1;
   canvas.width = width;
   canvas.height = height;
+  applyCanvasZoom();
   ctx.clearRect(0, 0, width, height);
   if (!workspace || !hitmap) return;
   if (sourceImage.complete && sourceImage.naturalWidth) {
@@ -422,6 +429,17 @@ function drawDesign() {
     );
     ctx.setLineDash([]);
   }
+}
+
+function applyCanvasZoom() {
+  el.designCanvas.style.width = `${canvasZoom}%`;
+  el.zoomLabel.textContent = `${canvasZoom}%`;
+  el.canvasZoom.value = String(canvasZoom);
+}
+
+function setCanvasZoom(nextZoom) {
+  canvasZoom = Math.max(25, Math.min(400, Number(nextZoom) || 100));
+  applyCanvasZoom();
 }
 
 async function updateSize() {
@@ -898,6 +916,10 @@ el.applyFocus.addEventListener('click', applyFocus);
 el.repairSmall.addEventListener('click', repairSmall);
 el.smoothBoundaries.addEventListener('click', smoothBoundaries);
 el.applySuggestions.addEventListener('click', applySuggestions);
+el.canvasZoom.addEventListener('input', () => setCanvasZoom(el.canvasZoom.value));
+el.zoomIn.addEventListener('click', () => setCanvasZoom(canvasZoom + 25));
+el.zoomOut.addEventListener('click', () => setCanvasZoom(canvasZoom - 25));
+el.zoomFit.addEventListener('click', () => setCanvasZoom(100));
 el.clearSelection.addEventListener('click', () => {
   selectedRegionIds.clear();
   updateSelectionStatus();

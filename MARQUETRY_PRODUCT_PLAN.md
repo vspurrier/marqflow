@@ -71,6 +71,7 @@ Implemented now:
 - raster boundary smoothing pass
 - selected-region raster smoothing
 - final label hitmap API and browser click/drag selection tooling
+- browser canvas zoom and scroll-pan
 - persisted rectangular detail zones
 - detail zones created from selected regions
 - focus-zone-driven local split pass

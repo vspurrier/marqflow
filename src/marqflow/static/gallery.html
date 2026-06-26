@@ -86,6 +86,13 @@
           <button id="clear-selection" type="button">Clear selection</button>
           <button id="undo" type="button">Undo last edit</button>
         </div>
+        <div class="controls">
+          <button id="zoom-out" type="button">Zoom out</button>
+          <label>Zoom <input id="canvas-zoom" type="range" min="25" max="400" step="25" value="100" /></label>
+          <output id="zoom-label">100%</output>
+          <button id="zoom-in" type="button">Zoom in</button>
+          <button id="zoom-fit" type="button">Fit</button>
+        </div>
         <div class="viewer">
           <canvas id="design-canvas" width="1" height="1"></canvas>
         </div>

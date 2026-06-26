@@ -57,6 +57,7 @@ uv run pytest -q
 - Raster boundary smoothing that validates the puzzle invariant before saving.
 - Selected-region raster smoothing from the browser canvas selection.
 - Final label hitmap API and canvas click/drag selection.
+- Canvas zoom controls with scroll-based panning.
 - Persisted rectangular detail zones.
 - Detail zones can be created from selected regions.
 - Detail zones can drive bounded local split passes.
@@ -92,9 +93,9 @@ uv run pytest -q
 
 4. Browser selection tooling.
 
-   Canvas click/drag selection and selected-boundary summaries exist. It
-   remains visually basic and lacks browser regression tests, zoom/pan, lasso
-   selection, and selected-boundary editing.
+   Canvas click/drag selection, selected-boundary summaries, zoom, and
+   scroll-panning exist. It remains visually basic and lacks browser regression
+   tests, lasso selection, and selected-boundary editing.
 
 5. Material planning.
 
