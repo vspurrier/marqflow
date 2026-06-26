@@ -82,7 +82,8 @@ Implemented now:
 - physical-unit SVG export with adjustable contour simplification
 - `rectpack` bounding-box pack manifest by veneer
 - browser stock-fit summary for pack results
-- browser smoke test for image upload and workspace creation
+- browser smoke test for image upload, candidate grid generation, and design
+  seeding
 - minimal browser UI
 
 ## Next Milestones
@@ -126,8 +127,8 @@ Implemented now:
 
 7. Add browser-level regression tests.
 
-   API/core tests cover the model. A browser smoke test covers image upload and
-   workspace creation. Add coverage for candidate-grid selection, veneer
+   API/core tests cover the model. A browser smoke test covers image upload,
+   candidate-grid generation, and design seeding. Add coverage for veneer
    assignment, merge, undo, SVG preview, pack export, zoom, and lasso
    selection.
 
