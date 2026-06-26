@@ -20,6 +20,7 @@ from skimage.segmentation import slic
 from .geometry import (
     boundary_graph,
     build_regions,
+    coverage_simplified_svg,
     coverage_summary,
     design_to_svg,
     merge_labels,
@@ -1362,6 +1363,30 @@ class MarquetryWorkspace:
             ),
             self.design.physical_size,
             (self.source.working_width, self.source.working_height),
+        )
+        path.write_text(svg, encoding='utf-8')
+        return path
+
+    def export_coverage_svg(self, output_path: str | Path, tolerance: float = 1.0) -> Path:
+        """Export a Shapely coverage-simplified SVG that preserves shared edges."""
+
+        if self.design is None:
+            raise ValueError('create a design first')
+        validation = self.validation()
+        if not validation['valid']:
+            raise ValueError(f'invalid partition: {validation}')
+        path = Path(output_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        svg = coverage_simplified_svg(
+            build_regions(
+                self.source_array(),
+                self.design_labels(),
+                self.design,
+                simplify_tolerance=0.0,
+            ),
+            self.design.physical_size,
+            (self.source.working_width, self.source.working_height),
+            tolerance=tolerance,
         )
         path.write_text(svg, encoding='utf-8')
         return path

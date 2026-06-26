@@ -74,6 +74,12 @@ def test_workspace_creates_valid_design_and_exports(tmp_path: Path) -> None:
         simplify_tolerance=3.0,
     )
     assert simplified_svg_path.exists()
+    coverage_svg_path = workspace.export_coverage_svg(
+        tmp_path / 'design-coverage.svg',
+        tolerance=1.0,
+    )
+    coverage_svg = coverage_svg_path.read_text(encoding='utf-8')
+    assert 'data-coverage-simplified="true"' in coverage_svg
 
     manifest = workspace.pack(tmp_path / 'packed')
     assert manifest['packing_backend'] == 'rectpack-bounding-box'
@@ -532,6 +538,10 @@ def test_api_vertical_slice(tmp_path: Path) -> None:
     svg_response = client.get('/api/design.svg?simplify_tolerance=2')
     assert svg_response.status_code == 200
     assert svg_response.headers['content-type'].startswith('image/svg+xml')
+
+    coverage_svg_response = client.get('/api/design-coverage.svg?tolerance=1')
+    assert coverage_svg_response.status_code == 200
+    assert 'data-coverage-simplified="true"' in coverage_svg_response.text
 
     pack_response = client.post('/api/pack', json={'output_dir': str(tmp_path / 'packed')})
     assert pack_response.status_code == 200

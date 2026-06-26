@@ -92,6 +92,7 @@ Implemented now:
 - selected-boundary summary in the browser
 - partition validation
 - physical-unit SVG export with adjustable contour simplification
+- Shapely coverage-safe SVG export with shared-edge simplification
 - `rectpack` bounding-box pack manifest by veneer
 - physical contour and SVG path data in each pack manifest piece
 - browser stock-fit summary for pack results
@@ -133,7 +134,8 @@ Implemented now:
    Current cleanup supports connected merge, targeted split, lock/unlock,
    physical-area sliver repair, raster boundary smoothing, selected-region
    smoothing, selected-boundary inspection, and bounded auto-merge suggestions.
-   Needed operations: apply shared vector simplification/smoothing, edit
+   Coverage-safe shared-edge simplification exists for SVG export. Needed
+   operations: persist shared vector simplification/smoothing as edits, edit
    vertices, and write edited shared edges back safely.
 
 4. Deepen veneer inventory logic.

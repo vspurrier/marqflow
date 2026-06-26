@@ -80,6 +80,7 @@ const el = /** @type {Record<string, any>} */ ({
   undo: document.getElementById('undo'),
   svgSimplify: document.getElementById('svg-simplify'),
   viewSvg: document.getElementById('view-svg'),
+  viewCoverageSvg: document.getElementById('view-coverage-svg'),
   cleanupReport: document.getElementById('cleanup-report'),
   pack: document.getElementById('pack'),
   packSummary: document.getElementById('pack-summary'),
@@ -1131,6 +1132,10 @@ el.undo.addEventListener('click', undo);
 el.viewSvg.addEventListener('click', () => {
   const tolerance = encodeURIComponent(String(el.svgSimplify.value || 1));
   window.open(`/api/design.svg?simplify_tolerance=${tolerance}`, '_blank');
+});
+el.viewCoverageSvg.addEventListener('click', () => {
+  const tolerance = encodeURIComponent(String(el.svgSimplify.value || 1));
+  window.open(`/api/design-coverage.svg?tolerance=${tolerance}`, '_blank');
 });
 el.cleanupReport.addEventListener('click', cleanupReport);
 el.pack.addEventListener('click', pack);

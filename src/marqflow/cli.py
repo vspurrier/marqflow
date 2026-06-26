@@ -49,11 +49,18 @@ def export(
         1.0,
         help='SVG contour simplification tolerance in working-image pixels.',
     ),
+    coverage_safe: bool = typer.Option(
+        False,
+        help='Use Shapely coverage simplification to preserve shared edges.',
+    ),
 ) -> None:
     """Export the current design as veneer-grouped SVG."""
 
     workspace = MarquetryWorkspace.load(workspace_dir)
-    path = workspace.export_svg(output_svg, simplify_tolerance=simplify_tolerance)
+    if coverage_safe:
+        path = workspace.export_coverage_svg(output_svg, tolerance=simplify_tolerance)
+    else:
+        path = workspace.export_svg(output_svg, simplify_tolerance=simplify_tolerance)
     typer.echo(f'svg: {path}')
 
 

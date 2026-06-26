@@ -82,6 +82,7 @@ uv run pytest -q
 - Browser selected-boundary summary with internal/external edge lengths.
 - Veneer-grouped SVG export in physical units with adjustable contour
   simplification.
+- Shapely coverage-safe SVG export that simplifies shared edges together.
 - `rectpack` bounding-box pack manifest grouped by veneer.
 - Pack manifest includes each piece's physical contour and SVG path for future
   irregular nesting adapters.
@@ -119,8 +120,9 @@ uv run pytest -q
    Merge, targeted split, lock/unlock, physical-area sliver repair, raster
    smoothing, selected-region smoothing, selected-boundary inspection, bounded
    auto-merge, and undo now exist. Vector simplify, selected-boundary vector
-   smoothing, point editing, and shared-boundary-safe writes are still open;
-   simplification is currently analysis-only.
+   smoothing, point editing, and shared-boundary-safe writes are still open.
+   Coverage-safe simplification exists for SVG export, but is not yet a
+   persisted edit on the design.
 
 3. Subject/detail logic.
 

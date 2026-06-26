@@ -9,7 +9,7 @@ from typing import Any
 
 import numpy as np
 from PIL import Image
-from shapely import coverage_invalid_edges, coverage_is_valid
+from shapely import coverage_invalid_edges, coverage_is_valid, coverage_simplify
 from shapely.geometry import Polygon
 from skimage.measure import approximate_polygon, find_contours
 from skimage.measure import label as connected_components
@@ -316,6 +316,81 @@ def coverage_summary(
         'invalid_edge_count': len(invalid_edge_lengths),
         'invalid_edge_length': sum(invalid_edge_lengths),
     }
+
+
+def _region_polygon(
+    region: Region,
+    physical_size: PhysicalSize,
+    image_size: tuple[int, int],
+) -> Polygon | None:
+    px_per_unit_x, px_per_unit_y = physical_size.pixels_per_unit(image_size)
+    points = [
+        (x / max(px_per_unit_x, 1e-9), y / max(px_per_unit_y, 1e-9))
+        for x, y in region.contour
+    ]
+    polygon = Polygon(points)
+    if polygon.is_empty or not polygon.is_valid or polygon.area <= 0:
+        return None
+    return polygon
+
+
+def _physical_path(points: list[tuple[float, float]]) -> str:
+    if len(points) < 3:
+        return ''
+    commands = [f'M {points[0][0]:.4f} {points[0][1]:.4f}']
+    for x, y in points[1:]:
+        commands.append(f'L {x:.4f} {y:.4f}')
+    commands.append('Z')
+    return ' '.join(commands)
+
+
+def coverage_simplified_svg(
+    regions: list[Region],
+    physical_size: PhysicalSize,
+    image_size: tuple[int, int],
+    tolerance: float,
+) -> str:
+    """Export a Shapely coverage-simplified SVG with shared edges preserved."""
+
+    polygons = []
+    polygon_regions = []
+    skipped = []
+    for region in regions:
+        polygon = _region_polygon(region, physical_size, image_size)
+        if polygon is None:
+            skipped.append(region.region_id)
+            continue
+        polygons.append(polygon)
+        polygon_regions.append(region)
+    if skipped:
+        raise ValueError(f'cannot coverage-simplify invalid regions: {skipped}')
+    if not coverage_is_valid(polygons):
+        raise ValueError('region polygons are not a valid coverage')
+    simplified = coverage_simplify(polygons, tolerance=max(0.0, float(tolerance)))
+    groups: dict[str, list[str]] = defaultdict(list)
+    for region, polygon in zip(polygon_regions, simplified, strict=True):
+        path = _physical_path([(float(x), float(y)) for x, y in polygon.exterior.coords])
+        if not path:
+            continue
+        groups[region.veneer_id].append(
+            f'<path id="region-{region.region_id}" d="{path}" '
+            f'fill="#{region.color_rgb[0]:02x}{region.color_rgb[1]:02x}{region.color_rgb[2]:02x}" '
+            'stroke="#111" stroke-width="0.01" '
+            f'data-region-id="{region.region_id}" data-veneer-id="{escape(region.veneer_id)}" '
+            'data-coverage-simplified="true" />'
+        )
+    body = ''.join(
+        f'<g id="veneer-{escape(veneer_id)}" data-veneer-id="{escape(veneer_id)}">'
+        + ''.join(paths)
+        + '</g>'
+        for veneer_id, paths in sorted(groups.items())
+    )
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" '
+        f'width="{physical_size.width}{physical_size.unit}" '
+        f'height="{physical_size.height}{physical_size.unit}" '
+        f'viewBox="0 0 {physical_size.width} {physical_size.height}">{body}</svg>'
+    )
 
 
 def contour_for_mask(mask: np.ndarray, tolerance: float = 1.0) -> tuple[tuple[float, float], ...]:

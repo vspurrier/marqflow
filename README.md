@@ -60,6 +60,12 @@ Export SVG:
 uv run marqflow export ./workspace ./out/design.svg
 ```
 
+Export a Shapely coverage-safe SVG:
+
+```bash
+uv run marqflow export ./workspace ./out/design-coverage.svg --coverage-safe
+```
+
 Write a pack manifest:
 
 ```bash
@@ -103,6 +109,7 @@ The browser UI is deliberately minimal in this rewrite:
 - repair regions below a physical area threshold
 - smooth raster boundary noise while preserving a valid partition
 - export SVG with adjustable contour simplification
+- export Shapely coverage-safe SVG with shared-edge simplification
 - generate a cleanup report with readiness score before final export
 - write the bounding-box pack manifest with `pack.json`, `design.svg`, and
   `cleanup-report.json`

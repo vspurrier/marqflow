@@ -528,6 +528,22 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
         )
         return Response(svg_path.read_text(encoding='utf-8'), media_type='image/svg+xml')
 
+    @app.get('/api/design-coverage.svg')
+    def design_coverage_svg(
+        tolerance: float = Query(default=1.0, ge=0.0, le=20.0),
+    ) -> Response:
+        ws = _load_workspace(workspace_path)
+        if ws.design is None:
+            raise HTTPException(status_code=400, detail='create a design first')
+        try:
+            svg_path = ws.export_coverage_svg(
+                ws.workspace_dir / 'design-coverage.svg',
+                tolerance=tolerance,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return Response(svg_path.read_text(encoding='utf-8'), media_type='image/svg+xml')
+
     @app.get('/api/cleanup-report')
     def cleanup_report() -> JSONResponse:
         ws = _load_workspace(workspace_path)
