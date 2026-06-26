@@ -473,6 +473,13 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
     @app.post('/api/pack')
     def pack(request: PackRequest) -> JSONResponse:
         ws = _load_workspace(workspace_path)
-        return JSONResponse(ws.pack(request.output_dir))
+        output_dir = Path(request.output_dir)
+        if not output_dir.is_absolute():
+            output_dir = ws.workspace_dir / output_dir
+        output_dir = output_dir.resolve()
+        root = workspace_root.resolve()
+        if root not in [output_dir, *output_dir.parents]:
+            raise HTTPException(status_code=400, detail='pack output escapes workspace')
+        return JSONResponse(ws.pack(output_dir))
 
     return app

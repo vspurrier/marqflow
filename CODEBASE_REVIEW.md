@@ -68,6 +68,7 @@ uv run pytest -q
   simplification.
 - `rectpack` bounding-box pack manifest grouped by veneer.
 - Browser pack summary with placed/unplaced counts and stock warnings.
+- Browser pack output is constrained to the configured workspace root.
 - Browser smoke test for creating a workspace, generating a candidate grid, and
   seeding the design from a candidate.
 - Browser smoke test for canvas selection, selected veneer assignment, undo, and

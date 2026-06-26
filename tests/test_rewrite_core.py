@@ -66,6 +66,23 @@ def test_workspace_creates_valid_design_and_exports(tmp_path: Path) -> None:
     assert (tmp_path / 'packed' / 'design.svg').exists()
 
 
+def test_browser_pack_output_stays_under_workspace(tmp_path: Path) -> None:
+    image_path = tmp_path / 'source.png'
+    _fixture_image(image_path)
+    workspace = MarquetryWorkspace.create(image_path, tmp_path / 'workspace', max_edge=64)
+    candidate = workspace.generate_candidate(target_regions=4, compactness=8.0)
+    workspace.create_design(candidate.candidate_id, PhysicalSize(width=8, height=8, unit='in'))
+
+    client = TestClient(create_app(workspace.workspace_dir))
+    response = client.post('/api/pack', json={'output_dir': './exported'})
+    assert response.status_code == 200
+    assert (workspace.workspace_dir / 'exported' / 'pack.json').exists()
+    assert (workspace.workspace_dir / 'exported' / 'design.svg').exists()
+
+    escaped = client.post('/api/pack', json={'output_dir': str(tmp_path.parent / 'outside')})
+    assert escaped.status_code == 400
+
+
 def test_candidate_grid_is_source_stage_only(tmp_path: Path) -> None:
     image_path = tmp_path / 'source.png'
     _fixture_image(image_path)

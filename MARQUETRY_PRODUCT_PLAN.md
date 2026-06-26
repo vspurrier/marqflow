@@ -82,6 +82,7 @@ Implemented now:
 - physical-unit SVG export with adjustable contour simplification
 - `rectpack` bounding-box pack manifest by veneer
 - browser stock-fit summary for pack results
+- workspace-root-constrained browser pack output
 - browser smoke test for image upload, candidate grid generation, and design
   seeding
 - browser smoke test for canvas selection, selected veneer assignment, undo, and
