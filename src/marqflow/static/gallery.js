@@ -4,6 +4,8 @@
 let workspace = null;
 /** @type {DesignHitmap | null} */
 let hitmap = null;
+/** @type {TopologyEditLayer | null} */
+let topologyEditLayer = null;
 /** @type {Set<number>} */
 let selectedRegionIds = new Set();
 let sourceImage = new Image();
@@ -13,6 +15,8 @@ let dragStart = null;
 let dragCurrent = null;
 /** @type {Array<{x: number, y: number}>} */
 let lassoPoints = [];
+/** @type {{vertexId: number, start: {x: number, y: number}, current: {x: number, y: number}} | null} */
+let activeVertexDrag = null;
 let canvasZoom = 100;
 
 const el = /** @type {Record<string, any>} */ ({
@@ -25,6 +29,7 @@ const el = /** @type {Record<string, any>} */ ({
   maxEdge: document.getElementById('max-edge'),
   targetRegions: document.getElementById('target-regions'),
   compactness: document.getElementById('compactness'),
+  marquetryMode: document.getElementById('marquetry-mode'),
   gridRows: document.getElementById('grid-rows'),
   gridCols: document.getElementById('grid-cols'),
   minRegions: document.getElementById('min-regions'),
@@ -33,6 +38,7 @@ const el = /** @type {Record<string, any>} */ ({
   maxCompactness: document.getElementById('max-compactness'),
   useDetailZones: document.getElementById('use-detail-zones'),
   useSubjectMask: document.getElementById('use-subject-mask'),
+  gridMarquetryMode: document.getElementById('grid-marquetry-mode'),
   openImage: document.getElementById('open-image'),
   candidateGrid: document.getElementById('candidate-grid'),
   candidates: document.getElementById('candidates'),
@@ -62,6 +68,7 @@ const el = /** @type {Record<string, any>} */ ({
   applyFocus: document.getElementById('apply-focus'),
   repairArea: document.getElementById('repair-area'),
   repairSmall: document.getElementById('repair-small'),
+  cuttabilityCleanup: document.getElementById('cuttability-cleanup'),
   smoothPasses: document.getElementById('smooth-passes'),
   smoothBoundaries: document.getElementById('smooth-boundaries'),
   applySuggestions: document.getElementById('apply-suggestions'),
@@ -116,6 +123,7 @@ async function refresh() {
   }
   workspace = await response.json();
   await loadHitmap();
+  await loadTopologyEditLayer();
   render();
 }
 
@@ -136,6 +144,7 @@ async function loadWorkspaces() {
 async function loadHitmap() {
   if (!workspace?.design) {
     hitmap = null;
+    topologyEditLayer = null;
     selectedRegionIds.clear();
     return;
   }
@@ -150,6 +159,20 @@ async function loadHitmap() {
   sourceImage.src = '/api/workspace-file/source.png';
 }
 
+async function loadTopologyEditLayer() {
+  if (!workspace?.design) {
+    topologyEditLayer = null;
+    return;
+  }
+  const kind = workspace.design.active_vector_graph_kind || 'raster_topology';
+  const response = await fetch(`/api/design/topology/edit-layer?kind=${encodeURIComponent(kind)}`);
+  if (!response.ok) {
+    topologyEditLayer = null;
+    return;
+  }
+  topologyEditLayer = await response.json();
+}
+
 function render() {
   if (!workspace) {
     el.summary.textContent = 'No workspace.';
@@ -157,6 +180,7 @@ function render() {
     el.regions.textContent = '';
     el.mergeSuggestions.textContent = '';
     hitmap = null;
+    topologyEditLayer = null;
     selectedRegionIds.clear();
     drawDesign();
     return;
@@ -169,6 +193,7 @@ function render() {
       valid_partition: workspace.validation.valid,
       region_count: workspace.validation.region_count,
       active_vector_graph: workspace.design?.active_vector_graph_kind || null,
+      vector_vertices: topologyEditLayer?.vertices?.length || 0,
       vector_graphs: workspace.design?.vector_graphs || [],
     },
     null,
@@ -458,6 +483,26 @@ function maskBrushRole() {
   return '';
 }
 
+function vectorEditMode() {
+  return selectionMode() === 'vector-edit';
+}
+
+function nearestVertex(point) {
+  if (!topologyEditLayer?.vertices?.length) return null;
+  const radius = Math.max(3, (hitmap?.width || 1) / 120);
+  let best = null;
+  let bestDistance = Infinity;
+  for (const vertex of topologyEditLayer.vertices) {
+    const [x, y] = vertex.point;
+    const distance = Math.hypot(point.x - x, point.y - y);
+    if (distance < bestDistance && distance <= radius) {
+      best = vertex;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
 function drawDesign() {
   const canvas = /** @type {HTMLCanvasElement} */ (el.designCanvas);
   const ctx = canvas.getContext('2d');
@@ -518,6 +563,32 @@ function drawDesign() {
       ctx.lineTo(point.x, point.y);
     }
     ctx.stroke();
+  }
+  if (vectorEditMode() && topologyEditLayer?.vertices?.length) {
+    ctx.save();
+    ctx.lineWidth = Math.max(1, width / 260);
+    ctx.strokeStyle = 'rgba(12, 31, 38, 0.72)';
+    for (const edge of topologyEditLayer.edges || []) {
+      if (!edge.path?.length) continue;
+      ctx.beginPath();
+      ctx.moveTo(edge.path[0][0], edge.path[0][1]);
+      for (const point of edge.path.slice(1)) {
+        ctx.lineTo(point[0], point[1]);
+      }
+      ctx.stroke();
+    }
+    for (const vertex of topologyEditLayer.vertices) {
+      const [x, y] = vertex.point;
+      const isActive = activeVertexDrag?.vertexId === vertex.vertex_id;
+      const drawPoint = isActive ? activeVertexDrag.current : {x, y};
+      ctx.fillStyle = isActive ? '#e17e48' : '#f4f0dc';
+      ctx.strokeStyle = '#10232a';
+      ctx.beginPath();
+      ctx.arc(drawPoint.x, drawPoint.y, Math.max(2, width / 180), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 }
 
@@ -611,6 +682,7 @@ async function openImage() {
   form.append('max_edge', el.maxEdge.value || '768');
   form.append('target_regions', el.targetRegions.value || '80');
   form.append('compactness', el.compactness.value || '18');
+  form.append('marquetry_mode', el.marquetryMode.checked ? 'true' : 'false');
   if (el.workspaceName.value) form.append('workspace_name', el.workspaceName.value);
   setStatus('Building first partition...');
   const response = await fetch('/api/workspace/open-image', {method: 'POST', body: form});
@@ -621,6 +693,7 @@ async function openImage() {
   workspace = await response.json();
   selectedRegionIds.clear();
   await loadHitmap();
+  await loadTopologyEditLayer();
   await loadWorkspaces();
   setStatus('Workspace ready.');
   render();
@@ -643,6 +716,7 @@ async function openSelectedWorkspace() {
   workspace = await response.json();
   selectedRegionIds.clear();
   await loadHitmap();
+  await loadTopologyEditLayer();
   await loadWorkspaces();
   setStatus(`Opened workspace ${el.workspaceList.value}.`);
   render();
@@ -689,6 +763,7 @@ async function generateCandidateGrid() {
       max_compactness: Number(el.maxCompactness.value || 28),
       use_detail_zones: Boolean(el.useDetailZones.checked),
       use_subject_mask: Boolean(el.useSubjectMask.checked),
+      marquetry_mode: Boolean(el.gridMarquetryMode.checked),
     }),
   });
   if (!response.ok) {
@@ -713,6 +788,7 @@ async function createDesign(candidateId) {
   workspace = await response.json();
   selectedRegionIds.clear();
   await loadHitmap();
+  await loadTopologyEditLayer();
   setStatus(`Design seeded from ${candidateId}.`);
   render();
 }
@@ -729,6 +805,7 @@ async function assignVeneer(regionId, veneerId) {
   }
   workspace = await response.json();
   await loadHitmap();
+  await loadTopologyEditLayer();
   setStatus(`Assigned region ${regionId}.`);
   render();
 }
@@ -752,6 +829,7 @@ async function assignSelected() {
   }
   workspace = await response.json();
   await loadHitmap();
+  await loadTopologyEditLayer();
   setStatus(`Assigned ${selectedRegionIds.size} selected region(s).`);
   render();
 }
@@ -769,6 +847,7 @@ async function mergeRegions(regionIds) {
   workspace = await response.json();
   selectedRegionIds.clear();
   await loadHitmap();
+  await loadTopologyEditLayer();
   setStatus(`Merged ${regionIds.join(', ')}.`);
   render();
 }
@@ -803,6 +882,7 @@ async function splitSelected() {
   workspace = await response.json();
   selectedRegionIds.clear();
   await loadHitmap();
+  await loadTopologyEditLayer();
   setStatus(`Split region ${regionId}.`);
   render();
 }
@@ -931,7 +1011,39 @@ async function repairSmall() {
   workspace = await response.json();
   selectedRegionIds.clear();
   await loadHitmap();
+  await loadTopologyEditLayer();
   setStatus(`Repaired ${workspace.repaired_region_count || 0} small region(s).`);
+  render();
+}
+
+async function cuttabilityCleanup() {
+  const response = await fetch('/api/design/cuttability-cleanup', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      max_repairs: 25,
+      min_area: Number(el.repairArea.value || 0.05),
+      smooth_iterations: Number(el.smoothPasses.value || 1),
+      vector_tolerance: Number(el.vectorTolerance.value || 1.25),
+    }),
+  });
+  if (!response.ok) {
+    setStatus(await response.text(), true);
+    return;
+  }
+  workspace = await response.json();
+  selectedRegionIds.clear();
+  await loadHitmap();
+  await loadTopologyEditLayer();
+  const result = workspace.cuttability_cleanup || {
+    repaired_region_count: 0,
+    smoothed_pixel_count: 0,
+    vector_simplified: false,
+    remaining_warning_region_ids: [],
+  };
+  setStatus(
+    `Cleanup: repaired ${result.repaired_region_count || 0}, smoothed ${result.smoothed_pixel_count || 0}, vector ${result.vector_simplified ? 'simplified' : 'unchanged'}.`,
+  );
   render();
 }
 
@@ -951,6 +1063,7 @@ async function smoothBoundaries() {
   }
   workspace = await response.json();
   await loadHitmap();
+  await loadTopologyEditLayer();
   const currentIds = new Set(workspace.regions.map((region) => region.region_id));
   selectedRegionIds = new Set(regionIds.filter((regionId) => currentIds.has(regionId)));
   setStatus(
@@ -1011,6 +1124,7 @@ async function simplifyVectorGraphSelected() {
   }
   workspace = await response.json();
   await loadHitmap();
+  await loadTopologyEditLayer();
   setStatus(`Simplified selected vector boundaries at tolerance ${tolerance}.`);
   render();
 }
@@ -1028,6 +1142,7 @@ async function promoteVectorGraph() {
   }
   workspace = await response.json();
   await loadHitmap();
+  await loadTopologyEditLayer();
   setStatus(`Promoted ${kind} as output geometry.`);
   render();
 }
@@ -1054,6 +1169,7 @@ async function moveVectorVertex() {
   }
   workspace = await response.json();
   await loadHitmap();
+  await loadTopologyEditLayer();
   setStatus(`Moved vector vertex ${vertexId}.`);
   render();
 }
@@ -1169,6 +1285,7 @@ el.markBackground.addEventListener('click', () => markSubjectMask('background'))
 el.focusSelected.addEventListener('click', focusSelected);
 el.applyFocus.addEventListener('click', applyFocus);
 el.repairSmall.addEventListener('click', repairSmall);
+el.cuttabilityCleanup.addEventListener('click', cuttabilityCleanup);
 el.smoothBoundaries.addEventListener('click', smoothBoundaries);
 el.applySuggestions.addEventListener('click', applySuggestions);
 el.vectorSimplifyAll.addEventListener('click', simplifyVectorGraphAll);
@@ -1188,12 +1305,35 @@ el.clearSelection.addEventListener('click', () => {
 el.designCanvas.addEventListener('pointerdown', (event) => {
   dragStart = canvasPoint(event);
   dragCurrent = dragStart;
+  if (vectorEditMode()) {
+    const vertex = nearestVertex(dragStart);
+    if (vertex) {
+      activeVertexDrag = {
+        vertexId: vertex.vertex_id,
+        start: {x: vertex.point[0], y: vertex.point[1]},
+        current: {x: vertex.point[0], y: vertex.point[1]},
+      };
+      el.vertexId.value = String(vertex.vertex_id);
+      el.vertexX.value = String(vertex.point[0]);
+      el.vertexY.value = String(vertex.point[1]);
+      el.designCanvas.setPointerCapture(event.pointerId);
+      drawDesign();
+      return;
+    }
+  }
   lassoPoints = (selectionMode() === 'lasso' || maskBrushRole()) && dragStart ? [dragStart] : [];
   el.designCanvas.setPointerCapture(event.pointerId);
 });
 el.designCanvas.addEventListener('pointermove', (event) => {
   if (!dragStart) return;
   dragCurrent = canvasPoint(event);
+  if (activeVertexDrag && dragCurrent) {
+    activeVertexDrag.current = dragCurrent;
+    el.vertexX.value = String(dragCurrent.x);
+    el.vertexY.value = String(dragCurrent.y);
+    drawDesign();
+    return;
+  }
   if ((selectionMode() === 'lasso' || maskBrushRole()) && dragCurrent) {
     lassoPoints.push(dragCurrent);
   }
@@ -1202,6 +1342,17 @@ el.designCanvas.addEventListener('pointermove', (event) => {
 el.designCanvas.addEventListener('pointerup', (event) => {
   if (!dragStart) return;
   const end = canvasPoint(event);
+  if (activeVertexDrag) {
+    const vertexId = activeVertexDrag.vertexId;
+    el.vertexId.value = String(vertexId);
+    el.vertexX.value = String(end.x);
+    el.vertexY.value = String(end.y);
+    activeVertexDrag = null;
+    dragStart = null;
+    dragCurrent = null;
+    void moveVectorVertex();
+    return;
+  }
   const role = maskBrushRole();
   if (role) {
     lassoPoints.push(end);

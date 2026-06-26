@@ -777,10 +777,14 @@ def build_regions(
         width_physical = (bbox[2] - bbox[0]) / max(px_per_unit_x, 1e-9)
         height_physical = (bbox[3] - bbox[1]) / max(px_per_unit_y, 1e-9)
         warnings = []
-        if min(width_physical, height_physical) < 0.08:
+        shortest_side = min(width_physical, height_physical)
+        longest_side = max(width_physical, height_physical)
+        if shortest_side < 0.08:
             warnings.append('thin')
         if area_px * area_scale < 0.05:
             warnings.append('small')
+        if longest_side / max(shortest_side, 1e-9) > 8:
+            warnings.append('high-aspect')
         records.append(
             Region(
                 region_id=raw_id,

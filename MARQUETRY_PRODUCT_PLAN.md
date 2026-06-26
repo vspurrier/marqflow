@@ -55,6 +55,8 @@ Implemented now:
 - browser-controlled working image size cap
 - explicit workspace naming, listing, opening, and deletion
 - one-off candidate generation
+- marquetry-mode candidate generation with source value-band compression and
+  source-stage tiny-region merging
 - candidate grid generation as a source-stage search tool
 - durable design partition
 - editable final physical dimensions
@@ -94,11 +96,14 @@ Implemented now:
 - active vector graph promotion as output geometry
 - topology-safe selected-boundary vector simplification
 - topology-safe single-vertex movement
+- direct browser canvas handles for dragging topology vertices
 - SVG reconstruction from persisted graph linework
 - API and CLI access for graph persistence, simplification, loading, and
   reconstructed graph SVG export
-- browser controls for vector cleanup, graph promotion, graph preview, and
-  vertex movement by ID
+- browser controls for vector cleanup, graph promotion, graph preview, direct
+  vertex dragging, and fallback vertex movement by ID
+- combined cuttability cleanup that runs small-piece repair, raster smoothing,
+  and warning-region vector simplification
 - Shapely coverage validation for exported physical polygons
 - selected-boundary summary in the browser
 - partition validation
@@ -117,6 +122,7 @@ Implemented now:
   pack summary generation
 - browser smoke test for zoom controls, lasso selection, box selection, and
   merge/undo
+- browser smoke test for direct vector-handle dragging
 - browser smoke test for SVG preview generation
 - cleanup report with a readiness score for cut-readiness review
 - cleanup report artifact in pack exports plus standalone CLI report command
@@ -141,9 +147,9 @@ Implemented now:
    Shapely coverage validation now provide the foundation for correctness, and
    coverage-safe exports persist artifact metadata. Topology graphs can now be
    persisted, simplified into undoable vector artifacts, reconstructed into
-   filled SVG, promoted as active output geometry, and edited with validated
-   single-vertex moves. Next improvement: replace numeric vertex movement with
-   direct canvas handles, snapping, and preview/accept flows.
+   filled SVG, promoted as active output geometry, edited with validated
+   single-vertex moves, and dragged with browser canvas handles. Next
+   improvement: snapping, boundary-level handles, and preview/accept flows.
 
 3. Add cleanup operations on top of shared boundaries.
 
@@ -153,9 +159,11 @@ Implemented now:
    Coverage-safe shared-edge simplification exists for SVG export, and shared
    graph simplification now persists as an undoable vector artifact. Selected
    regions can drive vector-edge simplification, individual vertices can be
-   moved with topology validation, and promoted graph geometry drives SVG/pack
-   output. Needed operations: visual handles, snapping constraints, smoother
-   curve cleanup, and explicit preview/accept UI for larger graph mutations.
+   moved with topology validation, direct handles can drag vertices, promoted
+   graph geometry drives SVG/pack output, and cuttability cleanup combines the
+   conservative repair passes. Needed operations: snapping constraints,
+   smoother curve cleanup, and explicit preview/accept UI for larger graph
+   mutations.
 
 4. Deepen veneer inventory logic.
 
@@ -178,10 +186,10 @@ Implemented now:
 7. Add browser-level regression tests.
 
    API/core tests cover the model. A browser smoke test covers image upload,
-   candidate-grid generation, design seeding, canvas selection, selected veneer
-   assignment, undo, pack summary generation, zoom, lasso selection, box
-   selection, merge/undo, and SVG preview. Broader visual regression and
-   multi-browser coverage are future hardening work.
+   candidate-grid generation, design seeding, direct vector-handle dragging,
+   canvas selection, selected veneer assignment, undo, pack summary generation,
+   zoom, lasso selection, box selection, merge/undo, and SVG preview. Broader
+   visual regression and multi-browser coverage are future hardening work.
 
 ## Non-Goals For This Branch
 

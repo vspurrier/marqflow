@@ -30,6 +30,7 @@
         <label>Max working edge <input id="max-edge" type="number" value="768" min="64" max="2048" step="64" /></label>
         <label>Regions <input id="target-regions" type="number" value="80" min="2" /></label>
         <label>Compactness <input id="compactness" type="number" value="18" min="1" step="1" /></label>
+        <label><input id="marquetry-mode" type="checkbox" checked /> Marquetry mode</label>
         <button id="open-image" type="button">Open image</button>
       </div>
       <div class="controls">
@@ -39,9 +40,10 @@
         <label>Max regions <input id="max-regions" type="number" value="140" min="2" /></label>
         <label>Min compactness <input id="min-compactness" type="number" value="4" min="0.1" step="0.1" /></label>
         <label>Max compactness <input id="max-compactness" type="number" value="28" min="0.1" step="0.1" /></label>
-        <label><input id="use-detail-zones" type="checkbox" /> Use focus zones</label>
-        <label><input id="use-subject-mask" type="checkbox" checked /> Use subject mask</label>
-        <button id="candidate-grid" type="button">Generate candidate grid</button>
+          <label><input id="use-detail-zones" type="checkbox" /> Use focus zones</label>
+          <label><input id="use-subject-mask" type="checkbox" checked /> Use subject mask</label>
+          <label><input id="grid-marquetry-mode" type="checkbox" checked /> Marquetry mode</label>
+          <button id="candidate-grid" type="button">Generate candidate grid</button>
       </div>
       <div id="candidates" class="candidates"></div>
     </section>
@@ -85,6 +87,7 @@
           <button id="apply-focus" type="button">Apply focus detail</button>
           <label>Min area <input id="repair-area" type="number" value="0.05" min="0.001" step="0.001" /></label>
           <button id="repair-small" type="button">Repair small pieces</button>
+          <button id="cuttability-cleanup" type="button">Cuttability cleanup</button>
           <label>Smooth passes <input id="smooth-passes" type="number" value="1" min="1" max="20" /></label>
           <button id="smooth-boundaries" type="button">Smooth boundaries</button>
           <button id="apply-suggestions" type="button">Auto-merge small pieces</button>
@@ -108,6 +111,7 @@
             <select id="selection-mode">
               <option value="box">Box/click</option>
               <option value="lasso">Lasso</option>
+              <option value="vector-edit">Vector handles</option>
               <option value="mask-subject">Brush subject</option>
               <option value="mask-background">Brush background</option>
             </select>

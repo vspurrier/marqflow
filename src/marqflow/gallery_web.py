@@ -24,6 +24,7 @@ class CandidateRequest(BaseModel):
     compactness: float = 18.0
     use_detail_zones: bool = False
     use_subject_mask: bool = True
+    marquetry_mode: bool = True
 
 
 class CandidateGridRequest(BaseModel):
@@ -35,6 +36,7 @@ class CandidateGridRequest(BaseModel):
     max_compactness: float = Field(default=28.0, gt=0)
     use_detail_zones: bool = False
     use_subject_mask: bool = True
+    marquetry_mode: bool = True
 
 
 class DesignRequest(BaseModel):
@@ -135,6 +137,13 @@ class SubjectMaskStrokeRequest(BaseModel):
 class RepairSmallRegionsRequest(BaseModel):
     max_area: float = Field(default=0.05, gt=0)
     max_repairs: int = Field(default=25, ge=1, le=500)
+
+
+class CuttabilityCleanupRequest(BaseModel):
+    max_repairs: int = Field(default=25, ge=1, le=500)
+    min_area: float = Field(default=0.05, gt=0)
+    smooth_iterations: int = Field(default=1, ge=1, le=20)
+    vector_tolerance: float = Field(default=1.25, ge=0.0, le=50.0)
 
 
 class SmoothBoundariesRequest(BaseModel):
@@ -266,6 +275,7 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
         target_regions: Annotated[int, Form()] = 80,
         compactness: Annotated[float, Form()] = 18.0,
         max_edge: Annotated[int, Form()] = 768,
+        marquetry_mode: Annotated[bool, Form()] = True,
         workspace_name: Annotated[str | None, Form()] = None,
     ) -> JSONResponse:
         nonlocal workspace_path
@@ -288,6 +298,7 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
             candidate = ws.generate_candidate(
                 target_regions=target_regions,
                 compactness=compactness,
+                marquetry_mode=marquetry_mode,
             )
             ws.create_design(candidate.candidate_id, PhysicalSize(width=8, height=10, unit='in'))
             return JSONResponse(ws.summary())
@@ -302,6 +313,7 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
             compactness=request.compactness,
             use_detail_zones=request.use_detail_zones,
             use_subject_mask=request.use_subject_mask,
+            marquetry_mode=request.marquetry_mode,
         )
         return JSONResponse(ws.summary())
 
@@ -324,6 +336,7 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
             max_compactness=request.max_compactness,
             use_detail_zones=request.use_detail_zones,
             use_subject_mask=request.use_subject_mask,
+            marquetry_mode=request.marquetry_mode,
         )
         return JSONResponse(ws.summary())
 
@@ -503,6 +516,22 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
         payload['repaired_region_count'] = applied
         return JSONResponse(payload)
 
+    @app.post('/api/design/cuttability-cleanup')
+    def cuttability_cleanup(request: CuttabilityCleanupRequest) -> JSONResponse:
+        ws = _load_workspace(workspace_path)
+        try:
+            result = ws.cuttability_cleanup(
+                max_repairs=request.max_repairs,
+                min_area=request.min_area,
+                smooth_iterations=request.smooth_iterations,
+                vector_tolerance=request.vector_tolerance,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        payload = ws.summary()
+        payload['cuttability_cleanup'] = result
+        return JSONResponse(payload)
+
     @app.post('/api/design/smooth-boundaries')
     def smooth_boundaries(request: SmoothBoundariesRequest) -> JSONResponse:
         ws = _load_workspace(workspace_path)
@@ -527,6 +556,16 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
         ws = _load_workspace(workspace_path)
         try:
             return JSONResponse(ws.topology_graph())
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get('/api/design/topology/edit-layer')
+    def design_topology_edit_layer(
+        kind: str | None = Query(default=None),
+    ) -> JSONResponse:
+        ws = _load_workspace(workspace_path)
+        try:
+            return JSONResponse(ws.vector_edit_layer(kind))
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

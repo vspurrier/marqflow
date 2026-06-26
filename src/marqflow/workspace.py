@@ -198,15 +198,21 @@ class MarquetryWorkspace:
         compactness: float = 18.0,
         use_detail_zones: bool = False,
         use_subject_mask: bool = True,
+        marquetry_mode: bool = True,
     ) -> Candidate:
         """Generate one SLIC candidate partition."""
 
         image = self.source_array()
+        slic_image = (
+            self._marquetry_guided_image(image, target_regions)
+            if marquetry_mode
+            else image
+        )
         labels = slic(
-            image,
+            slic_image,
             n_segments=max(2, int(target_regions)),
-            compactness=float(compactness),
-            sigma=1.0,
+            compactness=float(compactness) * (1.4 if marquetry_mode else 1.0),
+            sigma=1.5 if marquetry_mode else 1.0,
             start_label=1,
             channel_axis=-1,
         )
@@ -223,6 +229,12 @@ class MarquetryWorkspace:
                 compactness=float(compactness),
             )
         labels = normalize_labels(labels)
+        if marquetry_mode and not use_detail_zones:
+            average_area = (labels.shape[0] * labels.shape[1]) / max(target_regions, 1)
+            labels = self._merge_tiny_candidate_regions(
+                labels,
+                min_area_px=max(4, int(average_area * 0.18)),
+            )
         candidate_id = f'candidate-{len(self.candidates) + 1}'
         candidate_dir = self.workspace_dir / 'candidates' / candidate_id
         candidate_dir.mkdir(parents=True, exist_ok=True)
@@ -242,6 +254,60 @@ class MarquetryWorkspace:
         self.save()
         return candidate
 
+    def _marquetry_guided_image(self, image: np.ndarray, target_regions: int) -> np.ndarray:
+        """Compress source color variation into value/hue bands before segmentation."""
+
+        rgb = image.astype(float)
+        luma = 0.2126 * rgb[:, :, 0] + 0.7152 * rgb[:, :, 1] + 0.0722 * rgb[:, :, 2]
+        band_count = max(3, min(7, int(round(math.sqrt(max(2, target_regions))))))
+        quantiles = np.linspace(0, 1, band_count + 1)[1:-1]
+        thresholds = np.quantile(luma, quantiles) if quantiles.size else []
+        value_band = np.digitize(luma, thresholds)
+        output = np.zeros_like(image)
+        for band in range(band_count):
+            mask = value_band == band
+            if not np.any(mask):
+                continue
+            output[mask] = np.mean(image[mask], axis=0)
+        return output.astype(np.uint8)
+
+    def _merge_tiny_candidate_regions(self, labels: np.ndarray, min_area_px: int) -> np.ndarray:
+        """Merge source-stage specks into the neighbor sharing the longest boundary."""
+
+        merged = labels.copy()
+        for _ in range(8):
+            changed = False
+            neighbors = region_neighbors(merged)
+            areas = {
+                int(region_id): int(np.count_nonzero(merged == region_id))
+                for region_id in np.unique(merged)
+                if int(region_id) > 0
+            }
+            small = [
+                region_id
+                for region_id, area in sorted(areas.items(), key=lambda item: item[1])
+                if area < min_area_px and neighbors.get(region_id)
+            ]
+            if not small:
+                break
+            for region_id in small:
+                if region_id not in areas or areas[region_id] >= min_area_px:
+                    continue
+                current_neighbors = [
+                    neighbor
+                    for neighbor in neighbors.get(region_id, set())
+                    if neighbor in areas and neighbor != region_id
+                ]
+                if not current_neighbors:
+                    continue
+                target = max(current_neighbors, key=lambda neighbor: areas.get(neighbor, 0))
+                merged[merged == region_id] = target
+                changed = True
+            if not changed:
+                break
+            merged = normalize_labels(merged)
+        return normalize_labels(merged)
+
     def generate_candidate_grid(
         self,
         rows: int = 4,
@@ -252,6 +318,7 @@ class MarquetryWorkspace:
         max_compactness: float = 28.0,
         use_detail_zones: bool = False,
         use_subject_mask: bool = True,
+        marquetry_mode: bool = True,
     ) -> list[Candidate]:
         """Generate a coarse-to-detailed candidate grid without changing the design."""
 
@@ -276,6 +343,7 @@ class MarquetryWorkspace:
                         compactness=float(compactness),
                         use_detail_zones=use_detail_zones,
                         use_subject_mask=use_subject_mask,
+                        marquetry_mode=marquetry_mode,
                     )
                 )
         return candidates
@@ -1432,6 +1500,32 @@ class MarquetryWorkspace:
             return self.persist_topology_graph(kind=kind)
         raise ValueError(f'vector graph not found: {kind}')
 
+    def vector_edit_layer(self, kind: str | None = None) -> dict[str, Any]:
+        """Return graph vertices/edges in image pixel coordinates for canvas editing."""
+
+        if self.design is None:
+            raise ValueError('create a design first')
+        graph_kind = kind or self.design.active_vector_graph_kind or 'raster_topology'
+        payload = self.vector_graph_payload(graph_kind)
+        graph = payload['graph']
+        return {
+            'kind': graph_kind,
+            'active': graph_kind == self.design.active_vector_graph_kind,
+            'vertices': graph['vertices'],
+            'edges': [
+                {
+                    'edge_id': edge['edge_id'],
+                    'region_a': edge['region_a'],
+                    'region_b': edge['region_b'],
+                    'exterior': edge['exterior'],
+                    'vertex_ids': edge['vertex_ids'],
+                    'path': edge['path'],
+                }
+                for edge in graph['edges']
+            ],
+            'graph_validation': payload.get('graph_validation'),
+        }
+
     def active_vector_graph_payload(self) -> dict[str, Any] | None:
         """Return the promoted vector geometry, if the design has one."""
 
@@ -1694,6 +1788,44 @@ class MarquetryWorkspace:
             )
         )
         self.save()
+
+    def cuttability_cleanup(
+        self,
+        max_repairs: int = 25,
+        min_area: float = 0.05,
+        smooth_iterations: int = 1,
+        vector_tolerance: float = 1.25,
+    ) -> dict[str, Any]:
+        """Apply conservative cleanup passes aimed at physical cuttability."""
+
+        if self.design is None:
+            raise ValueError('create a design first')
+        repaired = self.repair_small_regions(max_area=min_area, max_repairs=max_repairs)
+        smoothed = self.smooth_boundaries(iterations=smooth_iterations)
+        warning_ids = [
+            int(region['region_id'])
+            for region in self.regions()
+            if region['warnings'] and not region['locked']
+        ]
+        vector_payload = None
+        if warning_ids:
+            try:
+                vector_payload = self.simplify_vector_graph_for_regions(
+                    warning_ids,
+                    tolerance=vector_tolerance,
+                )
+            except ValueError:
+                vector_payload = None
+        return {
+            'repaired_region_count': repaired,
+            'smoothed_pixel_count': smoothed,
+            'vector_simplified': vector_payload is not None,
+            'remaining_warning_region_ids': [
+                int(region['region_id'])
+                for region in self.regions()
+                if region['warnings']
+            ],
+        }
 
     def export_vector_graph_svg(
         self,

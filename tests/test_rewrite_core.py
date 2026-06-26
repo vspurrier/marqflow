@@ -154,6 +154,27 @@ def test_candidate_grid_is_source_stage_only(tmp_path: Path) -> None:
     assert len(workspace.candidates) == 7
 
 
+def test_marquetry_candidate_mode_merges_tiny_source_regions(tmp_path: Path) -> None:
+    image_path = tmp_path / 'source.png'
+    _fixture_image(image_path)
+    workspace = MarquetryWorkspace.create(image_path, tmp_path / 'workspace', max_edge=64)
+
+    candidate = workspace.generate_candidate(
+        target_regions=24,
+        compactness=14.0,
+        marquetry_mode=True,
+    )
+    labels = workspace.candidate_labels(candidate.candidate_id)
+    areas = [
+        int(np.count_nonzero(labels == region_id))
+        for region_id in np.unique(labels)
+        if int(region_id) > 0
+    ]
+
+    assert candidate.region_count <= 24
+    assert min(areas) >= 4
+
+
 def test_candidate_generation_can_use_detail_zones(tmp_path: Path) -> None:
     image_path = tmp_path / 'source.png'
     _textured_focus_image(image_path)
@@ -432,6 +453,35 @@ def test_topology_safe_vertex_move_is_undoable(tmp_path: Path) -> None:
     assert any(vertex['point'] == [25.0, 24.0] for vertex in edited_graph['vertices'])
     workspace.undo()
     assert workspace.summary()['design']['active_vector_graph_kind'] is None
+
+
+def test_vector_edit_layer_and_cuttability_cleanup(tmp_path: Path) -> None:
+    image_path = tmp_path / 'source.png'
+    _fixture_image(image_path)
+    workspace = MarquetryWorkspace.create(image_path, tmp_path / 'workspace', max_edge=64)
+    candidate = workspace.generate_candidate(target_regions=4, compactness=8.0)
+    workspace.create_design(candidate.candidate_id, PhysicalSize(width=8, height=8, unit='in'))
+    labels = _four_region_labels()
+    labels[0:2, 0:2] = 5
+    workspace._write_design_labels(labels)
+    workspace.design.veneer_assignments = {
+        1: 'maple',
+        2: 'cherry',
+        3: 'walnut',
+        4: 'black-dyed',
+        5: 'maple',
+    }
+    workspace.save()
+
+    layer = workspace.vector_edit_layer()
+    assert layer['kind'] == 'raster_topology'
+    assert layer['vertices']
+    assert layer['edges']
+
+    result = workspace.cuttability_cleanup(max_repairs=5, min_area=0.12)
+
+    assert result['repaired_region_count'] >= 1
+    assert workspace.summary()['validation']['valid'] is True
 
 
 def test_split_and_lock_are_undoable(tmp_path: Path) -> None:
@@ -764,6 +814,9 @@ def test_api_merge_undo_and_hitmap(tmp_path: Path) -> None:
     topology_response = client.get('/api/design/topology')
     assert topology_response.status_code == 200
     assert topology_response.json()['edge_count'] == 8
+    edit_layer_response = client.get('/api/design/topology/edit-layer')
+    assert edit_layer_response.status_code == 200
+    assert edit_layer_response.json()['vertices']
 
     report_response = client.get('/api/cleanup-report')
     assert report_response.status_code == 200
@@ -775,6 +828,13 @@ def test_api_merge_undo_and_hitmap(tmp_path: Path) -> None:
     )
     assert cleanup_response.status_code == 200
     assert 'applied_merge_count' in cleanup_response.json()
+
+    cuttability_response = client.post(
+        '/api/design/cuttability-cleanup',
+        json={'max_repairs': 2, 'min_area': 0.01, 'smooth_iterations': 1},
+    )
+    assert cuttability_response.status_code == 200
+    assert 'cuttability_cleanup' in cuttability_response.json()
 
     lock_response = client.post('/api/design/lock', json={'region_ids': [1], 'locked': True})
     assert lock_response.status_code == 200

@@ -95,8 +95,16 @@ uv run pytest -q
   contours/bounds.
 - Topology-safe vector edit operations exist for selected-boundary
   simplification and single-vertex movement, with graph validation before save.
+- Browser vector-handle mode draws topology edges/vertices on the canvas and
+  supports dragging vertices through the topology-safe move endpoint.
 - Browser controls expose vector simplification, selected-boundary vector
-  cleanup, graph promotion, graph SVG preview, and vertex movement by ID.
+  cleanup, graph promotion, graph SVG preview, direct vertex dragging, and
+  fallback vertex movement by ID.
+- Marquetry-mode candidate generation compresses source images into value bands
+  before SLIC and merges tiny source-stage regions unless focus-zone detail is
+  being preserved.
+- Cuttability cleanup combines sliver repair, raster smoothing, and vector
+  simplification for warning regions as one browser/API action.
 - Browser endpoints and CLI commands exist for topology persistence,
   simplification, graph loading, graph promotion, graph-SVG export, and vertex
   movement.
@@ -133,19 +141,20 @@ uv run pytest -q
    exported physical polygons. Coverage-safe exports persist vector artifact
    metadata. Topology graphs can now be persisted, simplified as undoable vector
    artifacts, reconstructed into filled SVG regions, edited with validated
-   single-vertex moves, and promoted as active output geometry. The remaining
-   gap is richer interactive editing: direct canvas handles, boundary-level
-   previews, snapping constraints, and a clearer UI for inspecting vertex IDs.
+   single-vertex moves, dragged directly with browser canvas handles, and
+   promoted as active output geometry. The remaining gap is richer interactive
+   editing: snapping constraints, before/after previews, boundary-specific
+   handles, and clearer failure feedback when a drag would invalidate topology.
 
 2. Real cleanup tools beyond merge.
 
    Merge, targeted split, lock/unlock, physical-area sliver repair, raster
    smoothing, selected-region smoothing, selected-boundary inspection, bounded
    auto-merge, vector-graph simplification, selected-boundary vector
-   simplification, graph SVG reconstruction, graph promotion, vertex movement,
-   and undo now exist. Remaining cleanup depth: true curve/spline smoothing,
-   constrained snapping, batch vertex simplification previews, and more usable
-   visual editing affordances.
+   simplification, graph SVG reconstruction, graph promotion, vertex dragging,
+   combined cuttability cleanup, and undo now exist. Remaining cleanup depth:
+   true curve/spline smoothing, constrained snapping, batch vertex
+   simplification previews, and more usable visual editing affordances.
 
 3. Subject/detail logic.
 
@@ -158,9 +167,9 @@ uv run pytest -q
 4. Browser selection tooling.
 
    Canvas click/drag selection, lasso selection, selected-boundary summaries,
-   zoom, scroll-panning, and vector cleanup buttons exist. It remains visually
-   basic: vertex movement currently uses numeric vertex IDs rather than direct
-   draggable handles on the canvas.
+   zoom, scroll-panning, vector cleanup buttons, and direct vector vertex
+   handles exist. It remains visually basic and needs better snapping,
+   hover-state labeling, and preview/revert affordances.
 
 5. Material planning.
 
@@ -184,9 +193,10 @@ uv run pytest -q
 8. Browser tests.
 
    A Playwright smoke test covers image upload, workspace creation,
-   candidate-grid generation, design seeding, canvas selection, selected veneer
-   assignment, undo, pack summary generation, zoom, lasso selection, box
-   selection, merge/undo, and SVG preview. Broader visual regression and
+   candidate-grid generation, design seeding, direct vector-handle dragging,
+   canvas selection, selected veneer assignment, undo, pack summary generation,
+   zoom, lasso selection, box selection, merge/undo, and SVG preview. Broader
+   visual regression and
    multi-browser coverage are still future hardening work, but the current
    vertical slice now has a browser smoke test.
 

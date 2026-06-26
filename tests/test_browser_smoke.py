@@ -68,6 +68,42 @@ def _drag_canvas(page: Page, start_fraction: float, end_fraction: float) -> None
     page.mouse.up()
 
 
+def _drag_first_vector_handle(page: Page) -> None:
+    canvas = page.locator('#design-canvas')
+    canvas.scroll_into_view_if_needed()
+    box = canvas.bounding_box()
+    if box is None:
+        raise AssertionError('design canvas is not visible')
+    layer = page.evaluate(
+        "() => fetch('/api/design/topology/edit-layer').then(response => response.json())"
+    )
+    vertices = layer.get('vertices') or []
+    if not vertices:
+        raise AssertionError('no topology vertices available')
+    canvas_width = page.locator('#design-canvas').evaluate('node => node.width')
+    canvas_height = page.locator('#design-canvas').evaluate('node => node.height')
+    vertex = next(
+        (
+            item
+            for item in vertices
+            if 0 < item['point'][0] < canvas_width and 0 < item['point'][1] < canvas_height
+        ),
+        vertices[0],
+    )
+    start = {
+        'x': box['width'] * vertex['point'][0] / canvas_width,
+        'y': box['height'] * vertex['point'][1] / canvas_height,
+    }
+    end = {
+        'x': min(box['width'] - 1, start['x'] + max(3, box['width'] / canvas_width)),
+        'y': start['y'],
+    }
+    canvas.hover(position=start)
+    page.mouse.down()
+    canvas.hover(position=end)
+    page.mouse.up()
+
+
 def test_browser_can_create_workspace_from_image(tmp_path: Path) -> None:
     image_path = tmp_path / 'source.png'
     _fixture_image(image_path)
@@ -106,6 +142,12 @@ def test_browser_can_create_workspace_from_image(tmp_path: Path) -> None:
             assert page.locator('#design-canvas').evaluate('node => node.width') == 48
             assert page.locator('.veneer-row').count() >= 1
             assert page.locator('#workspace-list option').count() >= 1
+            page.select_option('#selection-mode', 'vector-edit')
+            _drag_first_vector_handle(page)
+            _wait_for_status(page, 'Moved vector vertex')
+            page.click('#undo')
+            _wait_for_status(page, 'Undid last edit.')
+            page.select_option('#selection-mode', 'box')
 
             page.fill('#grid-rows', '2')
             page.fill('#grid-cols', '2')

@@ -104,6 +104,12 @@ interface WorkspaceSummary {
   applied_detail_split_count?: number;
   repaired_region_count?: number;
   smoothed_pixel_count?: number;
+  cuttability_cleanup?: {
+    repaired_region_count: number;
+    smoothed_pixel_count: number;
+    vector_simplified: boolean;
+    remaining_warning_region_ids: number[];
+  };
 }
 
 interface DesignHitmap {
@@ -111,6 +117,29 @@ interface DesignHitmap {
   height: number;
   labels: number[][];
   subject_mask: number[][];
+}
+
+interface TopologyVertex {
+  vertex_id: number;
+  point: [number, number];
+  physical_point: [number, number];
+}
+
+interface TopologyEdge {
+  edge_id: number;
+  region_a: number;
+  region_b: number;
+  exterior: boolean;
+  vertex_ids: number[];
+  path: number[][];
+}
+
+interface TopologyEditLayer {
+  kind: string;
+  active: boolean;
+  vertices: TopologyVertex[];
+  edges: TopologyEdge[];
+  graph_validation?: Record<string, unknown> | null;
 }
 
 interface PackSheet {
