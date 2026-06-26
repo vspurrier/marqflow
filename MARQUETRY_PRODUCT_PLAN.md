@@ -93,6 +93,7 @@ Implemented now:
 - partition validation
 - physical-unit SVG export with adjustable contour simplification
 - Shapely coverage-safe SVG export with shared-edge simplification
+- persisted coverage-safe vector export metadata
 - `rectpack` bounding-box pack manifest by veneer
 - physical contour and SVG path data in each pack manifest piece
 - browser stock-fit summary for pack results
@@ -126,9 +127,10 @@ Implemented now:
 
    Shared-boundary polylines now exist for adjacent regions in pixel and
    physical units, including simplified-path analysis. A topology graph and
-   Shapely coverage validation now provide the foundation for correctness.
-   Advanced smoothing, point editing, and no-gap/no-overlap SVG cleanup should
-   be built on persisted shared vector edges.
+   Shapely coverage validation now provide the foundation for correctness, and
+   coverage-safe exports persist artifact metadata. Advanced smoothing, point
+   editing, and no-gap/no-overlap SVG cleanup should be built on persisted
+   shared vector edges.
 
 3. Add cleanup operations on top of shared boundaries.
 

@@ -80,6 +80,11 @@ def test_workspace_creates_valid_design_and_exports(tmp_path: Path) -> None:
     )
     coverage_svg = coverage_svg_path.read_text(encoding='utf-8')
     assert 'data-coverage-simplified="true"' in coverage_svg
+    reloaded_after_coverage = MarquetryWorkspace.load(workspace.workspace_dir)
+    artifact = reloaded_after_coverage.summary()['design']['vector_exports'][0]
+    assert artifact['kind'] == 'coverage_svg'
+    assert artifact['coverage_valid'] is True
+    assert artifact['topology_edge_count'] > 0
 
     manifest = workspace.pack(tmp_path / 'packed')
     assert manifest['packing_backend'] == 'rectpack-bounding-box'

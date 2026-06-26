@@ -179,6 +179,34 @@ class EditOperation:
         return cls(op_id=int(data['op_id']), kind=str(data['kind']), payload=dict(data['payload']))
 
 
+@dataclass(frozen=True, slots=True)
+class ExportArtifact:
+    """Metadata for generated vector artifacts tied to a design state."""
+
+    kind: str
+    path: str
+    tolerance: float
+    coverage_valid: bool
+    topology_vertex_count: int
+    topology_edge_count: int
+    created_at: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ExportArtifact:
+        return cls(
+            kind=str(data['kind']),
+            path=str(data['path']),
+            tolerance=float(data.get('tolerance', 0.0)),
+            coverage_valid=bool(data.get('coverage_valid', False)),
+            topology_vertex_count=int(data.get('topology_vertex_count', 0)),
+            topology_edge_count=int(data.get('topology_edge_count', 0)),
+            created_at=str(data.get('created_at', '')),
+        )
+
+
 @dataclass(slots=True)
 class MarquetryDesign:
     """The durable product object: a measured, veneer-assigned partition."""
@@ -191,6 +219,7 @@ class MarquetryDesign:
     locked_region_ids: set[int] = field(default_factory=set)
     detail_zones: list[DetailZone] = field(default_factory=list)
     subject_mask_path: str | None = None
+    vector_exports: list[ExportArtifact] = field(default_factory=list)
     edit_history: list[EditOperation] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -206,6 +235,7 @@ class MarquetryDesign:
             'locked_region_ids': sorted(self.locked_region_ids),
             'detail_zones': [zone.to_dict() for zone in self.detail_zones],
             'subject_mask_path': self.subject_mask_path,
+            'vector_exports': [artifact.to_dict() for artifact in self.vector_exports],
             'edit_history': [edit.to_dict() for edit in self.edit_history],
         }
 
@@ -229,6 +259,9 @@ class MarquetryDesign:
                 if data.get('subject_mask_path') is not None
                 else None
             ),
+            vector_exports=[
+                ExportArtifact.from_dict(item) for item in data.get('vector_exports', [])
+            ],
             edit_history=[EditOperation.from_dict(item) for item in data.get('edit_history', [])],
         )
 

@@ -83,6 +83,8 @@ uv run pytest -q
 - Veneer-grouped SVG export in physical units with adjustable contour
   simplification.
 - Shapely coverage-safe SVG export that simplifies shared edges together.
+- Coverage-safe SVG exports persist artifact metadata on the design, including
+  tolerance, coverage validity, topology counts, and path.
 - `rectpack` bounding-box pack manifest grouped by veneer.
 - Pack manifest includes each piece's physical contour and SVG path for future
   irregular nesting adapters.
@@ -113,8 +115,9 @@ uv run pytest -q
    physical units, with simplified-path analysis and vertex reduction
    estimates. A topology graph now exposes unique vertices, exterior/shared
    edges, and region-edge references, and Shapely coverage validation checks the
-   exported physical polygons. Advanced smoothing/editing still needs persisted
-   editable vertices and topology-preserving writes back to the design.
+   exported physical polygons. Coverage-safe exports persist vector artifact
+   metadata. Advanced smoothing/editing still needs persisted editable vertices
+   and topology-preserving writes back to the design.
 
 2. Real cleanup tools beyond merge.
 

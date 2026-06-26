@@ -26,6 +26,16 @@ interface Region {
   warnings: string[];
 }
 
+interface ExportArtifact {
+  kind: string;
+  path: string;
+  tolerance: number;
+  coverage_valid: boolean;
+  topology_vertex_count: number;
+  topology_edge_count: number;
+  created_at: string;
+}
+
 interface MergeSuggestion {
   region_id: number;
   target_region_id: number;
@@ -56,6 +66,7 @@ interface WorkspaceSummary {
     physical_size: {width: number; height: number; unit: string};
     detail_zones: DetailZone[];
     subject_mask_path: string | null;
+    vector_exports: ExportArtifact[];
   };
   subject_mask: {subject_px: number; background_px: number; unknown_px: number};
   regions: Region[];

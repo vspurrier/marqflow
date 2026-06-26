@@ -8,6 +8,7 @@ import os
 import shutil
 import tempfile
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,7 @@ from .models import (
     Candidate,
     DetailZone,
     EditOperation,
+    ExportArtifact,
     MarquetryDesign,
     PhysicalSize,
     SourceImage,
@@ -1341,6 +1343,7 @@ class MarquetryWorkspace:
                 self.source_array(),
                 self.design_labels(),
                 self.design,
+                simplify_tolerance=0.0,
             ),
             self.design.physical_size,
             (self.source.working_width, self.source.working_height),
@@ -1389,6 +1392,29 @@ class MarquetryWorkspace:
             tolerance=tolerance,
         )
         path.write_text(svg, encoding='utf-8')
+        topology = self.topology_graph()
+        coverage = self.coverage_summary()
+        try:
+            relative_path = str(path.relative_to(self.workspace_dir))
+        except ValueError:
+            relative_path = str(path)
+        self.design.vector_exports = [
+            artifact
+            for artifact in self.design.vector_exports
+            if not (artifact.kind == 'coverage_svg' and artifact.path == relative_path)
+        ]
+        self.design.vector_exports.append(
+            ExportArtifact(
+                kind='coverage_svg',
+                path=relative_path,
+                tolerance=float(tolerance),
+                coverage_valid=bool(coverage['valid']),
+                topology_vertex_count=int(topology['vertex_count']),
+                topology_edge_count=int(topology['edge_count']),
+                created_at=datetime.now(timezone.utc).isoformat(),
+            )
+        )
+        self.save()
         return path
 
     def pack(self, output_dir: str | Path) -> dict[str, Any]:
