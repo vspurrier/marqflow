@@ -69,6 +69,7 @@ Implemented now:
 - bounded auto-merge cleanup for suggested small/thin regions
 - physical-area sliver repair pass
 - raster boundary smoothing pass
+- selected-region raster smoothing
 - final label hitmap API and browser click/drag selection tooling
 - persisted rectangular detail zones
 - detail zones created from selected regions
@@ -98,9 +99,9 @@ Implemented now:
 3. Add cleanup operations on top of shared boundaries.
 
    Current cleanup supports connected merge, targeted split, lock/unlock,
-   physical-area sliver repair, raster boundary smoothing, and bounded
-   auto-merge suggestions. Needed operations: simplify shared vector edges,
-   selected-boundary smoothing, and edit vertices.
+   physical-area sliver repair, raster boundary smoothing, selected-region
+   smoothing, and bounded auto-merge suggestions. Needed operations: simplify
+   shared vector edges, selected-boundary vector smoothing, and edit vertices.
 
 4. Deepen veneer inventory logic.
 

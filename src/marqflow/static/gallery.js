@@ -731,19 +731,28 @@ async function repairSmall() {
 }
 
 async function smoothBoundaries() {
+  const regionIds = [...selectedRegionIds];
   const response = await fetch('/api/design/smooth-boundaries', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({iterations: Number(el.smoothPasses.value || 1)}),
+    body: JSON.stringify({
+      iterations: Number(el.smoothPasses.value || 1),
+      region_ids: regionIds,
+    }),
   });
   if (!response.ok) {
     setStatus(await response.text(), true);
     return;
   }
   workspace = await response.json();
-  selectedRegionIds.clear();
   await loadHitmap();
-  setStatus(`Smoothed ${workspace.smoothed_pixel_count || 0} boundary pixel(s).`);
+  const currentIds = new Set(workspace.regions.map((region) => region.region_id));
+  selectedRegionIds = new Set(regionIds.filter((regionId) => currentIds.has(regionId)));
+  setStatus(
+    `Smoothed ${workspace.smoothed_pixel_count || 0} boundary pixel(s)${
+      regionIds.length ? ' in selected regions' : ''
+    }.`,
+  );
   render();
 }
 

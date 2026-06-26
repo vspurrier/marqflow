@@ -893,7 +893,11 @@ class MarquetryWorkspace:
                 break
         return applied
 
-    def smooth_boundaries(self, iterations: int = 1) -> int:
+    def smooth_boundaries(
+        self,
+        iterations: int = 1,
+        region_ids: list[int] | set[int] | None = None,
+    ) -> int:
         """Denoise unlocked boundary pixels with local neighbor voting."""
 
         if self.design is None:
@@ -901,6 +905,11 @@ class MarquetryWorkspace:
         labels_before = self.design_labels()
         labels_after = labels_before.copy()
         locked_ids = set(self.design.locked_region_ids)
+        selected_region_ids = {int(region_id) for region_id in region_ids or []}
+        if selected_region_ids:
+            missing = sorted(selected_region_ids - self._current_region_ids())
+            if missing:
+                raise ValueError(f'unknown region ids: {missing}')
         changed_total = 0
 
         for _ in range(max(1, int(iterations))):
@@ -910,6 +919,8 @@ class MarquetryWorkspace:
                 for x in range(1, labels_after.shape[1] - 1):
                     current = int(labels_after[y, x])
                     if current in locked_ids:
+                        continue
+                    if selected_region_ids and current not in selected_region_ids:
                         continue
                     neighbors = [
                         int(labels_after[y - 1, x]),
@@ -951,6 +962,7 @@ class MarquetryWorkspace:
                 kind='smooth_boundaries',
                 payload={
                     'iterations': int(iterations),
+                    'region_ids': sorted(selected_region_ids),
                     'changed_px': changed_total,
                     'previous_labels_path': previous_labels_path,
                     'previous_veneer_assignments': {

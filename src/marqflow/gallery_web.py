@@ -122,6 +122,7 @@ class RepairSmallRegionsRequest(BaseModel):
 
 class SmoothBoundariesRequest(BaseModel):
     iterations: int = Field(default=1, ge=1, le=20)
+    region_ids: list[int] = Field(default_factory=list)
 
 
 class PackRequest(BaseModel):
@@ -432,7 +433,10 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
     def smooth_boundaries(request: SmoothBoundariesRequest) -> JSONResponse:
         ws = _load_workspace(workspace_path)
         try:
-            changed_px = ws.smooth_boundaries(iterations=request.iterations)
+            changed_px = ws.smooth_boundaries(
+                iterations=request.iterations,
+                region_ids=request.region_ids or None,
+            )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         payload = ws.summary()
