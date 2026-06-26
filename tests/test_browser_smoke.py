@@ -54,6 +54,20 @@ def _click_canvas_center(page: Page) -> None:
     canvas.click(position={'x': box['width'] / 2, 'y': box['height'] / 2})
 
 
+def _drag_canvas(page: Page, start_fraction: float, end_fraction: float) -> None:
+    canvas = page.locator('#design-canvas')
+    canvas.scroll_into_view_if_needed()
+    box = canvas.bounding_box()
+    if box is None:
+        raise AssertionError('design canvas is not visible')
+    start = {'x': box['width'] * start_fraction, 'y': box['height'] * start_fraction}
+    end = {'x': box['width'] * end_fraction, 'y': box['height'] * end_fraction}
+    canvas.hover(position=start)
+    page.mouse.down()
+    canvas.hover(position=end)
+    page.mouse.up()
+
+
 def test_browser_can_create_workspace_from_image(tmp_path: Path) -> None:
     image_path = tmp_path / 'source.png'
     _fixture_image(image_path)
@@ -120,6 +134,30 @@ def test_browser_can_create_workspace_from_image(tmp_path: Path) -> None:
                 page.select_option('#selected-veneer', veneer_id)
             page.click('#assign-selected')
             _wait_for_status(page, 'Assigned ')
+            page.click('#undo')
+            _wait_for_status(page, 'Undid last edit.')
+            page.click('#zoom-in')
+            assert page.locator('#zoom-label').text_content() == '125%'
+            page.click('#zoom-fit')
+            assert page.locator('#zoom-label').text_content() == '100%'
+            page.click('#clear-selection')
+            page.select_option('#selection-mode', 'lasso')
+            _drag_canvas(page, 0.2, 0.8)
+            page.wait_for_function(
+                (
+                    "document.querySelector('#selection-status')?.textContent"
+                    "?.includes('Selected ')"
+                ),
+                timeout=15000,
+            )
+            page.click('#clear-selection')
+            page.select_option('#selection-mode', 'box')
+            before_merge_count = page.locator('.region').count()
+            assert before_merge_count > 1
+            _drag_canvas(page, 0.05, 0.95)
+            page.click('#merge-selected')
+            _wait_for_status(page, 'Merged ')
+            assert page.locator('.region').count() < before_merge_count
             page.click('#undo')
             _wait_for_status(page, 'Undid last edit.')
             page.click('#pack')

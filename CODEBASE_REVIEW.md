@@ -73,6 +73,8 @@ uv run pytest -q
   seeding the design from a candidate.
 - Browser smoke test for canvas selection, selected veneer assignment, undo, and
   pack summary generation.
+- Browser smoke test for zoom controls, lasso selection, box selection, and
+  merge/undo.
 - Thin browser UI over the new API.
 
 ## Still Outstanding
@@ -123,8 +125,8 @@ uv run pytest -q
 
    A Playwright smoke test covers image upload, workspace creation,
    candidate-grid generation, design seeding, canvas selection, selected veneer
-   assignment, undo, and pack summary generation. Add browser tests for merge,
-   SVG preview, zoom, and lasso selection.
+   assignment, undo, pack summary generation, zoom, lasso selection, box
+   selection, and merge/undo. Add browser tests for SVG preview.
 
 ## Engineering Direction
 
