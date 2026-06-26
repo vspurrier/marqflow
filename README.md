@@ -90,6 +90,7 @@ The browser UI is deliberately minimal in this rewrite:
 - split one selected region
 - lock/unlock selected regions
 - mark selected regions as subject/background for later candidate generation
+- brush subject/background mask pixels directly on the canvas
 - create and apply focus zones for local detail
 - auto-merge small/thin suggested regions
 - repair regions below a physical area threshold

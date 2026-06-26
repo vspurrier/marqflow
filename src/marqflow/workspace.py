@@ -476,6 +476,83 @@ class MarquetryWorkspace:
         )
         self.save()
 
+    def paint_subject_mask_stroke(
+        self,
+        points: list[tuple[float, float]],
+        role: str,
+        brush_radius: float = 4.0,
+    ) -> None:
+        """Paint subject/background mask pixels along a freehand source-space stroke."""
+
+        if self.design is None:
+            raise ValueError('create a design first')
+        role_value = {'subject': 1, 'background': 2}.get(role)
+        if role_value is None:
+            raise ValueError('role must be subject or background')
+        if not points:
+            raise ValueError('stroke needs at least one point')
+
+        op_id = self._next_op_id()
+        previous_mask_path = self._snapshot_subject_mask(op_id)
+        previous_subject_mask_path = self.design.subject_mask_path
+        mask = self.subject_mask()
+        height, width = mask.shape
+        radius = max(0.5, float(brush_radius))
+        radius_int = int(math.ceil(radius))
+        for point_index, point in enumerate(points):
+            x, y = point
+            if point_index > 0:
+                prev_x, prev_y = points[point_index - 1]
+                steps = max(int(math.ceil(max(abs(x - prev_x), abs(y - prev_y)))), 1)
+                for step in range(steps + 1):
+                    t = step / steps
+                    self._paint_mask_disk(
+                        mask,
+                        prev_x + (x - prev_x) * t,
+                        prev_y + (y - prev_y) * t,
+                        radius,
+                        radius_int,
+                        role_value,
+                    )
+            else:
+                self._paint_mask_disk(mask, x, y, radius, radius_int, role_value)
+        self._write_subject_mask(mask)
+        self.design.edit_history.append(
+            EditOperation(
+                op_id=op_id,
+                kind='paint_subject_mask_stroke',
+                payload={
+                    'role': role,
+                    'brush_radius': radius,
+                    'point_count': len(points),
+                    'previous_mask_path': previous_mask_path,
+                    'previous_subject_mask_path': previous_subject_mask_path,
+                },
+            )
+        )
+        self.save()
+
+    @staticmethod
+    def _paint_mask_disk(
+        mask: np.ndarray,
+        center_x: float,
+        center_y: float,
+        radius: float,
+        radius_int: int,
+        value: int,
+    ) -> None:
+        height, width = mask.shape
+        cx = int(round(center_x))
+        cy = int(round(center_y))
+        x0 = max(0, cx - radius_int)
+        x1 = min(width, cx + radius_int + 1)
+        y0 = max(0, cy - radius_int)
+        y1 = min(height, cy + radius_int + 1)
+        yy, xx = np.ogrid[y0:y1, x0:x1]
+        disk = (xx - center_x) ** 2 + (yy - center_y) ** 2 <= radius**2
+        region = mask[y0:y1, x0:x1]
+        region[disk] = value
+
     def _auto_assign_veneers(self, overwrite: bool = False) -> None:
         if self.design is None:
             return
@@ -963,7 +1040,7 @@ class MarquetryWorkspace:
             self.design.detail_zones = [
                 zone for zone in self.design.detail_zones if zone.zone_id != zone_id
             ]
-        elif edit.kind == 'set_subject_mask':
+        elif edit.kind in {'set_subject_mask', 'paint_subject_mask_stroke'}:
             previous_mask_path = edit.payload.get('previous_mask_path')
             previous_subject_mask_path = edit.payload.get('previous_subject_mask_path')
             if previous_mask_path is None:

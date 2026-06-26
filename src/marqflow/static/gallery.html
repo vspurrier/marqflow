@@ -95,8 +95,11 @@
             <select id="selection-mode">
               <option value="box">Box/click</option>
               <option value="lasso">Lasso</option>
+              <option value="mask-subject">Brush subject</option>
+              <option value="mask-background">Brush background</option>
             </select>
           </label>
+          <label>Brush radius <input id="brush-radius" type="number" value="5" min="1" max="128" step="1" /></label>
           <button id="zoom-out" type="button">Zoom out</button>
           <label>Zoom <input id="canvas-zoom" type="range" min="25" max="400" step="25" value="100" /></label>
           <output id="zoom-label">100%</output>

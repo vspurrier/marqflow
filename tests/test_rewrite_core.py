@@ -168,6 +168,15 @@ def test_subject_mask_guides_candidate_generation_and_undo(tmp_path: Path) -> No
     workspace.undo()
     assert workspace.subject_mask_summary()['subject_px'] == 0
 
+    workspace.paint_subject_mask_stroke(
+        [(4.0, 4.0), (20.0, 20.0)],
+        role='subject',
+        brush_radius=2.0,
+    )
+    assert workspace.subject_mask_summary()['subject_px'] > 0
+    workspace.undo()
+    assert workspace.subject_mask_summary()['subject_px'] == 0
+
 
 def test_size_and_veneer_inventory_edits_are_persisted_and_undoable(tmp_path: Path) -> None:
     image_path = tmp_path / 'source.png'

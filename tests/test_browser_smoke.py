@@ -131,6 +131,10 @@ def test_browser_can_create_workspace_from_image(tmp_path: Path) -> None:
             )
             page.click('#mark-subject')
             _wait_for_status(page, 'Marked ')
+            page.select_option('#selection-mode', 'mask-background')
+            _drag_canvas(page, 0.1, 0.2)
+            _wait_for_status(page, 'Painted background mask.')
+            page.select_option('#selection-mode', 'box')
             if page.locator('#selected-veneer option').count() > 1:
                 veneer_id = page.locator('#selected-veneer option').nth(1).get_attribute('value')
                 page.select_option('#selected-veneer', veneer_id)

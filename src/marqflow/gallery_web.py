@@ -124,6 +124,12 @@ class SubjectMaskForRegionsRequest(BaseModel):
     role: str
 
 
+class SubjectMaskStrokeRequest(BaseModel):
+    points: list[tuple[float, float]] = Field(min_length=1)
+    role: str
+    brush_radius: float = Field(default=4.0, gt=0, le=128)
+
+
 class RepairSmallRegionsRequest(BaseModel):
     max_area: float = Field(default=0.05, gt=0)
     max_repairs: int = Field(default=25, ge=1, le=500)
@@ -435,6 +441,19 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
         ws = _load_workspace(workspace_path)
         try:
             ws.set_subject_mask_for_regions(request.region_ids, request.role)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return JSONResponse(ws.summary())
+
+    @app.post('/api/design/subject-mask-stroke')
+    def paint_subject_mask_stroke(request: SubjectMaskStrokeRequest) -> JSONResponse:
+        ws = _load_workspace(workspace_path)
+        try:
+            ws.paint_subject_mask_stroke(
+                request.points,
+                role=request.role,
+                brush_radius=request.brush_radius,
+            )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return JSONResponse(ws.summary())

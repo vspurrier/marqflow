@@ -68,6 +68,7 @@ const el = /** @type {Record<string, any>} */ ({
   designCanvas: document.getElementById('design-canvas'),
   canvasZoom: document.getElementById('canvas-zoom'),
   selectionMode: document.getElementById('selection-mode'),
+  brushRadius: document.getElementById('brush-radius'),
   zoomLabel: document.getElementById('zoom-label'),
   zoomIn: document.getElementById('zoom-in'),
   zoomOut: document.getElementById('zoom-out'),
@@ -420,6 +421,13 @@ function selectionMode() {
   return el.selectionMode.value || 'box';
 }
 
+function maskBrushRole() {
+  const mode = selectionMode();
+  if (mode === 'mask-subject') return 'subject';
+  if (mode === 'mask-background') return 'background';
+  return '';
+}
+
 function drawDesign() {
   const canvas = /** @type {HTMLCanvasElement} */ (el.designCanvas);
   const ctx = canvas.getContext('2d');
@@ -471,8 +479,9 @@ function drawDesign() {
     ctx.setLineDash([]);
   }
   if (lassoPoints.length > 1) {
-    ctx.strokeStyle = '#f4f0dc';
-    ctx.lineWidth = Math.max(1, width / 220);
+    const role = maskBrushRole();
+    ctx.strokeStyle = role === 'subject' ? '#e17e48' : role === 'background' ? '#4682be' : '#f4f0dc';
+    ctx.lineWidth = role ? Number(el.brushRadius.value || 5) * 2 : Math.max(1, width / 220);
     ctx.beginPath();
     ctx.moveTo(lassoPoints[0].x, lassoPoints[0].y);
     for (const point of lassoPoints.slice(1)) {
@@ -834,6 +843,27 @@ async function markSubjectMask(role) {
   render();
 }
 
+async function paintSubjectMaskStroke(points, role) {
+  if (!points.length) return;
+  const response = await fetch('/api/design/subject-mask-stroke', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      points: points.map((point) => [point.x, point.y]),
+      role,
+      brush_radius: Number(el.brushRadius.value || 5),
+    }),
+  });
+  if (!response.ok) {
+    setStatus(await response.text(), true);
+    return;
+  }
+  workspace = await response.json();
+  await loadHitmap();
+  setStatus(`Painted ${role} mask.`);
+  render();
+}
+
 async function applyFocus() {
   const response = await fetch('/api/design/apply-detail-zones', {
     method: 'POST',
@@ -1013,13 +1043,13 @@ el.clearSelection.addEventListener('click', () => {
 el.designCanvas.addEventListener('pointerdown', (event) => {
   dragStart = canvasPoint(event);
   dragCurrent = dragStart;
-  lassoPoints = selectionMode() === 'lasso' && dragStart ? [dragStart] : [];
+  lassoPoints = (selectionMode() === 'lasso' || maskBrushRole()) && dragStart ? [dragStart] : [];
   el.designCanvas.setPointerCapture(event.pointerId);
 });
 el.designCanvas.addEventListener('pointermove', (event) => {
   if (!dragStart) return;
   dragCurrent = canvasPoint(event);
-  if (selectionMode() === 'lasso' && dragCurrent) {
+  if ((selectionMode() === 'lasso' || maskBrushRole()) && dragCurrent) {
     lassoPoints.push(dragCurrent);
   }
   drawDesign();
@@ -1027,6 +1057,15 @@ el.designCanvas.addEventListener('pointermove', (event) => {
 el.designCanvas.addEventListener('pointerup', (event) => {
   if (!dragStart) return;
   const end = canvasPoint(event);
+  const role = maskBrushRole();
+  if (role) {
+    lassoPoints.push(end);
+    void paintSubjectMaskStroke(lassoPoints, role);
+    dragStart = null;
+    dragCurrent = null;
+    lassoPoints = [];
+    return;
+  }
   if (selectionMode() === 'lasso') {
     lassoPoints.push(end);
     selectLasso(lassoPoints, event.shiftKey);
