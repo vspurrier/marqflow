@@ -76,6 +76,7 @@ Implemented now:
 - persisted rectangular detail zones
 - detail zones created from selected regions
 - subject/background mask painted from selected regions
+- subject/background mask overlay on the browser canvas
 - focus-zone-driven local split pass
 - focus-zone-aware candidate generation
 - subject/background-mask-aware candidate generation
@@ -105,8 +106,8 @@ Implemented now:
    Rectangular focus zones can be created from selected regions, applied to
    split intersecting final regions, and used during candidate generation for
    denser local segmentation. A pixel-level subject/background mask can now be
-   painted from selected regions and used during candidate generation. The UI
-   still needs mask overlay visualization and freehand/brush mask painting.
+   painted from selected regions, visualized on the browser canvas, and used
+   during candidate generation. The UI still needs freehand/brush mask painting.
 
 2. Build editable shared-boundary vector geometry.
 

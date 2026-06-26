@@ -82,6 +82,7 @@ interface DesignHitmap {
   width: number;
   height: number;
   labels: number[][];
+  subject_mask: number[][];
 }
 
 interface PackSheet {

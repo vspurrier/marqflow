@@ -380,11 +380,13 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
     def design_hitmap() -> JSONResponse:
         ws = _load_workspace(workspace_path)
         labels = ws.design_labels()
+        subject_mask = ws.subject_mask()
         return JSONResponse(
             {
                 'width': int(labels.shape[1]),
                 'height': int(labels.shape[0]),
                 'labels': labels.astype(int).tolist(),
+                'subject_mask': subject_mask.astype(int).tolist(),
             }
         )
 

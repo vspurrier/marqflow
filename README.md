@@ -83,6 +83,7 @@ The browser UI is deliberately minimal in this rewrite:
 - click or drag-select final regions
 - lasso-select regions with a freehand stroke
 - zoom and scroll-pan the design canvas
+- show a subject/background mask overlay
 - inspect selected internal/external boundary lengths
 - assign veneers to selected final regions
 - merge selected connected regions

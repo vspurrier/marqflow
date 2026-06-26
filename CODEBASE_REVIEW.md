@@ -64,6 +64,7 @@ uv run pytest -q
 - Detail zones can drive bounded local split passes.
 - Pixel-level subject/background mask can be painted from selected regions and
   undone.
+- Browser canvas can show a subject/background mask overlay.
 - Candidate generation can optionally use persisted detail zones for denser
   local source-stage segmentation.
 - Candidate generation can use the subject/background mask to avoid labels that
@@ -108,8 +109,8 @@ uv run pytest -q
    Detail zones can drive local splits after a design exists and can optionally
    refine new candidates with denser local source-stage segmentation. A
    first-class pixel-level subject/background mask exists and can guide
-   candidate generation. The UI still lacks freehand mask painting and mask
-   overlay visualization.
+   candidate generation. The browser can show the mask overlay. The UI still
+   lacks freehand/brush mask painting.
 
 4. Browser selection tooling.
 

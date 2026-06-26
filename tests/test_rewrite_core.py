@@ -456,6 +456,17 @@ def test_api_vertical_slice(tmp_path: Path) -> None:
     assert assign_response.status_code == 200
     assert assign_response.json()['regions'][0]['veneer_id'] == veneer_id
 
+    mask_response = client.post(
+        '/api/design/subject-mask-for-regions',
+        json={'region_ids': [region_id], 'role': 'subject'},
+    )
+    assert mask_response.status_code == 200
+    assert mask_response.json()['subject_mask']['subject_px'] > 0
+
+    hitmap_response = client.get('/api/design/hitmap')
+    assert hitmap_response.status_code == 200
+    assert np.count_nonzero(np.asarray(hitmap_response.json()['subject_mask']) == 1) > 0
+
     svg_response = client.get('/api/design.svg?simplify_tolerance=2')
     assert svg_response.status_code == 200
     assert svg_response.headers['content-type'].startswith('image/svg+xml')

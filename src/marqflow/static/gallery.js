@@ -72,6 +72,7 @@ const el = /** @type {Record<string, any>} */ ({
   zoomIn: document.getElementById('zoom-in'),
   zoomOut: document.getElementById('zoom-out'),
   zoomFit: document.getElementById('zoom-fit'),
+  showMask: document.getElementById('show-mask'),
   selectionStatus: document.getElementById('selection-status'),
   boundarySummary: document.getElementById('boundary-summary'),
   undo: document.getElementById('undo'),
@@ -437,9 +438,17 @@ function drawDesign() {
   const imageData = ctx.getImageData(0, 0, width, height);
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
+      const maskValue = Number(hitmap.subject_mask[y]?.[x] || 0);
       const regionId = Number(hitmap.labels[y]?.[x] || 0);
-      if (!selectedRegionIds.has(regionId)) continue;
       const offset = (y * width + x) * 4;
+      if (el.showMask.checked && maskValue > 0) {
+        const maskColor = maskValue === 1 ? [225, 126, 72] : [70, 130, 190];
+        imageData.data[offset] = Math.round(imageData.data[offset] * 0.55 + maskColor[0] * 0.45);
+        imageData.data[offset + 1] = Math.round(imageData.data[offset + 1] * 0.55 + maskColor[1] * 0.45);
+        imageData.data[offset + 2] = Math.round(imageData.data[offset + 2] * 0.55 + maskColor[2] * 0.45);
+        imageData.data[offset + 3] = 255;
+      }
+      if (!selectedRegionIds.has(regionId)) continue;
       const color = regionColor(regionId);
       imageData.data[offset] = Math.round(imageData.data[offset] * 0.45 + color[0] * 0.55);
       imageData.data[offset + 1] = Math.round(imageData.data[offset + 1] * 0.45 + color[1] * 0.55);
@@ -995,6 +1004,7 @@ el.canvasZoom.addEventListener('input', () => setCanvasZoom(el.canvasZoom.value)
 el.zoomIn.addEventListener('click', () => setCanvasZoom(canvasZoom + 25));
 el.zoomOut.addEventListener('click', () => setCanvasZoom(canvasZoom - 25));
 el.zoomFit.addEventListener('click', () => setCanvasZoom(100));
+el.showMask.addEventListener('change', drawDesign);
 el.clearSelection.addEventListener('click', () => {
   selectedRegionIds.clear();
   updateSelectionStatus();
