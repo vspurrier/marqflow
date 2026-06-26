@@ -160,6 +160,12 @@ def test_browser_can_create_workspace_from_image(tmp_path: Path) -> None:
             assert page.locator('.region').count() < before_merge_count
             page.click('#undo')
             _wait_for_status(page, 'Undid last edit.')
+            with page.expect_popup() as popup:
+                page.click('#view-svg')
+            svg_page = popup.value
+            svg_page.wait_for_load_state()
+            assert '<svg' in svg_page.content()
+            svg_page.close()
             page.click('#pack')
             _wait_for_status(page, 'Pack manifest written')
             assert page.locator('.pack-card').count() >= 1

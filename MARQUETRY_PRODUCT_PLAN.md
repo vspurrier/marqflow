@@ -89,6 +89,7 @@ Implemented now:
   pack summary generation
 - browser smoke test for zoom controls, lasso selection, box selection, and
   merge/undo
+- browser smoke test for SVG preview generation
 - minimal browser UI
 
 ## Next Milestones
@@ -135,7 +136,8 @@ Implemented now:
    API/core tests cover the model. A browser smoke test covers image upload,
    candidate-grid generation, design seeding, canvas selection, selected veneer
    assignment, undo, pack summary generation, zoom, lasso selection, box
-   selection, and merge/undo. Add coverage for SVG preview.
+   selection, merge/undo, and SVG preview. Broader visual regression and
+   multi-browser coverage are future hardening work.
 
 ## Non-Goals For This Branch
 
