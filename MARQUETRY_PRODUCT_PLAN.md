@@ -97,6 +97,8 @@ Implemented now:
 - topology-safe selected-boundary vector simplification
 - topology-safe single-vertex movement
 - direct browser canvas handles for dragging topology vertices
+- snapping, image-bound clamping, hover labels, and no-op rejection for direct
+  vertex dragging
 - SVG reconstruction from persisted graph linework
 - API and CLI access for graph persistence, simplification, loading, and
   reconstructed graph SVG export
@@ -148,8 +150,10 @@ Implemented now:
    coverage-safe exports persist artifact metadata. Topology graphs can now be
    persisted, simplified into undoable vector artifacts, reconstructed into
    filled SVG, promoted as active output geometry, edited with validated
-   single-vertex moves, and dragged with browser canvas handles. Next
-   improvement: snapping, boundary-level handles, and preview/accept flows.
+   single-vertex moves, and dragged with browser canvas handles. Direct dragging
+   now snaps to the image grid, clamps to the design bounds, labels hovered
+   vertices, and rejects no-op moves. Next improvement: boundary-level handles
+   and preview/accept flows.
 
 3. Add cleanup operations on top of shared boundaries.
 
@@ -161,9 +165,8 @@ Implemented now:
    regions can drive vector-edge simplification, individual vertices can be
    moved with topology validation, direct handles can drag vertices, promoted
    graph geometry drives SVG/pack output, and cuttability cleanup combines the
-   conservative repair passes. Needed operations: snapping constraints,
-   smoother curve cleanup, and explicit preview/accept UI for larger graph
-   mutations.
+   conservative repair passes. Needed operations: smoother curve cleanup and
+   explicit preview/accept UI for larger graph mutations.
 
 4. Deepen veneer inventory logic.
 

@@ -78,24 +78,39 @@ def _drag_first_vector_handle(page: Page) -> None:
         "() => fetch('/api/design/topology/edit-layer').then(response => response.json())"
     )
     vertices = layer.get('vertices') or []
+    edges = layer.get('edges') or []
     if not vertices:
         raise AssertionError('no topology vertices available')
     canvas_width = page.locator('#design-canvas').evaluate('node => node.width')
     canvas_height = page.locator('#design-canvas').evaluate('node => node.height')
+    vertex_use_count = {}
+    for edge in edges:
+        for vertex_id in edge.get('vertex_ids') or []:
+            vertex_use_count[vertex_id] = vertex_use_count.get(vertex_id, 0) + 1
     vertex = next(
         (
             item
             for item in vertices
             if 0 < item['point'][0] < canvas_width and 0 < item['point'][1] < canvas_height
+            and vertex_use_count.get(item['vertex_id'], 0) >= 3
         ),
-        vertices[0],
+        None,
     )
+    if vertex is None:
+        vertex = next(
+            (
+                item
+                for item in vertices
+                if 0 < item['point'][0] < canvas_width and 0 < item['point'][1] < canvas_height
+            ),
+            vertices[0],
+        )
     start = {
         'x': box['width'] * vertex['point'][0] / canvas_width,
         'y': box['height'] * vertex['point'][1] / canvas_height,
     }
     end = {
-        'x': min(box['width'] - 1, start['x'] + max(3, box['width'] / canvas_width)),
+        'x': min(box['width'] - 1, start['x'] + max(4, box['width'] / canvas_width)),
         'y': start['y'],
     }
     canvas.hover(position=start)

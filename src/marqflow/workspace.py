@@ -1719,13 +1719,30 @@ class MarquetryWorkspace:
         source = source_kind or self.design.active_vector_graph_kind or 'raster_topology'
         source_payload = self.vector_graph_payload(source)
         labels = self.design_labels()
+        clamped_point = (
+            max(0.0, min(float(point[0]), float(labels.shape[1]))),
+            max(0.0, min(float(point[1]), float(labels.shape[0]))),
+        )
         graph = move_topology_vertex(
             source_payload['graph'],
             vertex_id=int(vertex_id),
-            point=point,
+            point=clamped_point,
             physical_size=self.design.physical_size,
             image_size=(labels.shape[1], labels.shape[0]),
         )
+        original_vertex = next(
+            (
+                vertex
+                for vertex in source_payload['graph']['vertices']
+                if int(vertex['vertex_id']) == int(vertex_id)
+            ),
+            None,
+        )
+        if original_vertex and [
+            float(original_vertex['point'][0]),
+            float(original_vertex['point'][1]),
+        ] == [clamped_point[0], clamped_point[1]]:
+            raise ValueError('vertex did not move')
         op_id = self._next_op_id()
         previous_payload_path, previous_artifact = self._snapshot_vector_artifact(
             target_kind,
@@ -1738,7 +1755,7 @@ class MarquetryWorkspace:
             'source': 'move_topology_vertex',
             'source_kind': source,
             'vertex_id': int(vertex_id),
-            'point': [float(point[0]), float(point[1])],
+            'point': [clamped_point[0], clamped_point[1]],
             'physical_size': self.design.physical_size.to_dict(),
             'graph': graph,
         }

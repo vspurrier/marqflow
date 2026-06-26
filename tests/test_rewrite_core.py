@@ -454,6 +454,33 @@ def test_topology_safe_vertex_move_is_undoable(tmp_path: Path) -> None:
     workspace.undo()
     assert workspace.summary()['design']['active_vector_graph_kind'] is None
 
+    try:
+        workspace.move_vector_vertex(center['vertex_id'], (24, 24))
+    except ValueError as exc:
+        assert 'did not move' in str(exc)
+    else:
+        raise AssertionError('no-op vertex move should fail')
+
+
+def test_vector_vertex_move_is_clamped_to_design_bounds(tmp_path: Path) -> None:
+    image_path = tmp_path / 'source.png'
+    _fixture_image(image_path)
+    workspace = MarquetryWorkspace.create(image_path, tmp_path / 'workspace', max_edge=64)
+    candidate = workspace.generate_candidate(target_regions=4, compactness=8.0)
+    workspace.create_design(candidate.candidate_id, PhysicalSize(width=8, height=8, unit='in'))
+    workspace._write_design_labels(_four_region_labels())
+    workspace.save()
+
+    graph = workspace.persist_topology_graph()['graph']
+    corner = next(vertex for vertex in graph['vertices'] if vertex['point'] == [0, 0])
+
+    try:
+        workspace.move_vector_vertex(corner['vertex_id'], (-5, -3))
+    except ValueError as exc:
+        assert 'did not move' in str(exc)
+    else:
+        raise AssertionError('clamped no-op corner move should fail')
+
 
 def test_vector_edit_layer_and_cuttability_cleanup(tmp_path: Path) -> None:
     image_path = tmp_path / 'source.png'

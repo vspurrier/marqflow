@@ -17,6 +17,8 @@ let dragCurrent = null;
 let lassoPoints = [];
 /** @type {{vertexId: number, start: {x: number, y: number}, current: {x: number, y: number}} | null} */
 let activeVertexDrag = null;
+/** @type {TopologyVertex | null} */
+let hoveredVertex = null;
 let canvasZoom = 100;
 
 const el = /** @type {Record<string, any>} */ ({
@@ -78,6 +80,7 @@ const el = /** @type {Record<string, any>} */ ({
   vectorKind: document.getElementById('vector-kind'),
   vectorPromote: document.getElementById('vector-promote'),
   viewGraphSvg: document.getElementById('view-graph-svg'),
+  snapVertices: document.getElementById('snap-vertices'),
   vertexId: document.getElementById('vertex-id'),
   vertexX: document.getElementById('vertex-x'),
   vertexY: document.getElementById('vertex-y'),
@@ -428,6 +431,24 @@ function canvasPoint(event) {
   };
 }
 
+function clampCanvasPoint(point) {
+  const width = hitmap?.width || 1;
+  const height = hitmap?.height || 1;
+  return {
+    x: Math.max(0, Math.min(width, point.x)),
+    y: Math.max(0, Math.min(height, point.y)),
+  };
+}
+
+function snappedCanvasPoint(point) {
+  const clamped = clampCanvasPoint(point);
+  if (!el.snapVertices.checked) return clamped;
+  return {
+    x: Math.round(clamped.x),
+    y: Math.round(clamped.y),
+  };
+}
+
 function labelAt(point) {
   if (!hitmap) return 0;
   const x = Math.max(0, Math.min(hitmap.width - 1, point.x));
@@ -580,13 +601,29 @@ function drawDesign() {
     for (const vertex of topologyEditLayer.vertices) {
       const [x, y] = vertex.point;
       const isActive = activeVertexDrag?.vertexId === vertex.vertex_id;
+      const isHovered = hoveredVertex?.vertex_id === vertex.vertex_id;
       const drawPoint = isActive ? activeVertexDrag.current : {x, y};
-      ctx.fillStyle = isActive ? '#e17e48' : '#f4f0dc';
+      ctx.fillStyle = isActive ? '#e17e48' : isHovered ? '#f7c873' : '#f4f0dc';
       ctx.strokeStyle = '#10232a';
       ctx.beginPath();
-      ctx.arc(drawPoint.x, drawPoint.y, Math.max(2, width / 180), 0, Math.PI * 2);
+      ctx.arc(
+        drawPoint.x,
+        drawPoint.y,
+        Math.max(isHovered || isActive ? 3 : 2, width / 180),
+        0,
+        Math.PI * 2,
+      );
       ctx.fill();
       ctx.stroke();
+      if (isHovered || isActive) {
+        ctx.font = `${Math.max(8, width / 55)}px sans-serif`;
+        ctx.fillStyle = '#10232a';
+        ctx.fillText(
+          `v${vertex.vertex_id} ${Math.round(drawPoint.x)},${Math.round(drawPoint.y)}`,
+          drawPoint.x + 5,
+          drawPoint.y - 5,
+        );
+      }
     }
     ctx.restore();
   }
@@ -1153,12 +1190,16 @@ async function moveVectorVertex() {
     setStatus('Enter a vector vertex ID to move.', true);
     return;
   }
+  const point = snappedCanvasPoint({
+    x: Number(el.vertexX.value || 0),
+    y: Number(el.vertexY.value || 0),
+  });
   const response = await fetch('/api/design/topology/move-vertex', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
       vertex_id: vertexId,
-      point: [Number(el.vertexX.value || 0), Number(el.vertexY.value || 0)],
+      point: [point.x, point.y],
       source_kind: workspace?.design?.active_vector_graph_kind || null,
       target_kind: 'edited_topology',
     }),
@@ -1170,7 +1211,7 @@ async function moveVectorVertex() {
   workspace = await response.json();
   await loadHitmap();
   await loadTopologyEditLayer();
-  setStatus(`Moved vector vertex ${vertexId}.`);
+  setStatus(`Moved vector vertex ${vertexId} to ${point.x}, ${point.y}.`);
   render();
 }
 
@@ -1187,6 +1228,7 @@ async function applySuggestions() {
   workspace = await response.json();
   selectedRegionIds.clear();
   await loadHitmap();
+  await loadTopologyEditLayer();
   setStatus(`Applied ${workspace.applied_merge_count || 0} merge suggestion(s).`);
   render();
 }
@@ -1200,6 +1242,7 @@ async function undo() {
   workspace = await response.json();
   selectedRegionIds.clear();
   await loadHitmap();
+  await loadTopologyEditLayer();
   setStatus('Undid last edit.');
   render();
 }
@@ -1297,6 +1340,7 @@ el.zoomIn.addEventListener('click', () => setCanvasZoom(canvasZoom + 25));
 el.zoomOut.addEventListener('click', () => setCanvasZoom(canvasZoom - 25));
 el.zoomFit.addEventListener('click', () => setCanvasZoom(100));
 el.showMask.addEventListener('change', drawDesign);
+el.snapVertices.addEventListener('change', drawDesign);
 el.clearSelection.addEventListener('click', () => {
   selectedRegionIds.clear();
   updateSelectionStatus();
@@ -1313,9 +1357,11 @@ el.designCanvas.addEventListener('pointerdown', (event) => {
         start: {x: vertex.point[0], y: vertex.point[1]},
         current: {x: vertex.point[0], y: vertex.point[1]},
       };
+      hoveredVertex = vertex;
       el.vertexId.value = String(vertex.vertex_id);
       el.vertexX.value = String(vertex.point[0]);
       el.vertexY.value = String(vertex.point[1]);
+      setStatus(`Dragging vertex ${vertex.vertex_id}.`);
       el.designCanvas.setPointerCapture(event.pointerId);
       drawDesign();
       return;
@@ -1328,9 +1374,9 @@ el.designCanvas.addEventListener('pointermove', (event) => {
   if (!dragStart) return;
   dragCurrent = canvasPoint(event);
   if (activeVertexDrag && dragCurrent) {
-    activeVertexDrag.current = dragCurrent;
-    el.vertexX.value = String(dragCurrent.x);
-    el.vertexY.value = String(dragCurrent.y);
+    activeVertexDrag.current = snappedCanvasPoint(dragCurrent);
+    el.vertexX.value = String(activeVertexDrag.current.x);
+    el.vertexY.value = String(activeVertexDrag.current.y);
     drawDesign();
     return;
   }
@@ -1344,13 +1390,24 @@ el.designCanvas.addEventListener('pointerup', (event) => {
   const end = canvasPoint(event);
   if (activeVertexDrag) {
     const vertexId = activeVertexDrag.vertexId;
+    const snapped = snappedCanvasPoint(end);
+    const didMove =
+      Math.hypot(
+        snapped.x - activeVertexDrag.start.x,
+        snapped.y - activeVertexDrag.start.y,
+      ) >= 0.5;
     el.vertexId.value = String(vertexId);
-    el.vertexX.value = String(end.x);
-    el.vertexY.value = String(end.y);
+    el.vertexX.value = String(snapped.x);
+    el.vertexY.value = String(snapped.y);
     activeVertexDrag = null;
     dragStart = null;
     dragCurrent = null;
-    void moveVectorVertex();
+    if (didMove) {
+      void moveVectorVertex();
+    } else {
+      setStatus(`Selected vertex ${vertexId}.`);
+      drawDesign();
+    }
     return;
   }
   const role = maskBrushRole();
@@ -1391,6 +1448,17 @@ el.designCanvas.addEventListener('pointerup', (event) => {
   selectRect(dragStart, end, event.shiftKey);
   dragStart = null;
   dragCurrent = null;
+});
+el.designCanvas.addEventListener('pointermove', (event) => {
+  if (dragStart || !vectorEditMode()) return;
+  hoveredVertex = nearestVertex(canvasPoint(event));
+  drawDesign();
+});
+el.designCanvas.addEventListener('pointerleave', () => {
+  if (!dragStart) {
+    hoveredVertex = null;
+    drawDesign();
+  }
 });
 el.undo.addEventListener('click', undo);
 el.viewSvg.addEventListener('click', () => {
