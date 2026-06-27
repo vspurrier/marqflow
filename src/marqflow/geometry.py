@@ -627,6 +627,49 @@ def simplify_topology_edges(
     return reindex_topology_graph(edited, physical_size, image_size)
 
 
+def smooth_topology_edges(
+    graph: dict[str, Any],
+    edge_ids: set[int],
+    strength: float,
+    iterations: int,
+    physical_size: PhysicalSize,
+    image_size: tuple[int, int],
+) -> dict[str, Any]:
+    """Smooth selected graph edges by relaxing internal vertices only."""
+
+    edited = json_safe_graph(graph)
+    selected = {int(edge_id) for edge_id in edge_ids}
+    amount = max(0.0, min(float(strength), 1.0))
+    passes = max(1, int(iterations))
+    for edge in edited['edges']:
+        if int(edge['edge_id']) not in selected:
+            continue
+        path = [[float(x), float(y)] for x, y in edge['path']]
+        if len(path) <= 2 or amount <= 0:
+            edge['path'] = path
+            continue
+        for _ in range(passes):
+            next_path = [path[0]]
+            for index in range(1, len(path) - 1):
+                previous_point = path[index - 1]
+                point = path[index]
+                next_point = path[index + 1]
+                relaxed = [
+                    (previous_point[0] + next_point[0]) / 2,
+                    (previous_point[1] + next_point[1]) / 2,
+                ]
+                next_path.append(
+                    [
+                        point[0] * (1 - amount) + relaxed[0] * amount,
+                        point[1] * (1 - amount) + relaxed[1] * amount,
+                    ]
+                )
+            next_path.append(path[-1])
+            path = next_path
+        edge['path'] = path
+    return reindex_topology_graph(edited, physical_size, image_size)
+
+
 def json_safe_graph(graph: dict[str, Any]) -> dict[str, Any]:
     """Round-trip a graph through plain JSON-compatible objects."""
 

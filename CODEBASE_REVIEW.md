@@ -58,6 +58,8 @@ uv run pytest -q
 - Physical-area sliver repair that respects locks.
 - Raster boundary smoothing that validates the puzzle invariant before saving.
 - Selected-region raster smoothing from the browser canvas selection.
+- Boundary-notch cleanup that removes tiny jagged protrusions with validation
+  and undo support.
 - Final label hitmap API and canvas click/drag selection.
 - Canvas zoom controls with scroll-based panning.
 - Freehand lasso selection by sampled stroke.
@@ -104,6 +106,10 @@ uv run pytest -q
   explicit accept/cancel controls before committing the topology edit.
 - Individual shared boundaries can be simplified directly from the selected
   boundary summary without selecting all touching regions.
+- Vector simplification can be previewed before saving, reporting validation
+  status and vertex reduction.
+- Browser vector mode supports selecting explicit graph edges and smoothing
+  selected edges or one selected boundary through topology-validated edits.
 - Browser controls expose vector simplification, selected-boundary vector
   cleanup, graph promotion, graph SVG preview, direct vertex dragging, and
   fallback vertex movement by ID.
@@ -115,13 +121,15 @@ uv run pytest -q
 - Browser endpoints and CLI commands exist for topology persistence,
   simplification, graph loading, graph promotion, graph-SVG export, and vertex
   movement.
-- Shapely polygon-aware shelf pack manifest grouped by veneer.
+- Shapely polygon-aware rotation-capable shelf pack manifest grouped by veneer.
 - Pack manifest includes each piece's physical contour, SVG path, placement,
   transformed placed contour, and transformed placed SVG path.
 - Browser pack summary with placed/unplaced counts and stock warnings.
 - Pack manifest includes recommended sheet counts, stock shortfall, area totals,
   and bounding-box material utilization by veneer.
 - Browser pack output is constrained to the configured workspace root.
+- Browser canvas raster overlays are cached so vector dragging and linework
+  redraws avoid recomputing every image pixel on each pointer move.
 - Browser smoke test for creating a workspace, generating a candidate grid, and
   seeding the design from a candidate.
 - Browser smoke test for canvas selection, selected veneer assignment, undo, and
@@ -153,19 +161,22 @@ uv run pytest -q
    clamping, hover labels, no-op rejection, and preview validation before save.
    Browser vertex dragging now previews the proposed linework graphically and
    requires accept/cancel before save. Individual shared-boundary simplification
-   is available from boundary cards. The remaining gap is richer handle tooling:
-   edge handles, curve/spline editing, multi-vertex selection, and clearer
-   before/after previews for batch simplification operations.
+   is available from boundary cards. Vector mode can select graph edges and
+   smooth selected edges or one boundary through topology validation. The
+   remaining gap is richer handle tooling: true curve/spline editing,
+   multi-vertex transforms, and graphical before/after previews for every batch
+   mutation, not just vertex movement.
 
 2. Real cleanup tools beyond merge.
 
    Merge, targeted split, lock/unlock, physical-area sliver repair, raster
-   smoothing, selected-region smoothing, selected-boundary inspection, bounded
-   auto-merge, vector-graph simplification, selected-boundary vector
-   simplification, graph SVG reconstruction, graph promotion, vertex dragging,
-   combined cuttability cleanup, and undo now exist. Remaining cleanup depth:
-   true curve/spline smoothing, constrained snapping, batch vertex
-   simplification previews, and more usable visual editing affordances.
+   smoothing, selected-region smoothing, boundary-notch removal,
+   selected-boundary inspection, bounded auto-merge, vector-graph
+   simplification, selected-boundary vector simplification, graph SVG
+   reconstruction, graph promotion, edge smoothing, vertex dragging, combined
+   cuttability cleanup, and undo now exist. Remaining cleanup depth: true
+   curve/spline smoothing, constrained snapping, stronger tiny-piece decision
+   tooling, and more usable visual editing affordances.
 
 3. Subject/detail logic.
 
@@ -194,11 +205,11 @@ uv run pytest -q
 6. Real packing/nesting.
 
    Packing now uses a Shapely-backed polygon shelf adapter. It places true
-   physical contours, collision-checks placed polygons, and emits transformed
-   tracing contours. This is a real contour-aware baseline, but it is not yet an
-   optimized irregular nester: it does not rotate pieces, search alternate
-   orientations, exploit concavities, or minimize waste beyond simple shelf
-   placement.
+   physical contours, collision-checks placed polygons, tries rotated
+   orientations when grain settings allow, and emits transformed tracing
+   contours. This is a real contour-aware baseline, but it is not yet an
+   optimized irregular nester: it does not exploit concavities, optimize across
+   row/sheet choices deeply, or minimize waste beyond simple shelf placement.
 
 7. TypeScript migration.
 

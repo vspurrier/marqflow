@@ -88,7 +88,7 @@ def test_workspace_creates_valid_design_and_exports(tmp_path: Path) -> None:
     assert reloaded_after_coverage.cleanup_report()['vector_exports'][0]['coverage_valid'] is True
 
     manifest = workspace.pack(tmp_path / 'packed')
-    assert manifest['packing_backend'] == 'shapely-polygon-shelf'
+    assert manifest['packing_backend'] == 'shapely-polygon-shelf-rotating'
     assert manifest['sheets']
     assert 'placement' in manifest['sheets'][0]['pieces'][0]
     assert manifest['sheets'][0]['pieces'][0]['physical_contour']
@@ -454,6 +454,31 @@ def test_boundary_specific_vector_simplification_is_undoable(tmp_path: Path) -> 
     assert workspace.summary()['design']['active_vector_graph_kind'] is None
 
 
+def test_vector_simplification_preview_and_smoothing_are_valid(tmp_path: Path) -> None:
+    image_path = tmp_path / 'source.png'
+    _fixture_image(image_path)
+    workspace = MarquetryWorkspace.create(image_path, tmp_path / 'workspace', max_edge=64)
+    candidate = workspace.generate_candidate(target_regions=4, compactness=8.0)
+    workspace.create_design(candidate.candidate_id, PhysicalSize(width=8, height=8, unit='in'))
+    workspace._write_design_labels(_four_region_labels())
+    workspace.save()
+
+    preview = workspace.preview_vector_simplification(
+        tolerance=2.0,
+        boundary=(1, 2),
+    )
+    assert preview['valid'] is True
+    assert preview['edge_ids']
+    assert preview['after_vertex_count'] <= preview['before_vertex_count']
+
+    smoothed = workspace.smooth_vector_boundary(1, 2, strength=0.4, iterations=2)
+
+    assert smoothed['graph_validation']['valid'] is True
+    assert workspace.summary()['design']['active_vector_graph_kind'] == 'edited_topology'
+    workspace.undo()
+    assert workspace.summary()['design']['active_vector_graph_kind'] is None
+
+
 def test_topology_safe_vertex_move_is_undoable(tmp_path: Path) -> None:
     image_path = tmp_path / 'source.png'
     _fixture_image(image_path)
@@ -536,6 +561,72 @@ def test_vector_edit_layer_and_cuttability_cleanup(tmp_path: Path) -> None:
 
     assert result['repaired_region_count'] >= 1
     assert workspace.summary()['validation']['valid'] is True
+
+
+def test_remove_boundary_notches_is_undoable(tmp_path: Path) -> None:
+    image_path = tmp_path / 'source.png'
+    _fixture_image(image_path)
+    workspace = MarquetryWorkspace.create(image_path, tmp_path / 'workspace', max_edge=64)
+    candidate = workspace.generate_candidate(target_regions=4, compactness=8.0)
+    workspace.create_design(candidate.candidate_id, PhysicalSize(width=8, height=8, unit='in'))
+    labels = _four_region_labels()
+    labels[10, 24] = 1
+    workspace._write_design_labels(labels)
+    workspace.save()
+
+    changed = workspace.remove_boundary_notches(iterations=1, min_neighbor_votes=5)
+
+    assert changed >= 1
+    assert workspace.design_labels()[10, 24] == 2
+    assert workspace.summary()['validation']['valid'] is True
+    workspace.undo()
+    assert workspace.design_labels()[10, 24] == 1
+
+
+def test_pack_rotates_polygon_when_grain_allows(tmp_path: Path) -> None:
+    image_path = tmp_path / 'source.png'
+    _fixture_image(image_path)
+    workspace = MarquetryWorkspace.create(image_path, tmp_path / 'workspace', max_edge=64)
+    candidate = workspace.generate_candidate(target_regions=2, compactness=8.0)
+    workspace.create_design(candidate.candidate_id, PhysicalSize(width=8, height=8, unit='in'))
+    labels = np.zeros((48, 48), dtype=np.int32)
+    labels[:, :12] = 1
+    labels[:, 12:] = 2
+    workspace._write_design_labels(labels)
+    workspace.replace_veneers(
+        [
+            Veneer(
+                'maple',
+                'Maple',
+                (225, 205, 165),
+                sheet_width=8,
+                sheet_height=2.5,
+                sheet_count=1,
+            ),
+            Veneer(
+                'walnut',
+                'Walnut',
+                (80, 55, 38),
+                sheet_width=8,
+                sheet_height=8,
+                sheet_count=1,
+            ),
+        ]
+    )
+    workspace.design.veneer_assignments = {1: 'maple', 2: 'walnut'}
+    workspace.save()
+
+    manifest = workspace.pack(tmp_path / 'rotated-pack')
+    maple_piece = next(
+        piece
+        for sheet in manifest['sheets']
+        if sheet['veneer_id'] == 'maple'
+        for piece in sheet['pieces']
+    )
+
+    assert manifest['packing_backend'] == 'shapely-polygon-shelf-rotating'
+    assert maple_piece['packed'] is True
+    assert maple_piece['placement']['rotation'] in {90, 270}
 
 
 def test_split_and_lock_are_undoable(tmp_path: Path) -> None:

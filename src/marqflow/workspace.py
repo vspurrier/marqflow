@@ -36,6 +36,7 @@ from .geometry import (
     shared_boundary_paths,
     simplify_topology_edges,
     simplify_topology_graph,
+    smooth_topology_edges,
     validate_topology_graph,
 )
 from .models import (
@@ -1360,6 +1361,92 @@ class MarquetryWorkspace:
         self.save()
         return changed_total
 
+    def remove_boundary_notches(
+        self,
+        iterations: int = 1,
+        region_ids: list[int] | set[int] | None = None,
+        min_neighbor_votes: int = 5,
+    ) -> int:
+        """Remove tiny jagged protrusions while preserving a valid partition."""
+
+        if self.design is None:
+            raise ValueError('create a design first')
+        labels_before = self.design_labels()
+        labels_after = labels_before.copy()
+        locked_ids = set(self.design.locked_region_ids)
+        selected_region_ids = {int(region_id) for region_id in region_ids or []}
+        if selected_region_ids:
+            missing = sorted(selected_region_ids - self._current_region_ids())
+            if missing:
+                raise ValueError(f'unknown region ids: {missing}')
+        changed_total = 0
+        votes_needed = max(3, min(8, int(min_neighbor_votes)))
+
+        for _ in range(max(1, int(iterations))):
+            candidate = labels_after.copy()
+            changed = 0
+            for y in range(1, labels_after.shape[0] - 1):
+                for x in range(1, labels_after.shape[1] - 1):
+                    current = int(labels_after[y, x])
+                    if current in locked_ids:
+                        continue
+                    if selected_region_ids and current not in selected_region_ids:
+                        continue
+                    neighbors = [
+                        int(labels_after[y - 1, x - 1]),
+                        int(labels_after[y - 1, x]),
+                        int(labels_after[y - 1, x + 1]),
+                        int(labels_after[y, x - 1]),
+                        int(labels_after[y, x + 1]),
+                        int(labels_after[y + 1, x - 1]),
+                        int(labels_after[y + 1, x]),
+                        int(labels_after[y + 1, x + 1]),
+                    ]
+                    counts = {
+                        neighbor: neighbors.count(neighbor)
+                        for neighbor in set(neighbors)
+                        if neighbor != current and neighbor not in locked_ids
+                    }
+                    if not counts:
+                        continue
+                    winner, count = max(counts.items(), key=lambda item: item[1])
+                    if count >= votes_needed:
+                        candidate[y, x] = winner
+                        changed += 1
+            if changed == 0:
+                break
+            validation = partition_validation(candidate)
+            if not validation['valid']:
+                break
+            labels_after = candidate
+            changed_total += changed
+
+        if changed_total == 0:
+            return 0
+        op_id = self._next_op_id()
+        previous_labels_path = self._snapshot_labels(op_id)
+        self._write_design_labels(labels_after)
+        self.design.edit_history.append(
+            EditOperation(
+                op_id=op_id,
+                kind='smooth_boundaries',
+                payload={
+                    'operation': 'remove_boundary_notches',
+                    'iterations': int(iterations),
+                    'region_ids': sorted(selected_region_ids),
+                    'changed_px': changed_total,
+                    'previous_labels_path': previous_labels_path,
+                    'previous_veneer_assignments': {
+                        str(region_id): veneer_id
+                        for region_id, veneer_id in sorted(self.design.veneer_assignments.items())
+                    },
+                    'previous_locked_region_ids': sorted(self.design.locked_region_ids),
+                },
+            )
+        )
+        self.save()
+        return changed_total
+
     def regions(self) -> list[dict[str, Any]]:
         if self.design is None:
             return []
@@ -1575,6 +1662,44 @@ class MarquetryWorkspace:
             return str(snapshot_path), artifact.to_dict()
         return None, None
 
+    def _persist_vector_edit(
+        self,
+        payload: dict[str, Any],
+        target_kind: str,
+        operation: str,
+        source_kind: str,
+        op_id: int | None = None,
+    ) -> dict[str, Any]:
+        """Persist a validated vector edit and make it active."""
+
+        if self.design is None:
+            raise ValueError('create a design first')
+        next_op_id = op_id or self._next_op_id()
+        previous_payload_path, previous_artifact = self._snapshot_vector_artifact(
+            target_kind,
+            next_op_id,
+        )
+        previous_active_kind = self.design.active_vector_graph_kind
+        self._write_vector_graph_payload(payload, target_kind)
+        self.design.active_vector_graph_kind = target_kind
+        self.design.edit_history.append(
+            EditOperation(
+                op_id=next_op_id,
+                kind='edit_vector_graph',
+                payload={
+                    'operation': operation,
+                    'source_kind': source_kind,
+                    'target_kind': target_kind,
+                    'target_path': str(Path(VECTOR_DIR) / f'{target_kind}.json'),
+                    'previous_payload_path': previous_payload_path,
+                    'previous_artifact': previous_artifact,
+                    'previous_active_vector_graph_kind': previous_active_kind,
+                },
+            )
+        )
+        self.save()
+        return payload
+
     def simplify_vector_graph(
         self,
         tolerance: float = 1.25,
@@ -1778,6 +1903,158 @@ class MarquetryWorkspace:
         )
         self.save()
         return payload
+
+    def _edge_ids_for_boundary(
+        self,
+        graph: dict[str, Any],
+        region_a: int,
+        region_b: int,
+    ) -> set[int]:
+        pair = tuple(sorted((int(region_a), int(region_b))))
+        return {
+            int(edge['edge_id'])
+            for edge in graph['edges']
+            if tuple(sorted((int(edge['region_a']), int(edge['region_b'])))) == pair
+        }
+
+    def preview_vector_simplification(
+        self,
+        tolerance: float = 1.25,
+        region_ids: list[int] | set[int] | None = None,
+        boundary: tuple[int, int] | None = None,
+        source_kind: str | None = None,
+    ) -> dict[str, Any]:
+        """Validate a graph simplification without saving it."""
+
+        if self.design is None:
+            raise ValueError('create a design first')
+        source = source_kind or self.design.active_vector_graph_kind or 'raster_topology'
+        source_payload = self.vector_graph_payload(source)
+        graph = source_payload['graph']
+        if boundary is not None:
+            edge_ids = self._edge_ids_for_boundary(graph, boundary[0], boundary[1])
+            target = f'boundary {boundary[0]}-{boundary[1]}'
+        elif region_ids:
+            selected = {int(region_id) for region_id in region_ids}
+            edge_ids = {
+                int(edge['edge_id'])
+                for edge in graph['edges']
+                if int(edge['region_a']) in selected or int(edge['region_b']) in selected
+            }
+            target = f'{len(selected)} selected region(s)'
+        else:
+            edge_ids = {int(edge['edge_id']) for edge in graph['edges']}
+            target = 'all boundaries'
+        if not edge_ids:
+            raise ValueError('no matching vector edges')
+        labels = self.design_labels()
+        edited_graph = simplify_topology_edges(
+            graph,
+            edge_ids=edge_ids,
+            tolerance=max(0.0, float(tolerance)),
+            physical_size=self.design.physical_size,
+            image_size=(labels.shape[1], labels.shape[0]),
+        )
+        validation = validate_topology_graph(
+            edited_graph,
+            labels,
+            self.design.physical_size,
+        )
+        before_vertices = sum(
+            len(edge['path'])
+            for edge in graph['edges']
+            if int(edge['edge_id']) in edge_ids
+        )
+        after_vertices = sum(
+            len(edge['path'])
+            for edge in edited_graph['edges']
+            if int(edge['edge_id']) in edge_ids
+        )
+        return {
+            'valid': bool(validation['valid']),
+            'source_kind': source,
+            'target': target,
+            'edge_ids': sorted(edge_ids),
+            'tolerance': max(0.0, float(tolerance)),
+            'before_vertex_count': before_vertices,
+            'after_vertex_count': after_vertices,
+            'vertex_reduction': max(0, before_vertices - after_vertices),
+            'graph_validation': validation,
+        }
+
+    def smooth_vector_edges(
+        self,
+        edge_ids: list[int] | set[int],
+        strength: float = 0.35,
+        iterations: int = 2,
+        source_kind: str | None = None,
+        target_kind: str = 'edited_topology',
+    ) -> dict[str, Any]:
+        """Smooth explicit vector edges as an undoable topology edit."""
+
+        if self.design is None:
+            raise ValueError('create a design first')
+        selected_edge_ids = {int(edge_id) for edge_id in edge_ids}
+        if not selected_edge_ids:
+            raise ValueError('choose at least one vector edge')
+        source = source_kind or self.design.active_vector_graph_kind or 'raster_topology'
+        source_payload = self.vector_graph_payload(source)
+        known_edge_ids = {int(edge['edge_id']) for edge in source_payload['graph']['edges']}
+        missing = sorted(selected_edge_ids - known_edge_ids)
+        if missing:
+            raise ValueError(f'unknown edge ids: {missing}')
+        labels = self.design_labels()
+        graph = smooth_topology_edges(
+            source_payload['graph'],
+            edge_ids=selected_edge_ids,
+            strength=strength,
+            iterations=iterations,
+            physical_size=self.design.physical_size,
+            image_size=(labels.shape[1], labels.shape[0]),
+        )
+        payload = {
+            'schema_version': 1,
+            'kind': target_kind,
+            'source': 'smooth_topology_edges',
+            'source_kind': source,
+            'edge_ids': sorted(selected_edge_ids),
+            'strength': max(0.0, min(float(strength), 1.0)),
+            'iterations': max(1, int(iterations)),
+            'physical_size': self.design.physical_size.to_dict(),
+            'graph': graph,
+        }
+        return self._persist_vector_edit(
+            payload,
+            target_kind=target_kind,
+            operation='smooth_edges',
+            source_kind=source,
+        )
+
+    def smooth_vector_boundary(
+        self,
+        region_a: int,
+        region_b: int,
+        strength: float = 0.35,
+        iterations: int = 2,
+        source_kind: str | None = None,
+        target_kind: str = 'edited_topology',
+    ) -> dict[str, Any]:
+        """Smooth one shared boundary as an undoable topology edit."""
+
+        if self.design is None:
+            raise ValueError('create a design first')
+        source = source_kind or self.design.active_vector_graph_kind or 'raster_topology'
+        source_payload = self.vector_graph_payload(source)
+        edge_ids = self._edge_ids_for_boundary(source_payload['graph'], region_a, region_b)
+        if not edge_ids:
+            raise ValueError(f'boundary {region_a}-{region_b} has no vector edges')
+        return self.smooth_vector_edges(
+            edge_ids,
+            strength=strength,
+            iterations=iterations,
+            source_kind=source,
+            target_kind=target_kind,
+        )
 
     def move_vector_vertex(
         self,
@@ -2174,6 +2451,45 @@ class MarquetryWorkspace:
             for point in contour
         ]
 
+    @staticmethod
+    def _packing_rotations(grain_direction: str | None) -> list[int]:
+        grain = (grain_direction or '').strip().lower()
+        if any(token in grain for token in ('fixed', 'locked', 'no-rotate', 'no rotate')):
+            return [0]
+        if 'vertical' in grain or 'horizontal' in grain:
+            return [0, 180]
+        return [0, 90, 180, 270]
+
+    @staticmethod
+    def _oriented_contour(
+        contour: list[list[float]],
+        bbox: list[float],
+        rotation: int,
+    ) -> list[list[float]]:
+        x0, y0, x1, y1 = bbox
+        width = x1 - x0
+        height = y1 - y0
+        normalized = [
+            [float(point[0]) - x0, float(point[1]) - y0]
+            for point in contour
+        ]
+        angle = int(rotation) % 360
+        if angle == 0:
+            return normalized
+        if angle == 90:
+            return [[height - y, x] for x, y in normalized]
+        if angle == 180:
+            return [[width - x, height - y] for x, y in normalized]
+        if angle == 270:
+            return [[y, width - x] for x, y in normalized]
+        return normalized
+
+    @staticmethod
+    def _contour_bounds(contour: list[list[float]]) -> list[float]:
+        xs = [float(point[0]) for point in contour]
+        ys = [float(point[1]) for point in contour]
+        return [min(xs), min(ys), max(xs), max(ys)]
+
     def pack(self, output_dir: str | Path) -> dict[str, Any]:
         """Write a traceable polygon-aware physical packing manifest by veneer."""
 
@@ -2229,7 +2545,31 @@ class MarquetryWorkspace:
                 physical = self._piece_physical_geometry(piece, px_per_unit_x, px_per_unit_y)
                 bbox_area_total += physical['width'] * physical['height']
                 piece_area_total += float(piece.get('area_physical') or physical['area'])
-                enriched_pieces.append({**piece, '_physical': physical})
+                orientations = []
+                for rotation in self._packing_rotations(veneer.grain_direction):
+                    contour = self._oriented_contour(
+                        physical['contour'],
+                        physical['bbox'],
+                        rotation,
+                    )
+                    bounds = self._contour_bounds(contour)
+                    normalized = [
+                        [point[0] - bounds[0], point[1] - bounds[1]]
+                        for point in contour
+                    ]
+                    orientation_bounds = self._contour_bounds(normalized)
+                    orientations.append(
+                        {
+                            'rotation': rotation,
+                            'contour': normalized,
+                            'bbox': orientation_bounds,
+                            'width': max(1e-6, orientation_bounds[2] - orientation_bounds[0]),
+                            'height': max(1e-6, orientation_bounds[3] - orientation_bounds[1]),
+                        }
+                    )
+                enriched_pieces.append(
+                    {**piece, '_physical': physical, '_orientations': orientations}
+                )
 
             sheet_states = [
                 {'cursor_x': 0.0, 'cursor_y': 0.0, 'row_height': 0.0, 'polygons': []}
@@ -2254,46 +2594,56 @@ class MarquetryWorkspace:
                     int(item['region_id']),
                 ),
             ):
-                physical = piece['_physical']
-                if physical['width'] > sheet_width or physical['height'] > sheet_height:
+                orientations = [
+                    orientation
+                    for orientation in piece['_orientations']
+                    if orientation['width'] <= sheet_width + 1e-9
+                    and orientation['height'] <= sheet_height + 1e-9
+                ]
+                if not orientations:
                     continue
                 placed = False
                 for sheet_index, state in enumerate(sheet_states):
                     if placed:
                         break
-                    x = float(state['cursor_x'])
-                    y = float(state['cursor_y'])
-                    row_height = float(state['row_height'])
-                    for _attempt in range(2):
-                        if x + physical['width'] > sheet_width + 1e-9:
-                            x = 0.0
-                            y += row_height
-                            row_height = 0.0
-                        if y + physical['height'] > sheet_height + 1e-9:
+                    for orientation in sorted(
+                        orientations,
+                        key=lambda item: (item['height'], item['width']),
+                    ):
+                        x = float(state['cursor_x'])
+                        y = float(state['cursor_y'])
+                        row_height = float(state['row_height'])
+                        for _attempt in range(2):
+                            if x + orientation['width'] > sheet_width + 1e-9:
+                                x = 0.0
+                                y += row_height
+                                row_height = 0.0
+                            if y + orientation['height'] > sheet_height + 1e-9:
+                                break
+                            placed_contour = [
+                                [point[0] + x, point[1] + y]
+                                for point in orientation['contour']
+                            ]
+                            polygon = Polygon(placed_contour)
+                            if polygon.is_valid and can_place(state, polygon):
+                                placements_by_region[int(piece['region_id'])] = {
+                                    'sheet_index': sheet_index,
+                                    'x': x,
+                                    'y': y,
+                                    'width': orientation['width'],
+                                    'height': orientation['height'],
+                                    'rotation': orientation['rotation'],
+                                    'orientation_contour': orientation['contour'],
+                                }
+                                state['polygons'].append(polygon)
+                                state['cursor_x'] = x + orientation['width']
+                                state['cursor_y'] = y
+                                state['row_height'] = max(row_height, orientation['height'])
+                                placed = True
+                                break
+                            x += max(orientation['width'], 1e-6)
+                        if placed:
                             break
-                        placed_contour = self._placed_contour(
-                            physical['contour'],
-                            physical['bbox'],
-                            x,
-                            y,
-                        )
-                        polygon = Polygon(placed_contour)
-                        if polygon.is_valid and can_place(state, polygon):
-                            placements_by_region[int(piece['region_id'])] = {
-                                'sheet_index': sheet_index,
-                                'x': x,
-                                'y': y,
-                                'width': physical['width'],
-                                'height': physical['height'],
-                                'rotation': 0,
-                            }
-                            state['polygons'].append(polygon)
-                            state['cursor_x'] = x + physical['width']
-                            state['cursor_y'] = y
-                            state['row_height'] = max(row_height, physical['height'])
-                            placed = True
-                            break
-                        x += max(physical['width'], 1e-6)
             placed_count = len(placements_by_region)
             sheet_count_used = (
                 max(
@@ -2316,18 +2666,24 @@ class MarquetryWorkspace:
                 physical = piece['_physical']
                 placement = placements_by_region.get(int(piece['region_id']))
                 placed_contour = (
-                    self._placed_contour(
-                        physical['contour'],
-                        physical['bbox'],
-                        placement['x'],
-                        placement['y'],
-                    )
+                    [
+                        [point[0] + placement['x'], point[1] + placement['y']]
+                        for point in placement['orientation_contour']
+                    ]
                     if placement
                     else None
                 )
                 serialized_piece = {
-                    key: value for key, value in piece.items() if key != '_physical'
+                    key: value
+                    for key, value in piece.items()
+                    if key not in {'_physical', '_orientations'}
                 }
+                if placement is not None:
+                    placement = {
+                        key: value
+                        for key, value in placement.items()
+                        if key != 'orientation_contour'
+                    }
                 serialized_piece.update(
                     {
                         'bbox_physical': physical['bbox'],
@@ -2363,12 +2719,12 @@ class MarquetryWorkspace:
                     'total_bounding_box_area': bbox_area_total,
                     'material_utilization': material_utilization,
                     'over_stock_capacity': placed_count < len(pieces),
-                    'packing_strategy': 'polygon-shelf-no-rotation',
+                    'packing_strategy': 'polygon-shelf-rotation-aware',
                     'pieces': packed_pieces,
                 }
             )
         manifest = {
-            'packing_backend': 'shapely-polygon-shelf',
+            'packing_backend': 'shapely-polygon-shelf-rotating',
             'source_geometry': (
                 self.design.active_vector_graph_kind
                 if self.design and self.design.active_vector_graph_kind

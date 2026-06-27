@@ -104,6 +104,7 @@ interface WorkspaceSummary {
   applied_detail_split_count?: number;
   repaired_region_count?: number;
   smoothed_pixel_count?: number;
+  notch_removed_pixel_count?: number;
   cuttability_cleanup?: {
     repaired_region_count: number;
     smoothed_pixel_count: number;
@@ -163,6 +164,18 @@ interface VertexMovePreview {
   };
   topology_vertex_count?: number;
   topology_edge_count?: number;
+}
+
+interface VectorSimplifyPreview {
+  valid: boolean;
+  source_kind: string;
+  target: string;
+  edge_ids: number[];
+  tolerance: number;
+  before_vertex_count: number;
+  after_vertex_count: number;
+  vertex_reduction: number;
+  graph_validation: Record<string, unknown>;
 }
 
 interface PackPiece {

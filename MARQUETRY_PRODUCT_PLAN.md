@@ -75,6 +75,7 @@ Implemented now:
 - physical-area sliver repair pass
 - raster boundary smoothing pass
 - selected-region raster smoothing
+- boundary-notch cleanup with validation and undo support
 - final label hitmap API and browser click/drag selection tooling
 - browser canvas zoom and scroll-pan
 - lasso selection by freehand stroke
@@ -103,6 +104,8 @@ Implemented now:
   accept/cancel controls before saving
 - direct selected-boundary simplification actions from the browser boundary
   summary
+- vector simplification previews that report validity and vertex reduction
+- explicit vector-edge selection and topology-safe edge/boundary smoothing
 - SVG reconstruction from persisted graph linework
 - API and CLI access for graph persistence, simplification, loading, and
   reconstructed graph SVG export
@@ -116,13 +119,15 @@ Implemented now:
 - physical-unit SVG export with adjustable contour simplification
 - Shapely coverage-safe SVG export with shared-edge simplification
 - persisted coverage-safe vector export metadata
-- Shapely polygon-aware shelf pack manifest by veneer
+- Shapely polygon-aware rotation-capable shelf pack manifest by veneer
 - physical contour, SVG path, placement, transformed placed contour, and
   transformed placed SVG path data in each pack manifest piece
 - browser stock-fit summary for pack results
 - recommended sheet counts, stock shortfall, area totals, and material
   utilization by veneer
 - workspace-root-constrained browser pack output
+- cached browser canvas raster overlays for faster vector dragging and linework
+  redraws
 - browser smoke test for image upload, candidate grid generation, and design
   seeding
 - browser smoke test for canvas selection, selected veneer assignment, undo, and
@@ -160,21 +165,25 @@ Implemented now:
    vertices, rejects no-op moves, previews topology validity, renders a
    before/after overlay, and requires explicit accept/cancel before saving.
    Individual shared boundaries can also be simplified directly from the browser
-   boundary summary. Next improvement: edge-level handles, curve/spline editing,
-   and graphical previews for batch simplification.
+   boundary summary. Vector mode can select explicit graph edges and smooth
+   selected edges or one boundary through topology validation. Simplification
+   can be previewed before saving. Next improvement: true curve/spline editing,
+   multi-vertex transforms, and graphical previews for every batch mutation.
 
 3. Add cleanup operations on top of shared boundaries.
 
    Current cleanup supports connected merge, targeted split, lock/unlock,
    physical-area sliver repair, raster boundary smoothing, selected-region
-   smoothing, selected-boundary inspection, and bounded auto-merge suggestions.
-   Coverage-safe shared-edge simplification exists for SVG export, and shared
-   graph simplification now persists as an undoable vector artifact. Selected
-   regions can drive vector-edge simplification, individual vertices can be
-   moved with topology validation, direct handles can drag vertices, promoted
-   graph geometry drives SVG/pack output, and cuttability cleanup combines the
-   conservative repair passes. Needed operations: smoother curve cleanup and
-   explicit graphical preview/accept UI for larger graph mutations.
+   smoothing, boundary-notch removal, selected-boundary inspection, and bounded
+   auto-merge suggestions. Coverage-safe shared-edge simplification exists for
+   SVG export, and shared graph simplification now persists as an undoable
+   vector artifact. Selected regions can drive vector-edge simplification,
+   explicit edges can be smoothed, individual vertices can be moved with
+   topology validation, direct handles can drag vertices, promoted graph
+   geometry drives SVG/pack output, and cuttability cleanup combines the
+   conservative repair passes. Needed operations: true curve/spline cleanup,
+   stronger tiny-piece decision tooling, and explicit graphical preview/accept
+   UI for all larger graph mutations.
 
 4. Deepen veneer inventory logic.
 
@@ -186,10 +195,11 @@ Implemented now:
 5. Improve polygon nesting quality.
 
    Current packing uses a Shapely-backed polygon shelf adapter. It places actual
-   physical contours by veneer, collision-checks polygons, and emits transformed
-   tracing contours. The next adapter should improve optimization quality with
-   rotation options, grain-aware orientation constraints, concavity-aware
-   placement, and lower-waste search heuristics.
+   physical contours by veneer, collision-checks polygons, tries rotated
+   orientations when grain settings allow, and emits transformed tracing
+   contours. The next adapter should improve optimization quality with
+   concavity-aware placement, deeper sheet/row search, and lower-waste
+   heuristics.
 
 6. Convert browser JS to TypeScript modules once the API stabilizes.
 

@@ -151,6 +151,12 @@ class SmoothBoundariesRequest(BaseModel):
     region_ids: list[int] = Field(default_factory=list)
 
 
+class RemoveNotchesRequest(BaseModel):
+    iterations: int = Field(default=1, ge=1, le=20)
+    region_ids: list[int] = Field(default_factory=list)
+    min_neighbor_votes: int = Field(default=5, ge=3, le=8)
+
+
 class SimplifyTopologyRequest(BaseModel):
     tolerance: float = Field(default=1.25, ge=0.0, le=50.0)
     source_kind: str = 'raster_topology'
@@ -168,6 +174,24 @@ class SimplifyBoundaryTopologyRequest(BaseModel):
     region_a: int
     region_b: int
     tolerance: float = Field(default=1.25, ge=0.0, le=50.0)
+    source_kind: str | None = None
+    target_kind: str = 'edited_topology'
+
+
+class PreviewSimplifyTopologyRequest(BaseModel):
+    tolerance: float = Field(default=1.25, ge=0.0, le=50.0)
+    region_ids: list[int] = Field(default_factory=list)
+    region_a: int | None = None
+    region_b: int | None = None
+    source_kind: str | None = None
+
+
+class SmoothTopologyEdgesRequest(BaseModel):
+    edge_ids: list[int] = Field(default_factory=list)
+    region_a: int | None = None
+    region_b: int | None = None
+    strength: float = Field(default=0.35, ge=0.0, le=1.0)
+    iterations: int = Field(default=2, ge=1, le=20)
     source_kind: str | None = None
     target_kind: str = 'edited_topology'
 
@@ -554,6 +578,21 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
         payload['smoothed_pixel_count'] = changed_px
         return JSONResponse(payload)
 
+    @app.post('/api/design/remove-notches')
+    def remove_notches(request: RemoveNotchesRequest) -> JSONResponse:
+        ws = _load_workspace(workspace_path)
+        try:
+            changed_px = ws.remove_boundary_notches(
+                iterations=request.iterations,
+                region_ids=request.region_ids or None,
+                min_neighbor_votes=request.min_neighbor_votes,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        payload = ws.summary()
+        payload['notch_removed_pixel_count'] = changed_px
+        return JSONResponse(payload)
+
     @app.get('/api/design/boundaries')
     def design_boundaries() -> JSONResponse:
         ws = _load_workspace(workspace_path)
@@ -615,6 +654,28 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return JSONResponse(ws.summary())
 
+    @app.post('/api/design/topology/preview-simplify')
+    def preview_simplify_design_topology(
+        request: PreviewSimplifyTopologyRequest,
+    ) -> JSONResponse:
+        ws = _load_workspace(workspace_path)
+        try:
+            boundary = (
+                (request.region_a, request.region_b)
+                if request.region_a is not None and request.region_b is not None
+                else None
+            )
+            return JSONResponse(
+                ws.preview_vector_simplification(
+                    tolerance=request.tolerance,
+                    region_ids=request.region_ids or None,
+                    boundary=boundary,
+                    source_kind=request.source_kind,
+                )
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @app.post('/api/design/topology/simplify-boundary')
     def simplify_boundary_design_topology(
         request: SimplifyBoundaryTopologyRequest,
@@ -628,6 +689,33 @@ def create_app(workspace_dir: str | Path | None = None) -> FastAPI:
                 source_kind=request.source_kind,
                 target_kind=request.target_kind,
             )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return JSONResponse(ws.summary())
+
+    @app.post('/api/design/topology/smooth-edges')
+    def smooth_design_topology_edges(
+        request: SmoothTopologyEdgesRequest,
+    ) -> JSONResponse:
+        ws = _load_workspace(workspace_path)
+        try:
+            if request.region_a is not None and request.region_b is not None:
+                ws.smooth_vector_boundary(
+                    region_a=request.region_a,
+                    region_b=request.region_b,
+                    strength=request.strength,
+                    iterations=request.iterations,
+                    source_kind=request.source_kind,
+                    target_kind=request.target_kind,
+                )
+            else:
+                ws.smooth_vector_edges(
+                    edge_ids=request.edge_ids,
+                    strength=request.strength,
+                    iterations=request.iterations,
+                    source_kind=request.source_kind,
+                    target_kind=request.target_kind,
+                )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return JSONResponse(ws.summary())

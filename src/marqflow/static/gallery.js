@@ -21,6 +21,11 @@ let activeVertexDrag = null;
 let hoveredVertex = null;
 /** @type {{vertexId: number, sourcePoint: {x: number, y: number}, point: {x: number, y: number}, sourceKind: string | null} | null} */
 let pendingVertexMove = null;
+/** @type {Set<number>} */
+let selectedEdgeIds = new Set();
+/** @type {HTMLCanvasElement | null} */
+let cachedBaseCanvas = null;
+let cachedBaseKey = '';
 let canvasZoom = 100;
 
 const el = /** @type {Record<string, any>} */ ({
@@ -75,10 +80,14 @@ const el = /** @type {Record<string, any>} */ ({
   cuttabilityCleanup: document.getElementById('cuttability-cleanup'),
   smoothPasses: document.getElementById('smooth-passes'),
   smoothBoundaries: document.getElementById('smooth-boundaries'),
+  removeNotches: document.getElementById('remove-notches'),
   applySuggestions: document.getElementById('apply-suggestions'),
   vectorTolerance: document.getElementById('vector-tolerance'),
+  vectorSmoothStrength: document.getElementById('vector-smooth-strength'),
   vectorSimplifyAll: document.getElementById('vector-simplify-all'),
+  previewVectorSimplify: document.getElementById('preview-vector-simplify'),
   vectorSimplifySelected: document.getElementById('vector-simplify-selected'),
+  smoothVectorSelected: document.getElementById('smooth-vector-selected'),
   vectorKind: document.getElementById('vector-kind'),
   vectorPromote: document.getElementById('vector-promote'),
   viewGraphSvg: document.getElementById('view-graph-svg'),
@@ -115,6 +124,21 @@ const el = /** @type {Record<string, any>} */ ({
 function setStatus(text, error = false) {
   el.status.textContent = text;
   el.status.style.color = error ? '#b6332a' : 'var(--muted)';
+}
+
+function invalidateDesignBase() {
+  cachedBaseCanvas = null;
+  cachedBaseKey = '';
+}
+
+function designBaseKey(width, height) {
+  return JSON.stringify({
+    width,
+    height,
+    showMask: Boolean(el.showMask.checked),
+    selected: [...selectedRegionIds].sort((a, b) => a - b),
+    sourceReady: Boolean(sourceImage.complete && sourceImage.naturalWidth),
+  });
 }
 
 function rgb(color) {
@@ -154,16 +178,23 @@ async function loadHitmap() {
     hitmap = null;
     topologyEditLayer = null;
     selectedRegionIds.clear();
+    selectedEdgeIds.clear();
+    invalidateDesignBase();
     return;
   }
   const response = await fetch('/api/design/hitmap');
   if (!response.ok) {
     hitmap = null;
+    invalidateDesignBase();
     return;
   }
   hitmap = await response.json();
+  invalidateDesignBase();
   sourceImage = new Image();
-  sourceImage.onload = () => drawDesign();
+  sourceImage.onload = () => {
+    invalidateDesignBase();
+    drawDesign();
+  };
   sourceImage.src = '/api/workspace-file/source.png';
 }
 
@@ -356,6 +387,7 @@ async function saveVeneers() {
 }
 
 function updateSelectionStatus() {
+  invalidateDesignBase();
   const ids = [...selectedRegionIds].sort((a, b) => a - b);
   el.selectionStatus.textContent = ids.length
     ? `Selected ${ids.length} region(s): ${ids.join(', ')}`
@@ -418,9 +450,13 @@ function renderBoundarySummary(ids) {
         ${boundary.vertex_count || 0} -> ${boundary.simplified_vertex_count || 0} vertices
       </small>
       <button type="button">Simplify this boundary</button>
+      <button data-smooth="true" type="button">Smooth this boundary</button>
     `;
     card.querySelector('button')?.addEventListener('click', () => {
       void simplifyVectorBoundary(boundary.region_a, boundary.region_b);
+    });
+    card.querySelector('[data-smooth="true"]')?.addEventListener('click', () => {
+      void smoothVectorBoundary(boundary.region_a, boundary.region_b);
     });
     el.boundarySummary.appendChild(card);
   }
@@ -533,6 +569,34 @@ function nearestVertex(point) {
   return best;
 }
 
+function pointSegmentDistance(point, start, end) {
+  const dx = end[0] - start[0];
+  const dy = end[1] - start[1];
+  const lengthSquared = dx * dx + dy * dy || 1;
+  const t = Math.max(0, Math.min(1, ((point.x - start[0]) * dx + (point.y - start[1]) * dy) / lengthSquared));
+  const x = start[0] + t * dx;
+  const y = start[1] + t * dy;
+  return Math.hypot(point.x - x, point.y - y);
+}
+
+function nearestEdge(point) {
+  if (!topologyEditLayer?.edges?.length) return null;
+  const radius = Math.max(3, (hitmap?.width || 1) / 140);
+  let best = null;
+  let bestDistance = Infinity;
+  for (const edge of topologyEditLayer.edges) {
+    const path = edge.path || [];
+    for (let index = 1; index < path.length; index += 1) {
+      const distance = pointSegmentDistance(point, path[index - 1], path[index]);
+      if (distance < bestDistance && distance <= radius) {
+        best = edge;
+        bestDistance = distance;
+      }
+    }
+  }
+  return best;
+}
+
 function drawDesign() {
   const canvas = /** @type {HTMLCanvasElement} */ (el.designCanvas);
   const ctx = canvas.getContext('2d');
@@ -544,32 +608,43 @@ function drawDesign() {
   applyCanvasZoom();
   ctx.clearRect(0, 0, width, height);
   if (!workspace || !hitmap) return;
-  if (sourceImage.complete && sourceImage.naturalWidth) {
-    ctx.drawImage(sourceImage, 0, 0, width, height);
-  }
-
-  const imageData = ctx.getImageData(0, 0, width, height);
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      const maskValue = Number(hitmap.subject_mask[y]?.[x] || 0);
-      const regionId = Number(hitmap.labels[y]?.[x] || 0);
-      const offset = (y * width + x) * 4;
-      if (el.showMask.checked && maskValue > 0) {
-        const maskColor = maskValue === 1 ? [225, 126, 72] : [70, 130, 190];
-        imageData.data[offset] = Math.round(imageData.data[offset] * 0.55 + maskColor[0] * 0.45);
-        imageData.data[offset + 1] = Math.round(imageData.data[offset + 1] * 0.55 + maskColor[1] * 0.45);
-        imageData.data[offset + 2] = Math.round(imageData.data[offset + 2] * 0.55 + maskColor[2] * 0.45);
+  const baseKey = designBaseKey(width, height);
+  if (!cachedBaseCanvas || cachedBaseKey !== baseKey) {
+    const base = document.createElement('canvas');
+    base.width = width;
+    base.height = height;
+    const baseCtx = base.getContext('2d');
+    if (!baseCtx) return;
+    baseCtx.clearRect(0, 0, width, height);
+    if (sourceImage.complete && sourceImage.naturalWidth) {
+      baseCtx.drawImage(sourceImage, 0, 0, width, height);
+    }
+    const imageData = baseCtx.getImageData(0, 0, width, height);
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const maskValue = Number(hitmap.subject_mask[y]?.[x] || 0);
+        const regionId = Number(hitmap.labels[y]?.[x] || 0);
+        const offset = (y * width + x) * 4;
+        if (el.showMask.checked && maskValue > 0) {
+          const maskColor = maskValue === 1 ? [225, 126, 72] : [70, 130, 190];
+          imageData.data[offset] = Math.round(imageData.data[offset] * 0.55 + maskColor[0] * 0.45);
+          imageData.data[offset + 1] = Math.round(imageData.data[offset + 1] * 0.55 + maskColor[1] * 0.45);
+          imageData.data[offset + 2] = Math.round(imageData.data[offset + 2] * 0.55 + maskColor[2] * 0.45);
+          imageData.data[offset + 3] = 255;
+        }
+        if (!selectedRegionIds.has(regionId)) continue;
+        const color = regionColor(regionId);
+        imageData.data[offset] = Math.round(imageData.data[offset] * 0.45 + color[0] * 0.55);
+        imageData.data[offset + 1] = Math.round(imageData.data[offset + 1] * 0.45 + color[1] * 0.55);
+        imageData.data[offset + 2] = Math.round(imageData.data[offset + 2] * 0.45 + color[2] * 0.55);
         imageData.data[offset + 3] = 255;
       }
-      if (!selectedRegionIds.has(regionId)) continue;
-      const color = regionColor(regionId);
-      imageData.data[offset] = Math.round(imageData.data[offset] * 0.45 + color[0] * 0.55);
-      imageData.data[offset + 1] = Math.round(imageData.data[offset + 1] * 0.45 + color[1] * 0.55);
-      imageData.data[offset + 2] = Math.round(imageData.data[offset + 2] * 0.45 + color[2] * 0.55);
-      imageData.data[offset + 3] = 255;
     }
+    baseCtx.putImageData(imageData, 0, 0);
+    cachedBaseCanvas = base;
+    cachedBaseKey = baseKey;
   }
-  ctx.putImageData(imageData, 0, 0);
+  ctx.drawImage(cachedBaseCanvas, 0, 0);
 
   if (dragStart && dragCurrent) {
     ctx.strokeStyle = '#f4f0dc';
@@ -600,6 +675,9 @@ function drawDesign() {
     ctx.strokeStyle = 'rgba(12, 31, 38, 0.72)';
     for (const edge of topologyEditLayer.edges || []) {
       if (!edge.path?.length) continue;
+      const selectedEdge = selectedEdgeIds.has(edge.edge_id);
+      ctx.strokeStyle = selectedEdge ? 'rgba(70, 130, 190, 0.96)' : 'rgba(12, 31, 38, 0.72)';
+      ctx.lineWidth = Math.max(selectedEdge ? 2 : 1, width / (selectedEdge ? 150 : 260));
       ctx.beginPath();
       ctx.moveTo(edge.path[0][0], edge.path[0][1]);
       for (const point of edge.path.slice(1)) {
@@ -1162,6 +1240,34 @@ async function smoothBoundaries() {
   render();
 }
 
+async function removeNotches() {
+  const regionIds = [...selectedRegionIds];
+  const response = await fetch('/api/design/remove-notches', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      iterations: Number(el.smoothPasses.value || 1),
+      region_ids: regionIds,
+      min_neighbor_votes: 5,
+    }),
+  });
+  if (!response.ok) {
+    setStatus(await response.text(), true);
+    return;
+  }
+  workspace = await response.json();
+  await loadHitmap();
+  await loadTopologyEditLayer();
+  const currentIds = new Set(workspace.regions.map((region) => region.region_id));
+  selectedRegionIds = new Set(regionIds.filter((regionId) => currentIds.has(regionId)));
+  setStatus(
+    `Removed ${workspace.notch_removed_pixel_count || 0} notch pixel(s)${
+      regionIds.length ? ' in selected regions' : ''
+    }.`,
+  );
+  render();
+}
+
 async function simplifyVectorGraphAll() {
   const tolerance = Number(el.vectorTolerance.value || 1.25);
   const response = await fetch('/api/design/topology/simplify', {
@@ -1190,6 +1296,31 @@ async function simplifyVectorGraphAll() {
   setStatus(`Simplified and promoted graph at tolerance ${tolerance}.`);
 }
 
+async function previewVectorSimplify() {
+  const tolerance = Number(el.vectorTolerance.value || 1.25);
+  const response = await fetch('/api/design/topology/preview-simplify', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      tolerance,
+      region_ids: [...selectedRegionIds],
+      source_kind: workspace?.design?.active_vector_graph_kind || null,
+    }),
+  });
+  if (!response.ok) {
+    setStatus(await response.text(), true);
+    return;
+  }
+  const preview = await response.json();
+  el.packOutput.textContent = JSON.stringify(preview, null, 2);
+  setStatus(
+    preview.valid
+      ? `Preview valid: ${preview.vertex_reduction} vector vertex reduction(s) on ${preview.target}.`
+      : 'Preview invalid: simplification would break puzzle coverage.',
+    !preview.valid,
+  );
+}
+
 async function simplifyVectorGraphSelected() {
   if (!selectedRegionIds.size) {
     setStatus('Select at least one region before simplifying selected boundaries.', true);
@@ -1214,6 +1345,59 @@ async function simplifyVectorGraphSelected() {
   await loadHitmap();
   await loadTopologyEditLayer();
   setStatus(`Simplified selected vector boundaries at tolerance ${tolerance}.`);
+  render();
+}
+
+async function smoothVectorSelected() {
+  if (!selectedEdgeIds.size) {
+    setStatus('Select one or more vector edges in vector-handle mode first.', true);
+    return;
+  }
+  const response = await fetch('/api/design/topology/smooth-edges', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      edge_ids: [...selectedEdgeIds],
+      strength: Number(el.vectorSmoothStrength.value || 0.35),
+      iterations: Number(el.smoothPasses.value || 2),
+      source_kind: workspace?.design?.active_vector_graph_kind || null,
+      target_kind: 'edited_topology',
+    }),
+  });
+  if (!response.ok) {
+    setStatus(await response.text(), true);
+    return;
+  }
+  workspace = await response.json();
+  selectedEdgeIds.clear();
+  await loadHitmap();
+  await loadTopologyEditLayer();
+  setStatus('Smoothed selected vector edge(s).');
+  render();
+}
+
+async function smoothVectorBoundary(regionA, regionB) {
+  const response = await fetch('/api/design/topology/smooth-edges', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      region_a: regionA,
+      region_b: regionB,
+      strength: Number(el.vectorSmoothStrength.value || 0.35),
+      iterations: Number(el.smoothPasses.value || 2),
+      source_kind: workspace?.design?.active_vector_graph_kind || null,
+      target_kind: 'edited_topology',
+    }),
+  });
+  if (!response.ok) {
+    setStatus(await response.text(), true);
+    return;
+  }
+  workspace = await response.json();
+  selectedEdgeIds.clear();
+  await loadHitmap();
+  await loadTopologyEditLayer();
+  setStatus(`Smoothed boundary ${regionA}-${regionB}.`);
   render();
 }
 
@@ -1485,9 +1669,12 @@ el.applyFocus.addEventListener('click', applyFocus);
 el.repairSmall.addEventListener('click', repairSmall);
 el.cuttabilityCleanup.addEventListener('click', cuttabilityCleanup);
 el.smoothBoundaries.addEventListener('click', smoothBoundaries);
+el.removeNotches.addEventListener('click', removeNotches);
 el.applySuggestions.addEventListener('click', applySuggestions);
 el.vectorSimplifyAll.addEventListener('click', simplifyVectorGraphAll);
+el.previewVectorSimplify.addEventListener('click', previewVectorSimplify);
 el.vectorSimplifySelected.addEventListener('click', simplifyVectorGraphSelected);
+el.smoothVectorSelected.addEventListener('click', smoothVectorSelected);
 el.vectorPromote.addEventListener('click', promoteVectorGraph);
 el.previewVertexMove.addEventListener('click', () => {
   void previewVectorVertexMove(true);
@@ -1499,10 +1686,14 @@ el.canvasZoom.addEventListener('input', () => setCanvasZoom(el.canvasZoom.value)
 el.zoomIn.addEventListener('click', () => setCanvasZoom(canvasZoom + 25));
 el.zoomOut.addEventListener('click', () => setCanvasZoom(canvasZoom - 25));
 el.zoomFit.addEventListener('click', () => setCanvasZoom(100));
-el.showMask.addEventListener('change', drawDesign);
+el.showMask.addEventListener('change', () => {
+  invalidateDesignBase();
+  drawDesign();
+});
 el.snapVertices.addEventListener('change', drawDesign);
 el.clearSelection.addEventListener('click', () => {
   selectedRegionIds.clear();
+  selectedEdgeIds.clear();
   updateSelectionStatus();
   drawDesign();
 });
@@ -1523,6 +1714,20 @@ el.designCanvas.addEventListener('pointerdown', (event) => {
       el.vertexY.value = String(vertex.point[1]);
       setStatus(`Dragging vertex ${vertex.vertex_id}.`);
       el.designCanvas.setPointerCapture(event.pointerId);
+      drawDesign();
+      return;
+    }
+    const edge = nearestEdge(dragStart);
+    if (edge) {
+      if (!event.shiftKey) selectedEdgeIds.clear();
+      if (selectedEdgeIds.has(edge.edge_id) && event.shiftKey) {
+        selectedEdgeIds.delete(edge.edge_id);
+      } else {
+        selectedEdgeIds.add(edge.edge_id);
+      }
+      setStatus(`Selected ${selectedEdgeIds.size} vector edge(s).`);
+      dragStart = null;
+      dragCurrent = null;
       drawDesign();
       return;
     }
