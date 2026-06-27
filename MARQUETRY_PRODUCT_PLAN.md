@@ -128,6 +128,8 @@ Implemented now:
 - workspace-root-constrained browser pack output
 - cached browser canvas raster overlays for faster vector dragging and linework
   redraws
+- browser source maintained in TypeScript and compiled to served JavaScript
+- user-facing workflow and packing/export documentation under `docs/`
 - browser smoke test for image upload, candidate grid generation, and design
   seeding
 - browser smoke test for canvas selection, selected veneer assignment, undo, and
@@ -201,18 +203,20 @@ Implemented now:
    concavity-aware placement, deeper sheet/row search, and lower-waste
    heuristics.
 
-6. Convert browser JS to TypeScript modules once the API stabilizes.
+6. Split browser TypeScript into smaller modules once the API stabilizes.
 
-   The current browser code uses `checkJs` and declarations. A module split
-   becomes worthwhile after the core workflow stops shifting.
+   The browser now uses TypeScript source compiled to static JavaScript. A
+   module split becomes worthwhile after the core workflow stops shifting.
 
 7. Add browser-level regression tests.
 
    API/core tests cover the model. A browser smoke test covers image upload,
    candidate-grid generation, design seeding, direct vector-handle dragging,
-   canvas selection, selected veneer assignment, undo, pack summary generation,
-   zoom, lasso selection, box selection, merge/undo, and SVG preview. Broader
-   visual regression and multi-browser coverage are future hardening work.
+   vector simplification preview, vector edge selection/smoothing, canvas
+   selection, selected veneer assignment, undo, notch cleanup, pack summary
+   generation, zoom, lasso selection, box selection, merge/undo, and SVG
+   preview. Broader visual regression and multi-browser coverage are future
+   hardening work.
 
 ## Non-Goals For This Branch
 

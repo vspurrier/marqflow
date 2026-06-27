@@ -34,7 +34,8 @@ The rewrite currently supports:
 14. Apply focus zones as local split passes.
 15. Validate the partition invariant.
 16. Export a veneer-grouped SVG in physical units.
-17. Write a `rectpack` bounding-box packing manifest.
+17. Edit topology-safe vector boundaries and vertices.
+18. Write a contour-aware, veneer-grouped packing manifest.
 
 This is intentionally smaller than the prototype. The goal is a clean core
 that can grow without repeating the previous tech debt.
@@ -108,10 +109,14 @@ The browser UI is deliberately minimal in this rewrite:
 - auto-merge small/thin suggested regions
 - repair regions below a physical area threshold
 - smooth raster boundary noise while preserving a valid partition
+- remove tiny boundary notches while preserving a valid partition
+- preview vector simplification before saving
+- drag vector vertices with topology validation
+- select and smooth vector edges
 - export SVG with adjustable contour simplification
 - export Shapely coverage-safe SVG with shared-edge simplification
 - generate a cleanup report with readiness score before final export
-- write the bounding-box pack manifest with `pack.json`, `design.svg`, and
+- write the contour-aware pack manifest with `pack.json`, `design.svg`, and
   `design-coverage.svg`, and `cleanup-report.json`
 - review placed/unplaced piece counts and stock warnings
 
@@ -124,6 +129,7 @@ new browser workspaces are created alongside that path.
 ## Verification
 
 ```bash
+npm run build
 npm run typecheck
 uv run ruff check src tests
 uv run pytest -q
@@ -131,3 +137,11 @@ uv run pytest -q
 
 The browser smoke test uses Playwright. If Chromium is not installed locally,
 the test skips instead of failing the suite.
+
+## Documentation
+
+- [User guide](docs/USER_GUIDE.md)
+- [Packing and exports](docs/PACKING_AND_EXPORTS.md)
+
+Browser source is maintained in `src/marqflow/static/gallery.ts`. The served
+file is compiled to `src/marqflow/static/gallery.js` with `npm run build`.

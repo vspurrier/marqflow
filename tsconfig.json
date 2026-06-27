@@ -1,7 +1,6 @@
 {
   "compilerOptions": {
-    "allowJs": true,
-    "checkJs": true,
+    "allowJs": false,
     "noEmit": true,
     "target": "ES2022",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
@@ -10,5 +9,5 @@
     "strict": false,
     "skipLibCheck": true
   },
-  "include": ["src/marqflow/static/**/*.js", "src/marqflow/static/**/*.d.ts"]
+  "include": ["src/marqflow/static/**/*.ts", "src/marqflow/static/**/*.d.ts"]
 }

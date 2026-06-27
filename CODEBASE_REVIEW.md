@@ -19,7 +19,8 @@ been retired; previous designs remain recoverable from Git history.
 - Added `MarquetryWorkspace` as the persistence boundary.
 - Final design export and pack operate on `MarquetryDesign`, not on candidate selections.
 - Browser UI is reduced to the first vertical slice instead of carrying over prototype tabs.
-- TypeScript checking is retained for static browser JavaScript through `npm run typecheck`.
+- Browser code is maintained as TypeScript source and compiled to static
+  JavaScript for FastAPI to serve.
 
 ## Current Verification
 
@@ -130,6 +131,9 @@ uv run pytest -q
 - Browser pack output is constrained to the configured workspace root.
 - Browser canvas raster overlays are cached so vector dragging and linework
   redraws avoid recomputing every image pixel on each pointer move.
+- Browser TypeScript source lives in `src/marqflow/static/gallery.ts` and is
+  compiled to the served `gallery.js` with `npm run build`.
+- User-facing workflow and packing/export documentation lives under `docs/`.
 - Browser smoke test for creating a workspace, generating a candidate grid, and
   seeding the design from a candidate.
 - Browser smoke test for canvas selection, selected veneer assignment, undo, and
@@ -213,18 +217,20 @@ uv run pytest -q
 
 7. TypeScript migration.
 
-   The browser has `checkJs` and domain declarations. A full TS module split
-   remains open.
+   The browser source is now TypeScript and compiles to the served JavaScript.
+   A deeper module split remains open; the UI is still concentrated in one
+   large file.
 
 8. Browser tests.
 
    A Playwright smoke test covers image upload, workspace creation,
    candidate-grid generation, design seeding, direct vector-handle dragging,
-   canvas selection, selected veneer assignment, undo, pack summary generation,
-   zoom, lasso selection, box selection, merge/undo, and SVG preview. Broader
-   visual regression and
-   multi-browser coverage are still future hardening work, but the current
-   vertical slice now has a browser smoke test.
+   vector simplification preview, vector edge selection/smoothing, canvas
+   selection, selected veneer assignment, undo, notch cleanup, pack summary
+   generation, zoom, lasso selection, box selection, merge/undo, and SVG
+   preview. Broader visual regression and multi-browser coverage are still
+   future hardening work, but the current vertical slice now has a browser smoke
+   test.
 
 ## Engineering Direction
 

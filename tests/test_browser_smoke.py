@@ -119,6 +119,36 @@ def _drag_first_vector_handle(page: Page) -> None:
     page.mouse.up()
 
 
+def _click_first_vector_edge(page: Page) -> None:
+    canvas = page.locator('#design-canvas')
+    canvas.scroll_into_view_if_needed()
+    box = canvas.bounding_box()
+    if box is None:
+        raise AssertionError('design canvas is not visible')
+    layer = page.evaluate(
+        "() => fetch('/api/design/topology/edit-layer').then(response => response.json())"
+    )
+    edges = layer.get('edges') or []
+    edge = next((item for item in edges if not item.get('exterior')), None)
+    if edge is None:
+        edge = next(iter(edges), None)
+    if edge is None:
+        raise AssertionError('no topology edges available')
+    path = edge.get('path') or []
+    if len(path) < 2:
+        raise AssertionError('topology edge has no drawable path')
+    point = path[len(path) // 2]
+    canvas_width = page.locator('#design-canvas').evaluate('node => node.width')
+    canvas_height = page.locator('#design-canvas').evaluate('node => node.height')
+    canvas.click(
+        position={
+            'x': box['width'] * point[0] / canvas_width,
+            'y': box['height'] * point[1] / canvas_height,
+        },
+        modifiers=['Shift'],
+    )
+
+
 def test_browser_can_create_workspace_from_image(tmp_path: Path) -> None:
     image_path = tmp_path / 'source.png'
     _fixture_image(image_path)
@@ -164,6 +194,14 @@ def test_browser_can_create_workspace_from_image(tmp_path: Path) -> None:
             _wait_for_status(page, 'Moved vector vertex')
             page.click('#undo')
             _wait_for_status(page, 'Undid last edit.')
+            page.click('#preview-vector-simplify')
+            _wait_for_status(page, 'Preview valid')
+            _click_first_vector_edge(page)
+            _wait_for_status(page, 'Selected 1 vector edge')
+            page.click('#smooth-vector-selected')
+            _wait_for_status(page, 'Smoothed selected vector edge')
+            page.click('#undo')
+            _wait_for_status(page, 'Undid last edit.')
             page.select_option('#selection-mode', 'box')
 
             page.fill('#grid-rows', '2')
@@ -201,6 +239,8 @@ def test_browser_can_create_workspace_from_image(tmp_path: Path) -> None:
             _wait_for_status(page, 'Assigned ')
             page.click('#undo')
             _wait_for_status(page, 'Undid last edit.')
+            page.click('#remove-notches')
+            _wait_for_status(page, 'Removed ')
             page.click('#zoom-in')
             assert page.locator('#zoom-label').text_content() == '125%'
             page.click('#zoom-fit')
