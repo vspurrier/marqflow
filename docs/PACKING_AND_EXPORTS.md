@@ -25,7 +25,8 @@ linework.
 - transformed placed SVG path
 - stock shortfall and utilization estimates
 
-The current backend is `shapely-polygon-shelf-rotating`.
+Marqflow prefers `libnest2d-djd` when the optional native bindings are
+installed. Otherwise it uses `shapely-polygon-shelf-rotating`.
 
 It is contour-aware:
 
@@ -34,7 +35,16 @@ It is contour-aware:
 - Tries rotated orientations when grain settings allow.
 - Preserves per-veneer grouping.
 
-It is not yet a full irregular nesting optimizer:
+Install the external backend on supported platforms with:
+
+```bash
+uv sync --extra nesting
+```
+
+`python-libnest2d` currently publishes wheels for Linux and Windows. On macOS,
+Marqflow falls back automatically.
+
+The Shapely fallback is not a full irregular nesting optimizer:
 
 - It does not exploit concavities.
 - It does not perform deep no-fit-polygon search.
@@ -52,12 +62,5 @@ Veneer grain notes affect rotation:
 
 ## Why Not Let A Library Do All Nesting?
 
-That is the right long-term direction. The current packer is deliberately an
-adapter-shaped baseline: it converts Marqflow's validated physical contours,
-veneer groupings, grain constraints, and output manifest into data that an
-external irregular nesting package can consume.
-
-The remaining work is not inventing nesting theory. It is integrating a
-maintained nesting package behind this manifest boundary and preserving
-Marqflow-specific constraints.
-
+Marqflow now has a libnest2d adapter. The in-repo Shapely backend remains as a
+portable fallback and as a deterministic reference implementation for tests.

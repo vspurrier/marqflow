@@ -2490,6 +2490,181 @@ class MarquetryWorkspace:
         ys = [float(point[1]) for point in contour]
         return [min(xs), min(ys), max(xs), max(ys)]
 
+    @staticmethod
+    def _placement_from_contour(
+        contour: list[list[float]],
+        sheet_index: int,
+        rotation: int,
+    ) -> dict[str, Any]:
+        bounds = MarquetryWorkspace._contour_bounds(contour)
+        return {
+            'sheet_index': int(sheet_index),
+            'x': bounds[0],
+            'y': bounds[1],
+            'width': max(1e-6, bounds[2] - bounds[0]),
+            'height': max(1e-6, bounds[3] - bounds[1]),
+            'rotation': int(rotation),
+            'orientation_contour': [
+                [float(point[0]) - bounds[0], float(point[1]) - bounds[1]]
+                for point in contour
+            ],
+        }
+
+    def _pack_with_libnest2d(
+        self,
+        enriched_pieces: list[dict[str, Any]],
+        sheet_width: float,
+        sheet_height: float,
+        grain_direction: str,
+    ) -> tuple[dict[int, dict[str, Any]], str] | None:
+        """Use libnest2d Python bindings when available."""
+
+        try:
+            import pynest2d  # type: ignore[import-not-found]
+        except ImportError:
+            return None
+
+        scale = 1_000_000
+        items = []
+        item_region_ids = []
+        for piece in enriched_pieces:
+            physical = piece['_physical']
+            contour = self._oriented_contour(physical['contour'], physical['bbox'], 0)
+            bounds = self._contour_bounds(contour)
+            normalized = [
+                [point[0] - bounds[0], point[1] - bounds[1]]
+                for point in contour
+            ]
+            if len(normalized) < 3:
+                continue
+            points = [
+                pynest2d.Point(
+                    int(round(point[0] * scale)),
+                    int(round(point[1] * scale)),
+                )
+                for point in normalized
+            ]
+            items.append(pynest2d.Item(points))
+            item_region_ids.append(int(piece['region_id']))
+        if not items:
+            return {}, 'libnest2d-djd'
+
+        config = pynest2d.NfpConfig()
+        config.rotations = [
+            math.radians(rotation)
+            for rotation in self._packing_rotations(grain_direction)
+        ]
+        bin_shape = pynest2d.Box(
+            max(1, int(round(float(sheet_width) * scale))),
+            max(1, int(round(float(sheet_height) * scale))),
+        )
+        try:
+            pynest2d.nest_djd(items, bin_shape, 0, config)
+        except Exception:
+            return None
+
+        placements: dict[int, dict[str, Any]] = {}
+        for region_id, item in zip(item_region_ids, items, strict=True):
+            bin_id = int(item.binId())
+            if bin_id < 0:
+                continue
+            placed_contour = [
+                [point.x() / scale, point.y() / scale]
+                for point in item.transformedContour()
+            ]
+            if len(placed_contour) < 3:
+                continue
+            placements[region_id] = self._placement_from_contour(
+                placed_contour,
+                sheet_index=bin_id,
+                rotation=int(round(math.degrees(float(item.rotation())))) % 360,
+            )
+        return placements, 'libnest2d-djd'
+
+    def _pack_with_shelf(
+        self,
+        enriched_pieces: list[dict[str, Any]],
+        sheet_width: float,
+        sheet_height: float,
+        available_count: int,
+    ) -> dict[int, dict[str, Any]]:
+        """Deterministic local fallback for platforms without libnest2d."""
+
+        sheet_states = [
+            {'cursor_x': 0.0, 'cursor_y': 0.0, 'row_height': 0.0, 'polygons': []}
+            for _ in range(max(available_count, len(enriched_pieces), 1))
+        ]
+        placements_by_region: dict[int, dict[str, Any]] = {}
+
+        def can_place(
+            sheet_state: dict[str, Any],
+            polygon: Polygon,
+        ) -> bool:
+            for existing in sheet_state['polygons']:
+                if polygon.intersection(existing).area > 1e-9:
+                    return False
+            return True
+
+        for piece in sorted(
+            enriched_pieces,
+            key=lambda item: (
+                -float(item['_physical']['height']),
+                -float(item['_physical']['width']),
+                int(item['region_id']),
+            ),
+        ):
+            orientations = [
+                orientation
+                for orientation in piece['_orientations']
+                if orientation['width'] <= sheet_width + 1e-9
+                and orientation['height'] <= sheet_height + 1e-9
+            ]
+            if not orientations:
+                continue
+            placed = False
+            for sheet_index, state in enumerate(sheet_states):
+                if placed:
+                    break
+                for orientation in sorted(
+                    orientations,
+                    key=lambda item: (item['height'], item['width']),
+                ):
+                    x = float(state['cursor_x'])
+                    y = float(state['cursor_y'])
+                    row_height = float(state['row_height'])
+                    for _attempt in range(2):
+                        if x + orientation['width'] > sheet_width + 1e-9:
+                            x = 0.0
+                            y += row_height
+                            row_height = 0.0
+                        if y + orientation['height'] > sheet_height + 1e-9:
+                            break
+                        placed_contour = [
+                            [point[0] + x, point[1] + y]
+                            for point in orientation['contour']
+                        ]
+                        polygon = Polygon(placed_contour)
+                        if polygon.is_valid and can_place(state, polygon):
+                            placements_by_region[int(piece['region_id'])] = {
+                                'sheet_index': sheet_index,
+                                'x': x,
+                                'y': y,
+                                'width': orientation['width'],
+                                'height': orientation['height'],
+                                'rotation': orientation['rotation'],
+                                'orientation_contour': orientation['contour'],
+                            }
+                            state['polygons'].append(polygon)
+                            state['cursor_x'] = x + orientation['width']
+                            state['cursor_y'] = y
+                            state['row_height'] = max(row_height, orientation['height'])
+                            placed = True
+                            break
+                        x += max(orientation['width'], 1e-6)
+                    if placed:
+                        break
+        return placements_by_region
+
     def pack(self, output_dir: str | Path) -> dict[str, Any]:
         """Write a traceable polygon-aware physical packing manifest by veneer."""
 
@@ -2571,79 +2746,22 @@ class MarquetryWorkspace:
                     {**piece, '_physical': physical, '_orientations': orientations}
                 )
 
-            sheet_states = [
-                {'cursor_x': 0.0, 'cursor_y': 0.0, 'row_height': 0.0, 'polygons': []}
-                for _ in range(max(available_count, len(enriched_pieces), 1))
-            ]
-            placements_by_region: dict[int, dict[str, Any]] = {}
-
-            def can_place(
-                sheet_state: dict[str, Any],
-                polygon: Polygon,
-            ) -> bool:
-                for existing in sheet_state['polygons']:
-                    if polygon.intersection(existing).area > 1e-9:
-                        return False
-                return True
-
-            for piece in sorted(
+            libnest_result = self._pack_with_libnest2d(
                 enriched_pieces,
-                key=lambda item: (
-                    -float(item['_physical']['height']),
-                    -float(item['_physical']['width']),
-                    int(item['region_id']),
-                ),
-            ):
-                orientations = [
-                    orientation
-                    for orientation in piece['_orientations']
-                    if orientation['width'] <= sheet_width + 1e-9
-                    and orientation['height'] <= sheet_height + 1e-9
-                ]
-                if not orientations:
-                    continue
-                placed = False
-                for sheet_index, state in enumerate(sheet_states):
-                    if placed:
-                        break
-                    for orientation in sorted(
-                        orientations,
-                        key=lambda item: (item['height'], item['width']),
-                    ):
-                        x = float(state['cursor_x'])
-                        y = float(state['cursor_y'])
-                        row_height = float(state['row_height'])
-                        for _attempt in range(2):
-                            if x + orientation['width'] > sheet_width + 1e-9:
-                                x = 0.0
-                                y += row_height
-                                row_height = 0.0
-                            if y + orientation['height'] > sheet_height + 1e-9:
-                                break
-                            placed_contour = [
-                                [point[0] + x, point[1] + y]
-                                for point in orientation['contour']
-                            ]
-                            polygon = Polygon(placed_contour)
-                            if polygon.is_valid and can_place(state, polygon):
-                                placements_by_region[int(piece['region_id'])] = {
-                                    'sheet_index': sheet_index,
-                                    'x': x,
-                                    'y': y,
-                                    'width': orientation['width'],
-                                    'height': orientation['height'],
-                                    'rotation': orientation['rotation'],
-                                    'orientation_contour': orientation['contour'],
-                                }
-                                state['polygons'].append(polygon)
-                                state['cursor_x'] = x + orientation['width']
-                                state['cursor_y'] = y
-                                state['row_height'] = max(row_height, orientation['height'])
-                                placed = True
-                                break
-                            x += max(orientation['width'], 1e-6)
-                        if placed:
-                            break
+                sheet_width,
+                sheet_height,
+                veneer.grain_direction,
+            )
+            if libnest_result is None:
+                placements_by_region = self._pack_with_shelf(
+                    enriched_pieces,
+                    sheet_width,
+                    sheet_height,
+                    available_count,
+                )
+                packing_strategy = 'polygon-shelf-rotation-aware'
+            else:
+                placements_by_region, packing_strategy = libnest_result
             placed_count = len(placements_by_region)
             sheet_count_used = (
                 max(
@@ -2719,12 +2837,18 @@ class MarquetryWorkspace:
                     'total_bounding_box_area': bbox_area_total,
                     'material_utilization': material_utilization,
                     'over_stock_capacity': placed_count < len(pieces),
-                    'packing_strategy': 'polygon-shelf-rotation-aware',
+                    'packing_strategy': packing_strategy,
                     'pieces': packed_pieces,
                 }
             )
         manifest = {
-            'packing_backend': 'shapely-polygon-shelf-rotating',
+            'packing_backend': (
+                'libnest2d-djd'
+                if any(sheet['packing_strategy'] == 'libnest2d-djd' for sheet in sheets)
+                else 'shapely-polygon-shelf-rotating'
+            ),
+            'fallback_backend': 'shapely-polygon-shelf-rotating',
+            'preferred_backend': 'libnest2d-djd',
             'source_geometry': (
                 self.design.active_vector_graph_kind
                 if self.design and self.design.active_vector_graph_kind

@@ -119,7 +119,10 @@ Implemented now:
 - physical-unit SVG export with adjustable contour simplification
 - Shapely coverage-safe SVG export with shared-edge simplification
 - persisted coverage-safe vector export metadata
-- Shapely polygon-aware rotation-capable shelf pack manifest by veneer
+- optional libnest2d irregular polygon nesting backend with Shapely shelf
+  fallback
+- Shapely polygon-aware rotation-capable shelf pack manifest by veneer as a
+  portable fallback
 - physical contour, SVG path, placement, transformed placed contour, and
   transformed placed SVG path data in each pack manifest piece
 - browser stock-fit summary for pack results
@@ -128,8 +131,10 @@ Implemented now:
 - workspace-root-constrained browser pack output
 - cached browser canvas raster overlays for faster vector dragging and linework
   redraws
-- browser source maintained in TypeScript and compiled to served JavaScript
+- browser source maintained in TypeScript modules and compiled to served
+  JavaScript
 - user-facing workflow and packing/export documentation under `docs/`
+- CI and release checklist for build/typecheck/lint/test verification
 - browser smoke test for image upload, candidate grid generation, and design
   seeding
 - browser smoke test for canvas selection, selected veneer assignment, undo, and
@@ -196,17 +201,18 @@ Implemented now:
 
 5. Improve polygon nesting quality.
 
-   Current packing uses a Shapely-backed polygon shelf adapter. It places actual
-   physical contours by veneer, collision-checks polygons, tries rotated
-   orientations when grain settings allow, and emits transformed tracing
-   contours. The next adapter should improve optimization quality with
-   concavity-aware placement, deeper sheet/row search, and lower-waste
-   heuristics.
+   Current packing prefers libnest2d through the optional `nesting` extra and
+   falls back to a Shapely-backed polygon shelf adapter. Both preserve actual
+   physical contours by veneer, rotated orientations when grain settings allow,
+   and transformed tracing contours. Next work is backend hardening: tune
+   libnest2d spacing/search parameters, add CI coverage on a supported native
+   platform, and expose backend controls in CLI/UI.
 
-6. Split browser TypeScript into smaller modules once the API stabilizes.
+6. Continue splitting browser TypeScript into smaller modules.
 
-   The browser now uses TypeScript source compiled to static JavaScript. A
-   module split becomes worthwhile after the core workflow stops shifting.
+   The browser now uses TypeScript modules compiled to static JavaScript.
+   Continue extracting rendering, API calls, and vector editing into separate
+   modules as the workflow stabilizes.
 
 7. Add browser-level regression tests.
 

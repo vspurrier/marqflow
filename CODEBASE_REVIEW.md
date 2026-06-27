@@ -122,7 +122,10 @@ uv run pytest -q
 - Browser endpoints and CLI commands exist for topology persistence,
   simplification, graph loading, graph promotion, graph-SVG export, and vertex
   movement.
-- Shapely polygon-aware rotation-capable shelf pack manifest grouped by veneer.
+- Optional libnest2d irregular polygon nesting backend with automatic Shapely
+  shelf fallback on unsupported platforms.
+- Shapely polygon-aware rotation-capable shelf pack manifest grouped by veneer
+  as the deterministic fallback.
 - Pack manifest includes each piece's physical contour, SVG path, placement,
   transformed placed contour, and transformed placed SVG path.
 - Browser pack summary with placed/unplaced counts and stock warnings.
@@ -133,7 +136,12 @@ uv run pytest -q
   redraws avoid recomputing every image pixel on each pointer move.
 - Browser TypeScript source lives in `src/marqflow/static/gallery.ts` and is
   compiled to the served `gallery.js` with `npm run build`.
+- Browser TypeScript has been split into small modules for DOM wiring and
+  shared UI types.
 - User-facing workflow and packing/export documentation lives under `docs/`.
+- GitHub Actions CI runs browser build, typecheck, Ruff, and pytest.
+- Release checklist documents local verification, optional nesting installs,
+  and version tagging.
 - Browser smoke test for creating a workspace, generating a candidate grid, and
   seeding the design from a candidate.
 - Browser smoke test for canvas selection, selected veneer assignment, undo, and
@@ -208,18 +216,18 @@ uv run pytest -q
 
 6. Real packing/nesting.
 
-   Packing now uses a Shapely-backed polygon shelf adapter. It places true
-   physical contours, collision-checks placed polygons, tries rotated
-   orientations when grain settings allow, and emits transformed tracing
-   contours. This is a real contour-aware baseline, but it is not yet an
-   optimized irregular nester: it does not exploit concavities, optimize across
-   row/sheet choices deeply, or minimize waste beyond simple shelf placement.
+   Packing now prefers libnest2d through the optional `nesting` extra and falls
+   back to a Shapely-backed polygon shelf adapter. Both paths preserve veneer
+   groupings, physical contours, grain-aware rotations, and transformed tracing
+   contours in the manifest. Remaining packing work is backend hardening:
+   richer tests against a real libnest2d installation, tuning spacing/search
+   parameters, and exposing backend controls in CLI/UI.
 
 7. TypeScript migration.
 
-   The browser source is now TypeScript and compiles to the served JavaScript.
-   A deeper module split remains open; the UI is still concentrated in one
-   large file.
+   The browser source is now TypeScript, compiles to served JavaScript, and has
+   an initial module split. Further splitting is still useful as the UI grows,
+   but the migration itself is complete.
 
 8. Browser tests.
 

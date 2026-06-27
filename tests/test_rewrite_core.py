@@ -88,7 +88,12 @@ def test_workspace_creates_valid_design_and_exports(tmp_path: Path) -> None:
     assert reloaded_after_coverage.cleanup_report()['vector_exports'][0]['coverage_valid'] is True
 
     manifest = workspace.pack(tmp_path / 'packed')
-    assert manifest['packing_backend'] == 'shapely-polygon-shelf-rotating'
+    assert manifest['preferred_backend'] == 'libnest2d-djd'
+    assert manifest['fallback_backend'] == 'shapely-polygon-shelf-rotating'
+    assert manifest['packing_backend'] in {
+        'libnest2d-djd',
+        'shapely-polygon-shelf-rotating',
+    }
     assert manifest['sheets']
     assert 'placement' in manifest['sheets'][0]['pieces'][0]
     assert manifest['sheets'][0]['pieces'][0]['physical_contour']
@@ -624,7 +629,10 @@ def test_pack_rotates_polygon_when_grain_allows(tmp_path: Path) -> None:
         for piece in sheet['pieces']
     )
 
-    assert manifest['packing_backend'] == 'shapely-polygon-shelf-rotating'
+    assert manifest['packing_backend'] in {
+        'libnest2d-djd',
+        'shapely-polygon-shelf-rotating',
+    }
     assert maple_piece['packed'] is True
     assert maple_piece['placement']['rotation'] in {90, 270}
 

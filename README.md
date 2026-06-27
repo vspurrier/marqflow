@@ -47,6 +47,12 @@ uv sync
 npm install
 ```
 
+Optional external polygon nesting backend on supported platforms:
+
+```bash
+uv sync --extra nesting
+```
+
 ## CLI
 
 Create a workspace and seed the first design:
@@ -142,6 +148,8 @@ the test skips instead of failing the suite.
 
 - [User guide](docs/USER_GUIDE.md)
 - [Packing and exports](docs/PACKING_AND_EXPORTS.md)
+- [Release checklist](docs/RELEASE.md)
 
 Browser source is maintained in `src/marqflow/static/gallery.ts`. The served
 file is compiled to `src/marqflow/static/gallery.js` with `npm run build`.
+Small browser modules live beside it in `src/marqflow/static/`.

@@ -220,6 +220,8 @@ interface PackSheet {
 
 interface PackManifest {
   packing_backend: string;
+  preferred_backend: string;
+  fallback_backend: string;
   source_geometry: string;
   sheets: PackSheet[];
 }
